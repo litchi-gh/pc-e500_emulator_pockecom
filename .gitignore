@@ -1,0 +1,26 @@
+# Build output: app/ holds the published binaries beside the data folders
+/app/*
+!/app/rom/
+!/app/ram/
+!/app/drive-x/
+!/app/manual/
+/app/rom/*.rom
+/app/rom/*.bin
+/app/ram/*.ram
+/app/drive-x/*
+!/app/drive-x/.gitkeep
+/app/manual/images/manual-shots.txt
+/bin/
+/tmp/
+/backups/
+/tests/__pycache__/
+/tools/__pycache__/
+/tests/output/
+/tests/test-core.*
+/src/desktop/bin/
+/src/desktop/obj/
+/src/native/*.obj
+*.pdb
+*.exp
+*.lib
+*.obj

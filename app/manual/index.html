@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PC-E500 エミュレータ 取扱説明書</title>
+<style>
+  :root{--ink:#222;--sub:#5a6470;--line:#dde2e8;--accent:#2b5fa8;--bg:#fafbfc;--panel:#fff;--code:#f1f3f6;--warn:#fff6e0;--tip:#e9f4ff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Yu Gothic UI","Meiryo","Segoe UI",sans-serif;font-size:15px;line-height:1.75;color:var(--ink);background:var(--bg)}
+  header{background:#2c3440;color:#fff;padding:26px 32px}
+  header h1{margin:0;font-size:24px;font-weight:600}
+  header p{margin:6px 0 0;color:#c8d0da}
+  .wrap{display:flex;gap:32px;max-width:1240px;margin:0 auto;padding:24px 20px 60px}
+  nav{flex:0 0 230px;position:sticky;top:16px;align-self:flex-start;font-size:14px}
+  nav ol{list-style:none;padding:0;margin:0;border-left:3px solid var(--line)}
+  nav li a{display:block;padding:5px 12px;color:var(--sub);text-decoration:none}
+  nav li a:hover{color:var(--accent)}
+  nav li.sub a{padding-left:26px;font-size:13px}
+  main{flex:1;min-width:0}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px 28px;margin-bottom:22px}
+  h2{margin:0 0 14px;font-size:21px;border-bottom:2px solid var(--accent);padding-bottom:6px}
+  h3{margin:22px 0 8px;font-size:17px;color:var(--accent)}
+  p{margin:8px 0}
+  figure{margin:14px 0;text-align:center}
+  figure img{max-width:100%;border:1px solid var(--line);border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  figure.small img{max-width:520px}
+  figcaption{font-size:13px;color:var(--sub);margin-top:6px}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#f3f5f8;white-space:nowrap}
+  code,kbd{font-family:Consolas,"Courier New",monospace;font-size:13.5px}
+  code{background:var(--code);padding:1px 5px;border-radius:3px}
+  kbd{display:inline-block;border:1px solid #b9c0c8;border-bottom-width:2px;border-radius:4px;padding:0 6px;background:#fff;font-size:12.5px;line-height:1.6}
+  pre{background:var(--code);padding:12px 14px;border-radius:6px;overflow:auto;font-size:13.5px;line-height:1.5}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:10px 0}
+  .steps li{position:relative;padding:6px 0 6px 40px;margin:0}
+  .steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:7px;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;text-align:center;line-height:26px;font-size:13px;font-weight:600}
+  .box{border-left:4px solid;border-radius:4px;padding:10px 14px;margin:12px 0;font-size:14px}
+  .tip{background:var(--tip);border-color:var(--accent)}
+  .warn{background:var(--warn);border-color:#e0a300}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .swatch{display:inline-block;width:14px;height:14px;border:1px solid #999;vertical-align:-2px;margin-right:6px}
+  footer{max-width:1240px;margin:0 auto;padding:0 20px 40px;color:var(--sub);font-size:13px}
+  @media (max-width:860px){.wrap{flex-direction:column}nav{position:static;flex:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>PC-E500 / PC-E650 / PC-U6000 エミュレータ 取扱説明書</h1>
+  <p>Windows用デスクトップエミュレータ「PokeCom」の使い方</p>
+</header>
+
+<div class="wrap">
+<nav>
+  <ol>
+    <li><a href="#start">1. 起動と画面の見かた</a></li>
+    <li><a href="#first">2. 最初の操作</a></li>
+    <li><a href="#keys">3. キー操作</a></li>
+    <li><a href="#toolbar">4. ツールバーのボタン</a></li>
+    <li><a href="#ramcard">5. RAMカード</a></li>
+    <li class="sub"><a href="#ramcard-create">カードを作る</a></li>
+    <li class="sub"><a href="#ramcard-swap">入れ替える・外す</a></li>
+    <li><a href="#settings">6. 設定</a></li>
+    <li><a href="#disk">7. CE-140F（X:ドライブ）</a></li>
+    <li><a href="#text">8. 文字のコピーと貼り付け</a></li>
+    <li><a href="#reset">9. リセット</a></li>
+    <li><a href="#debug">10. デバッグ</a></li>
+    <li class="sub"><a href="#debug-edit">メモリの書き換え</a></li>
+    <li class="sub"><a href="#debug-bin">BINの読み書き</a></li>
+    <li><a href="#save">11. 保存と復元</a></li>
+    <li><a href="#faq">12. こんなときは</a></li>
+    <li><a href="#romdump">13. 実機からROMを吸い出す</a></li>
+    <li class="sub"><a href="#romdump-savem">SAVEMで吸い出す</a></li>
+    <li class="sub"><a href="#romdump-header">ヘッダーと修正方法</a></li>
+    <li class="sub"><a href="#romdump-tool">結合ツールの使い方</a></li>
+    <li><a href="#scope">14. 対応範囲とライセンス</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="start">
+<h2>1. 起動と画面の見かた</h2>
+<p><code>app</code> フォルダの <code>PC-E500.exe</code> をダブルクリックすると起動します（一つ上のフォルダの <code>Start-PC-E500.cmd</code> からも起動できます）。.NETランタイムを同梱しているので、追加のインストールは不要です。</p>
+<p>エミュレータが読み書きするファイルはすべて <code>app</code> フォルダの中にあります。<code>app</code> フォルダごと別の場所へコピーしても、そのまま動作します。</p>
+<table>
+<tr><th>フォルダ</th><th>内容</th></tr>
+<tr><td><code>app\rom\</code></td><td>内蔵ROMのイメージ。起動時にここから読み込みます</td></tr>
+<tr><td><code>app\ram\</code></td><td>RAMカードのイメージファイル（<a href="#ramcard">5章</a>）</td></tr>
+<tr><td><code>app\drive-x\</code></td><td>CE-140F（X:ドライブ）の保存先（<a href="#disk">7章</a>）</td></tr>
+<tr><td><code>app\state\</code></td><td>設定、内蔵RAMの内容、自動保存、リセット前のバックアップ</td></tr>
+<tr><td><code>app\manual\</code></td><td>この説明書</td></tr>
+</table>
+<figure>
+<img src="images/main-e500.png" alt="メインウィンドウ">
+<figcaption>メインウィンドウ。上がツールバー、中央が本体、下の2行が操作ヒントと状態表示です。</figcaption>
+</figure>
+<p>いちばん下の行には、実行状態・ROMのバージョン・内蔵RAMとRAMカードの容量・CE-140Fの接続状態・音声の状態を常に表示します。</p>
+</section>
+
+<section id="first">
+<h2>2. 最初の操作</h2>
+<p>初めて起動したとき（またはメモリが空のとき）は、実機と同じくメモリの初期化を求める画面になります。</p>
+<ol class="steps">
+<li>
+<figure class="small"><img src="images/lcd-new-card.png" alt="初期化を求める画面"><figcaption>「アタラシイ カードデス / PF1 ショキカ シマス」（英語ROMでは <code>NEW CARD</code>）</figcaption></figure>
+<b>PF1</b>（PCのキーボードでは <kbd>F1</kbd>）を押してメモリを初期化します。RAMカードを新しく装着したときも、続けてカード側の初期化を同じように求められます。大容量では数秒かかります。
+</li>
+<li>
+<figure class="small"><img src="images/lcd-initialized.png" alt="初期化後の画面"><figcaption>初期化が終わった直後の画面</figcaption></figure>
+<b>BASIC</b>（<kbd>F7</kbd>）を押すと、液晶上部に <b>RUN</b> が点灯してBASICが使えます。
+</li>
+<li>
+<figure class="small"><img src="images/lcd-run.png" alt="1+2 の計算"><figcaption><code>1+2</code> と打って Enter。答えの 3 が右端に出ます</figcaption></figure>
+<code>1+2</code> と入力して <kbd>Enter</kbd>。計算結果が表示されます。
+</li>
+</ol>
+
+<h3>プログラムを入力する</h3>
+<p>行番号付きのプログラムは <b>PRO</b> 表示で入力します。BASICキーをもう一度押すと RUN と PRO が切り替わります。</p>
+<figure class="small"><img src="images/lcd-pro.png" alt="PROモードで入力"><figcaption>PRO表示で <code>10 PRINT 123</code> を入力したところ</figcaption></figure>
+<p>入力が済んだらBASICキーで <b>RUN</b> に戻し、<code>RUN</code> と打って Enter で実行します。</p>
+<figure class="small"><img src="images/lcd-program.png" alt="RUN の結果"><figcaption><code>RUN</code> の結果</figcaption></figure>
+<div class="box warn">RUN表示のまま行番号付きの行を入力すると <code>Syntax error</code> になります。プログラム入力の前にPRO表示へ切り替えてください。</div>
+</section>
+
+<section id="keys">
+<h2>3. キー操作</h2>
+<p>画面のキーをマウスでクリックするか、PCのキーボードで入力します。英字は大文字としてポケコンへ送られます。</p>
+<table>
+<tr><th>PCのキー</th><th>ポケコンの操作</th></tr>
+<tr><td>英数字、空白、演算子</td><td>対応するキー。<code>"</code> <code>:</code> <code>$</code> などの記号はSHIFT操作へ自動変換</td></tr>
+<tr><td><kbd>Enter</kbd> / <kbd>BackSpace</kbd> / <kbd>Delete</kbd> / <kbd>Insert</kbd></td><td>ENTER / BS / DEL / INS</td></tr>
+<tr><td>矢印キー</td><td>カーソル移動</td></tr>
+<tr><td><kbd>F1</kbd>〜<kbd>F5</kbd></td><td>PF1〜PF5（機能キー）</td></tr>
+<tr><td><kbd>F6</kbd></td><td>MENU</td></tr>
+<tr><td><kbd>F7</kbd></td><td>BASIC（RUN / PRO の切り替え）</td></tr>
+<tr><td><kbd>F8</kbd></td><td>2ndF</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>ON/BRK（電源ON・実行中断）</td></tr>
+<tr><td><kbd>Ctrl</kbd> / <kbd>Shift</kbd></td><td>CTRL / SHIFT</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>文字入出力を開く / クリップボードを貼り付け / デバッグを開く</td></tr>
+</table>
+<div class="box tip">画面上の <b>SHIFT</b> と <b>CTRL</b> をクリックすると、次の1キーまで押した状態を保持します。もう一度クリックすると解除できます。</div>
+<p>実機はキーを1/64秒ごとに走査するため、入力できる速さは毎秒18キー程度です。キーを押しっぱなしにしたときは、機械が受け取れる速さで連打し、離せばすぐ止まります。日本語IMEからの入力には対応していません。</p>
+</section>
+
+<section id="toolbar">
+<h2>4. ツールバーのボタン</h2>
+<figure><img src="images/toolbar.png" alt="ツールバー"><figcaption>ツールバー</figcaption></figure>
+<table>
+<tr><th>ボタン</th><th>働き</th></tr>
+<tr><td>ROMを開く</td><td>別のROMイメージ（PC-E500の256KB、またはPC-E650/PC-U6000の384KB）に切り替えます</td></tr>
+<tr><td>一時停止 / 再開</td><td>機械の実行を止めます。止めている間はキー入力を受け付けません</td></tr>
+<tr><td>保存 / 読込</td><td>現在の状態をスナップショットとしてファイルへ保存・復元します（<a href="#save">11章</a>）</td></tr>
+<tr><td>設定</td><td>外観、内蔵RAM、RAMカード、CE-140F、音量などを変更します（<a href="#settings">6章</a>）</td></tr>
+<tr><td>CE-140F</td><td>X:ドライブの通信履歴を表示し、保存フォルダを開けます（<a href="#disk">7章</a>）</td></tr>
+<tr><td>文字入出力</td><td>液晶の文字をコピーしたり、クリップボードの文字を入力したりします（<a href="#text">8章</a>）</td></tr>
+<tr><td>オールリセット</td><td>実機の ON＋RESET と同じ操作をします（<a href="#reset">9章</a>）</td></tr>
+<tr><td>デバッグ</td><td>CPUレジスタとメモリの表示・書き換え、BINの読み書き（<a href="#debug">10章</a>）</td></tr>
+<tr><td>使い方</td><td>この説明書を開きます</td></tr>
+<tr><td>速度</td><td>0.5x → 1x → 2x → 4x の順に実行速度を切り替えます。音を確認するときは 1x にしてください</td></tr>
+</table>
+<p>「設定」「CE-140F」「文字入出力」「デバッグ」は本体を動かしたまま開いておけます。同じボタンをもう一度押すと、開いているウィンドウを前面に出します。</p>
+</section>
+
+<section id="ramcard">
+<h2>5. RAMカード</h2>
+<p>RAMカードは、実機のカードスロットに差すメモリカードです。このエミュレータでは <b>1枚のカード＝1つのイメージファイル</b> として扱います。ファイルの大きさがそのままカードの容量（8 / 16 / 32 / 64 / 128 / 256 KB）で、中身がカードの内容です。実機でカードを差し替えるのと同じ感覚で、何枚でも作って入れ替えられます。</p>
+<p>カードの内容は、5秒ごと・電源OFF時・アプリ終了時・カードを外すときに、そのイメージファイルへ書き戻されます。</p>
+<figure><img src="images/settings.png" alt="設定画面のRAMカード欄"><figcaption>「設定」の RAMカード 欄。ここで作成・装着・取り外しをします</figcaption></figure>
+
+<h3 id="ramcard-create">カードを作る</h3>
+<ol class="steps">
+<li>ツールバーの <b>設定</b> を開き、RAMカード欄の <b>作成...</b> を押します。</li>
+<li>
+<figure class="small"><img src="images/card-size.png" alt="RAMカード作成"><figcaption>容量を選びます</figcaption></figure>
+容量を選んで <b>OK</b>。ファイルの保存先を聞かれるので、そのまま <code>app\ram\</code> に保存します（ファイル名は自由です）。
+</li>
+<li>設定画面の <b>適用</b> を押します。現在の内容を保存してから再起動し、カードが装着された状態で立ち上がります。</li>
+<li>ROMが新しいカードの初期化を求めるので、<b>PF1</b>（<kbd>F1</kbd>）を押します。</li>
+</ol>
+<p>状態表示の行に <code>RAMカード 64KB (card-64KB.ram)</code> のように表示されれば装着できています。</p>
+
+<h3 id="ramcard-swap">入れ替える・外す</h3>
+<table>
+<tr><th>操作</th><th>やり方</th></tr>
+<tr><td>別のカードに入れ替える</td><td>設定 → <b>装着...</b> で別のイメージファイルを選び、<b>適用</b>。今のカードの内容はそのファイルへ保存されてから切り替わります</td></tr>
+<tr><td>カードを外す</td><td>設定 → <b>取り外す</b> → <b>適用</b>。スロットが空になります</td></tr>
+<tr><td>カードを複製する</td><td>エクスプローラーでイメージファイルをコピーするだけです（エミュレータを終了するか、カードを外した状態で行ってください）</td></tr>
+</table>
+<div class="box tip">RAMカードを入れ替えても内蔵RAMの内容は変わりません。逆に、内蔵RAMの容量を変えてもカードには影響しません。</div>
+<div class="box warn">エミュレータが動作中は、装着中のイメージファイルを他のソフトで書き換えないでください。5秒ごとの自動保存で上書きされます。</div>
+</section>
+
+<section id="settings">
+<h2>6. 設定</h2>
+<p>ツールバーの <b>設定</b> で開きます。変更は <b>適用</b> で反映され、内蔵RAMやRAMカードに関わる変更は現在の内容を保存してから再起動します。</p>
+<table>
+<tr><th>項目</th><th>内容</th></tr>
+<tr><td>本体の外観</td><td>PC-E500 / PC-E650 の筐体を切り替えます。PC-U6000はPC-E650と同じ筐体です。外観を変えてもROMは自動で変わらないので、機種に合うROMは「ROMを開く」で選んでください</td></tr>
+<tr><td>内蔵RAM (KB)</td><td>8〜256KB。容量ごとに内容を別々に保持するので、元の容量に戻せば以前の内容が戻ります。E650/U6000（384KB ROM）では実機標準の64KBと、増設改造相当の128KB・256KBから選びます</td></tr>
+<tr><td>RAMカード</td><td><a href="#ramcard">5章</a>を参照</td></tr>
+<tr><td>CE-140Fを接続 (X:)</td><td>X:ドライブの接続と、書込み禁止、保存フォルダ</td></tr>
+<tr><td>音量 / 消音</td><td>BEEPやキークリック音の音量</td></tr>
+<tr><td>LCDのドット間に線を表示</td><td>ドットの境目が見える実機風の表示にします</td></tr>
+</table>
+<div class="grid">
+<figure><img src="images/main-e650.png" alt="PC-E650の外観"><figcaption>外観をPC-E650にしたところ</figcaption></figure>
+<figure><img src="images/lcd-dot-lines.png" alt="ドット間の線"><figcaption>「LCDのドット間に線を表示」を有効にした液晶</figcaption></figure>
+</div>
+</section>
+
+<section id="disk">
+<h2>7. CE-140F（X:ドライブ）</h2>
+<p>フロッピーディスクドライブ CE-140F をエミュレートし、PCのフォルダをディスクとして使います。既定の保存先は <code>app\drive-x\</code> です。</p>
+<pre>SAVE "X:TEST.BAS"        ' プログラムを保存
+SAVE "X:TEXT.BAS",A      ' ASCII形式で保存
+LOAD "X:TEST.BAS"        ' 読み込み
+FILES "X:"               ' 一覧</pre>
+<p>OPEN / PRINT # / INPUT # によるファイル入出力、COPY・NAME・KILL・SET・INIT も使えます。ファイル名は英数字・<code>_</code>・<code>-</code> の 8.3 形式です。</p>
+<figure><img src="images/disk-trace.png" alt="CE-140Fウィンドウ"><figcaption>「CE-140F」ウィンドウ。通信履歴が0.5秒ごとに更新されます</figcaption></figure>
+<div class="box warn"><code>INIT</code> は保存フォルダ内のディスク対象ファイルを削除します。CE-140F専用のフォルダを指定してください。</div>
+</section>
+
+<section id="text">
+<h2>8. 文字のコピーと貼り付け</h2>
+<p>ツールバーの <b>文字入出力</b>（または <kbd>Ctrl</kbd>+<kbd>C</kbd>）で、液晶の表示を40桁×4行の文字として取り出せます。テキストをドラッグして「選択範囲をコピー」を押すとクリップボードへコピーします。</p>
+<figure><img src="images/text-transfer.png" alt="文字入出力ウィンドウ"><figcaption>文字入出力ウィンドウ</figcaption></figure>
+<p>「クリップボードから貼り付け」（または <kbd>Ctrl</kbd>+<kbd>V</kbd>）は、クリップボードの文字をキー入力としてポケコンへ送ります。改行はENTER、タブは空白4個になります。長いBASICプログラムを流し込むときに便利です。一度に4096文字まで、実機のキー速度で順に入力されるので、長いときは速度を上げると待ち時間が短くなります。</p>
+</section>
+
+<section id="reset">
+<h2>9. リセット</h2>
+<table>
+<tr><th>操作</th><th>動作</th></tr>
+<tr><td>RESET穴（BASICキーとAキーの間）をクリック</td><td>CPUだけを再起動します。内蔵RAMもRAMカードも残ります</td></tr>
+<tr><td>ツールバーの <b>オールリセット</b></td><td>実機の ON＋RESET と同じです。ROMが「スベテノ データヲ ショウキョ シマスカ? (Y/N)」と聞いてくるので、<b>Y</b> で全消去、<b>N</b> でそのまま復帰します</td></tr>
+</table>
+<figure class="small"><img src="images/lcd-all-reset.png" alt="オールリセットの確認"><figcaption>オールリセット直後。Y か N で答えます</figcaption></figure>
+<p>オールリセットの直前の状態は <code>app\state\before-reset-日時.e500state</code> に保存されるので、誤って消してしまっても「読込」で戻せます。RAMカードはどちらのリセットでも消えません。</p>
+</section>
+
+<section id="debug">
+<h2>10. デバッグ</h2>
+<p>ツールバーの <b>デバッグ</b>（または <kbd>Ctrl</kbd>+<kbd>D</kbd>）で開きます。本体を動かしたまま、0.25秒ごとに自動更新されます（「自動更新」を外すと「更新」を押したときだけ読み直します）。</p>
+<figure><img src="images/debugger.png" alt="デバッグウィンドウ"><figcaption>左がCPUレジスタとSC62015の内部RAM、右がメモリ</figcaption></figure>
+<table>
+<tr><th>左側</th><td>A・B・BA・I・IL・IH・X・Y・U・S・PC・フラグ、実行状態、サイクル数。続けて内部RAM 256バイトと、BP/PX/PY のポインタや KOL〜SSR の I/O レジスタ</td></tr>
+<tr><th>右側</th><td><code>00000</code>〜<code>FFFFF</code> のメモリを16進とASCIIで表示。右端のスクロールバー、マウスホイール、矢印キー、PageUp/PageDown、<kbd>Ctrl</kbd>+<kbd>Home</kbd>/<kbd>End</kbd> で移動できます</td></tr>
+<tr><th>アドレス欄</th><td>16進を入れて Enter で移動（<code>B8000</code> <code>&amp;HB8000</code> <code>0xB8000</code> のどれでも可）。PC・S・X・Y・U の各ボタンはレジスタが指す場所へ、内蔵RAM・カード・ROM は各領域の先頭へ飛びます</td></tr>
+<tr><th>下段</th><td>表示範囲とカーソル位置がどの領域かを表示します</td></tr>
+</table>
+
+<h3>領域の色分け</h3>
+<table>
+<tr><th><span class="swatch" style="background:#000"></span>黒</th><td>内蔵RAM、RAMカード、それらのミラー ― <b>書き換えできます</b></td></tr>
+<tr><th><span class="swatch" style="background:#00008c"></span>紺</th><td>内蔵ROM（CE2）、E650/U6000 の拡張ROM（CE3）― 読み出しのみ</td></tr>
+<tr><th><span class="swatch" style="background:#a0a0a0"></span>灰</th><td>何も接続されていない領域（カード未装着時のスロット、CE6、内部エリアなど）</td></tr>
+</table>
+<div class="grid">
+<figure><img src="images/debugger-ram-rom.png" alt="内蔵RAMとROMの境目"><figcaption>内蔵RAM（黒）から内蔵ROM（紺）へ切り替わる <code>C0000</code></figcaption></figure>
+<figure><img src="images/debugger-slot-mirror.png" alt="カードスロットと内蔵RAMミラーの境目"><figcaption>カード未装着のスロット（灰）と内蔵RAMのミラー（黒）の境目 <code>80000</code></figcaption></figure>
+</div>
+
+<h3 id="debug-edit">メモリの書き換え（バイナリエディタ）</h3>
+<ol class="steps">
+<li>メモリ欄で書き換えたいバイトをクリックします。カーソルが付き、下段にそのアドレスと領域が出ます。</li>
+<li><kbd>0</kbd>〜<kbd>9</kbd>・<kbd>A</kbd>〜<kbd>F</kbd> を打つと、上位・下位の順に1桁ずつその場で書き換わります。2桁打つと次のバイトへ進むので、続けて打てば連続して書き換えられます。</li>
+<li>矢印キーでカーソルを動かせます。書き換えた内容は通常のRAMと同じく自動保存されます。</li>
+</ol>
+<p>書き換えられるのは黒い領域（内蔵RAM・RAMカード）だけです。ROMや灰色の領域に打っても変わらず、下段に理由が表示されます。</p>
+
+<h3 id="debug-bin">BINの読み書き</h3>
+<div class="grid">
+<figure><img src="images/bin-load.png" alt="BIN書込み"><figcaption>BIN書込み。SAVEM形式のヘッダーを自動検出しています</figcaption></figure>
+<figure><img src="images/bin-save.png" alt="BIN書出し"><figcaption>BIN書出し。ヘッダー付きで書き出せば元の位置へ戻せます</figcaption></figure>
+</div>
+<table>
+<tr><th>BIN書込み</th><td>ファイルの中身を指定アドレスから書き込みます。CE-140F の <code>SAVE M</code> が作る16バイトヘッダー付きファイルはヘッダーを自動で見つけ、ヘッダーに書かれた開始アドレスへ（ヘッダーを除いて）書き込みます。チェックを外せば任意のアドレスへ書き込めます。書込み先がRAMの範囲に収まっていないときは、1バイトも書き込まずにエラーになります</td></tr>
+<tr><th>BIN書出し</th><td>指定アドレスから指定した長さ（16進）をファイルへ書き出します。既定では <code>SAVE M</code> と同じヘッダーを付けるので、そのまま <code>LOAD M</code> や BIN書込み で元の位置へ戻せます</td></tr>
+</table>
+<div class="box tip">機械語プログラムを試すときは、内蔵RAMの先頭（PC-E500 32KB なら <code>B8000</code>、E650/U6000 64KB なら <code>B0000</code>）付近より、BASICが使わない領域を確保してから書き込んでください。書き込んだ直後に自動保存されるため、うっかりシステム領域を壊したときはオールリセット（<a href="#reset">9章</a>）で戻せます。</div>
+</section>
+
+<section id="save">
+<h2>11. 保存と復元</h2>
+<p>何もしなくても、電源を切ったりアプリを終了したりしてもメモリの内容は保持されます。</p>
+<table>
+<tr><th>内蔵RAM</th><td>5秒ごと・OFF時・終了時に <code>app\state\memory\</code> の下へ保存。容量ごとに別ファイルです</td></tr>
+<tr><th>RAMカード</th><td>同じタイミングで、装着中のイメージファイル自身へ保存</td></tr>
+<tr><th>スナップショット</th><td>CPU・内蔵RAM・液晶・タイマーの状態を <code>app\state\</code> へ自動保存。次回起動時にそのまま続きから始まります</td></tr>
+<tr><th>設定</th><td><code>app\state\settings.json</code></td></tr>
+</table>
+<p>ツールバーの <b>保存</b> / <b>読込</b> で、好きなタイミングのスナップショット（<code>.e500state</code>）をファイルに残して戻せます。</p>
+<div class="box tip">スナップショットに含まれるのは CPU と内蔵RAM です。RAMカードは含まれず、読み込んだときも装着中のイメージファイルの内容がそのまま使われます。保存したときと容量の違うカードを装着していると読み込めないので、同じ容量のカードを装着してから読み込んでください（カードなしで保存したものは、カードなしで読み込みます）。</div>
+<p>CE-140F の通信中やファイルOPEN中はスナップショットを保存・復元できません。<code>CLOSE</code> してから操作してください。</p>
+</section>
+
+<section id="faq">
+<h2>12. こんなときは</h2>
+<table>
+<tr><th>起動時に「アタラシイ カードデス」「NEW CARD」と出る</th><td>正常です。<kbd>F1</kbd> を押して初期化してください（<a href="#first">2章</a>）</td></tr>
+<tr><th>キーを押しても何も起きない</th><td>電源が切れているかもしれません。<kbd>Esc</kbd>（ON/BRK）を押してください。「一時停止」中でないかも確認してください</td></tr>
+<tr><th>行番号付きの行を入れると Syntax error</th><td>RUN表示のままです。BASICキー（<kbd>F7</kbd>）でPRO表示にしてください</td></tr>
+<tr><th>音が出ない・途切れる</th><td>設定の消音と音量を確認してください。2x・4x では音声の同期は実機どおりではありません。1x で確認してください</td></tr>
+<tr><th>RAMカードを付けたのに容量が変わらない</th><td>設定画面で <b>適用</b> を押しましたか。状態表示の行で装着中のカード名を確認できます</td></tr>
+<tr><th>読込で「RAMカードが異なります」と出る</th><td>保存時と同じ容量のカードを装着（または取り外し）してから読み込んでください（<a href="#save">11章</a>）</td></tr>
+<tr><th>内蔵RAMを全部消したい</th><td>オールリセットで <b>Y</b> と答えてください。直前の状態は自動でバックアップされます（<a href="#reset">9章</a>）</td></tr>
+<tr><th>間違ってメモリを壊した</th><td><code>app\state\before-reset-*.e500state</code> や自分で保存したスナップショットを「読込」で戻せます</td></tr>
+<tr><th>PC-E650 / PC-U6000 で使いたい</th><td>S3A と S3B を結合した384KBのROMイメージ（<a href="#romdump">13章</a>）を <code>app\rom\</code> に置いて「ROMを開く」で選び、設定で外観をPC-E650にしてください</td></tr>
+<tr><th>「ROMを開く」で拒否される</th><td>大きさが 256KB / 384KB（またはヘッダー付きで +16バイト）か、S3B だけを開いていないかを確認してください（<a href="#romdump-header">13章</a>）</td></tr>
+</table>
+</section>
+
+<section id="romdump">
+<h2>13. 実機からROMを吸い出す</h2>
+<p>このエミュレータには内蔵ROMは含まれません。お手持ちの実機からROMイメージを取り出して <code>app\rom\</code> に置いてください。取り出しには実機側の <code>SAVEM</code> コマンド（メモリをファイルに書き出す命令）を使います。</p>
+
+<h3>必要なもの</h3>
+<table>
+<tr><th>実機</th><td>PC-E500 / PC-E550 / PC-1490UII など（256KB ROM）、または PC-E650 / PC-U6000（384KB ROM）</td></tr>
+<tr><th>保存先の機器</th><td>CE-140F（フロッピー）など、実機の11ピン端子につないでファイルを保存できる機器。PC上でCE-140Fを模擬するソフトを11ピンケーブルで接続する方法もあります。PCで読めるファイルとして取り出せれば何でも構いません</td></tr>
+</table>
+
+<h3 id="romdump-savem">SAVEMで吸い出す</h3>
+<p><code>SAVEM</code> の書式は次のとおりです。<code>d:</code> はつないだ機器のデバイス名で、アドレスは16進を <code>&amp;H</code> で書きます。</p>
+<pre>SAVEM "d:ファイル名",開始アドレス,終了アドレス</pre>
+<ol class="steps">
+<li>実機の電源を入れ、BASICキーで <b>RUN</b> 表示にします。</li>
+<li>本体ROM（全機種共通）を吸い出します。256KBなので、機器によっては数分かかります。
+<pre>SAVEM "L:S3A.ROM",&amp;HC0000,&amp;HFFFFF</pre></li>
+<li><b>PC-E650 / PC-U6000 の場合はこちらも必要です。</b>拡張ROM（128KB）を吸い出します。
+<pre>SAVEM "L:S3B.ROM",&amp;H20000,&amp;H3FFFF</pre></li>
+<li>できたファイルをPCへ持ってきます。</li>
+</ol>
+<div class="box tip">ファイル名の <code>L:</code> は例です。CE-140F なら <code>X:</code> など、実際につないだ機器のデバイス名に読み替えてください。</div>
+<table>
+<tr><th>ファイル</th><th>範囲</th><th>大きさ</th><th>内容</th></tr>
+<tr><td><code>S3A.ROM</code></td><td><code>C0000-FFFFF</code></td><td>256KB + 16バイト</td><td>本体ROM（CE2）。全機種で必要</td></tr>
+<tr><td><code>S3B.ROM</code></td><td><code>20000-3FFFF</code></td><td>128KB + 16バイト</td><td>拡張ROM（CE3）。PC-E650 / PC-U6000 のみ</td></tr>
+</table>
+
+<h3 id="romdump-header">吸い出したファイルのヘッダーと修正方法</h3>
+<p><code>SAVEM</code> が作るファイルの先頭には、次の <b>16バイトのヘッダー</b> が付きます。そのぶんファイルはROMより16バイト大きくなります。</p>
+<table>
+<tr><th>位置</th><th>内容</th></tr>
+<tr><td>0〜3</td><td><code>FF 00 06 01</code>（機械語ファイルの印）</td></tr>
+<tr><td>4</td><td><code>10</code></td></tr>
+<tr><td>5〜7</td><td>データの長さ（3バイト、下位から）例: <code>00 00 04</code> = 0x40000 = 256KB</td></tr>
+<tr><td>8〜10</td><td>開始アドレス（3バイト、下位から）例: <code>00 00 0C</code> = C0000</td></tr>
+<tr><td>11〜15</td><td><code>FF FF FF 00 0F</code></td></tr>
+</table>
+<p>機種ごとの修正方法は次のとおりです。</p>
+<table>
+<tr><th>PC-E500 など<br>（256KB ROM）</th><td>
+<b>修正は不要です。</b>ヘッダー付きの <code>S3A.ROM</code> をそのまま <code>app\rom\</code> に置くか「ROMを開く」で選ぶと、エミュレータがヘッダーを見分けて本体ROMだけを読み込みます。<br>
+ヘッダーを取り除いたきれいな256KBのファイルにしたい場合は、下の結合ツールで <code>--strip</code> を使うか、PowerShellで次のように先頭16バイトを捨てます。
+<pre>$b = [IO.File]::ReadAllBytes("S3A.ROM"); [IO.File]::WriteAllBytes("PC-E500.rom", $b[16..($b.Length-1)])</pre>
+</td></tr>
+<tr><th>PC-E650 / PC-U6000<br>（384KB ROM）</th><td>
+<code>S3A.ROM</code> と <code>S3B.ROM</code> を <b>1つの384KBファイルに結合</b>する必要があります（拡張ROMを先頭、本体ROMを後ろに置く並びです）。下の結合ツールで作ります。<code>S3B.ROM</code> だけを開くと、その旨のメッセージが出ます。
+</td></tr>
+</table>
+<div class="box warn">256KBのファイルに <code>E650</code> や <code>U6000</code> を含む名前を付けると、結合し忘れとみなして開けません。PC-E500用のROMは <code>PC-E500.rom</code> のような名前にしてください。</div>
+
+<h3 id="romdump-tool">結合ツールの使い方（tools\merge_savem_rom.py）</h3>
+<p>Python 3 が必要です（<a href="https://www.python.org/">python.org</a> から入れられます）。コマンドプロンプトか PowerShell で、<code>app</code> の一つ上のフォルダ（<code>tools</code> フォルダがある場所）に移動して実行します。</p>
+<table>
+<tr><th>ヘッダーの中身を確認する</th><td><pre>python tools\merge_savem_rom.py S3A.ROM S3B.ROM --info</pre>開始アドレス・長さ・範囲と、FFで埋まっている割合を表示します。長さの不一致や見慣れないヘッダーには警告が出ます</td></tr>
+<tr><th>PC-E650 / PC-U6000 用の384KBイメージを作る</th><td><pre>python tools\merge_savem_rom.py S3A.ROM S3B.ROM -o app\rom\PC-U6000-full.rom</pre>2つのダンプを1つに結合します。<code>20000-3FFFF</code> のダンプがあれば自動で full（384KB）レイアウトになります</td></tr>
+<tr><th>PC-E500 用の256KBイメージを作る（ヘッダー除去）</th><td><pre>python tools\merge_savem_rom.py S3A.ROM -o app\rom\PC-E500.rom</pre></td></tr>
+<tr><th>ヘッダーだけを取り除く（上書き）</th><td><pre>python tools\merge_savem_rom.py S3A.ROM S3B.ROM --strip</pre>結合せず、それぞれのファイルから先頭16バイトを取り除いて上書きします。元のファイルは残らないので、必要ならコピーしてから実行してください</td></tr>
+<tr><th>ヘッダー除去済みの本体ROMと結合する</th><td><pre>python tools\merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o app\rom\PC-U6000-full.rom</pre>すでに256KBにしてある本体ROMを <code>--main-rom</code> で渡します</td></tr>
+</table>
+<p>実行すると「カバー率」が表示されます。<b>100.0%</b> でなければ吸い出しが途中で欠けているので、未取得の範囲を確認して吸い出し直してください。出力した <code>SHA-256</code> は同じROMかどうかを確かめるのに使えます。</p>
+
+<h3>確認する</h3>
+<ol class="steps">
+<li>できたファイルを <code>app\rom\</code> に置き、「ROMを開く」で選びます（PC-E500の256KBなら起動時に自動で読み込みます）。</li>
+<li>画面いちばん下の状態表示に <code>ROM Ver.7.2 / 256KB (E500)</code> のようにバージョンと系列が出ることを確認します。バージョンはファイル名ではなくROMの中身から読んでいます。</li>
+<li>初期化画面が出て、<a href="#first">2章</a> の手順で計算ができれば完了です。</li>
+</ol>
+</section>
+
+<section id="scope">
+<h2>14. 対応範囲とライセンス</h2>
+<p>SC62015 CPU、256KB / 384KB ROM、内蔵RAMとRAMカード、HD61102 液晶2個（240×32ドット）、キー行列、タイマー割込み、ON/BRK・OFF、実行速度切替、状態の保存・復元、BEEP、フォルダ型 CE-140F を実装しています。</p>
+<p><b>未対応:</b> プリンタ、カセット、RS-232C、時計など。液晶のBUSY時間は省略しています。機械語プログラムや周辺機器を使うプログラムは、実機と動作が異なる場合があります。</p>
+<p>移植元は <a href="https://github.com/matsumo/PockEmul">matsumo/PockEmul</a>（CPU部分 Copyright (C) Matsumo 1998,1999）で、GPL に基づき提供します。詳細は <code>app\LICENSE</code> と <code>app\THIRD_PARTY_NOTICES.md</code> を参照してください。ROMイメージは本ソフトウェアに含まれません。お手持ちの実機から吸い出してください（<a href="#romdump">13章</a>）。</p>
+<p>開発者向けの情報（ビルド、テスト、メモリマップの詳細）は一つ上のフォルダの <code>README.md</code> にあります。</p>
+</section>
+
+</main>
+</div>
+<footer>この説明書の画像は、ビルド時に <code>PC-E500.exe --manual-shots</code> でエミュレータ自身が描画したものです。</footer>
+</body>
+</html>
