@@ -110,6 +110,9 @@ internal static class ManualShots
                     save.StartPosition=FormStartPosition.CenterScreen;save.Show(form);save.TestSet(dump,(0xc0000-core.InternalKB*1024).ToString("X5"),true,"100");Shot(save,"bin-save");save.Close();
                 }
             } finally {if(sampleBin)File.Delete(savem);}
+            using(var sums=new ChecksumDialog(()=>core,0xc0000-core.InternalKB*1024)) {
+                sums.StartPosition=FormStartPosition.CenterScreen;sums.Show(form);sums.Compute();Shot(sums,"checksum");sums.Close();
+            }
             debugger.Close();
 
             form.TestAllReset();Settle();

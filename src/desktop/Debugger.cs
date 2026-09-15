@@ -76,6 +76,8 @@ internal sealed class DebugDialog : Form
         var save=new Button{Text=L.T("BIN書出し","Save BIN"),AutoSize=true,Margin=new Padding(3,0,0,0)};
         load.Click+=(_,_)=>Transfer(false);save.Click+=(_,_)=>Transfer(true);
         bar.Controls.Add(load);bar.Controls.Add(save);
+        var checksum=new Button{Text=L.T("チェックサム","Checksum"),AutoSize=true,Margin=new Padding(12,0,0,0)};
+        checksum.Click+=(_,_)=>ShowChecksum();bar.Controls.Add(checksum);
 
         var panes=new SplitContainer{Dock=DockStyle.Fill,Margin=new Padding(0,6,0,0),FixedPanel=FixedPanel.Panel1,Panel1MinSize=140,Panel2MinSize=140};
         main.Controls.Add(panes,0,1);
@@ -109,6 +111,11 @@ internal sealed class DebugDialog : Form
         if(dialog.ShowDialog(this)!=DialogResult.OK||dialog.Done is not {} at)return;
         note.Text=saving?L.T($"{at:X5} からメモリを書き出しました。",$"Memory saved from {at:X5}."):L.T($"{at:X5} へ書き込みました。",$"Written at {at:X5}.");
         Memory.Jump(at);Render();
+    }
+    // Sums a range starting at the caret; the dialog leaves the caret alone.
+    void ShowChecksum() {
+        using var dialog=new ChecksumDialog(read,Memory.Caret>=0?Memory.Caret:Memory.Address);
+        dialog.ShowDialog(this);
     }
     void UpdateRegion() {
         var core=read();

@@ -67,6 +67,7 @@
     <li><a href="#reset">9. Reset</a></li>
     <li><a href="#debug">10. Debug</a></li>
     <li class="sub"><a href="#debug-edit">Editing memory</a></li>
+    <li class="sub"><a href="#debug-checksum">Checksum</a></li>
     <li class="sub"><a href="#debug-bin">Loading and saving BIN files</a></li>
     <li><a href="#save">11. Saving and restoring</a></li>
     <li><a href="#faq">12. Troubleshooting</a></li>
@@ -272,6 +273,16 @@ FILES "X:"               ' list</pre>
 <li>The arrow keys move the caret. Edits are autosaved like any other RAM change.</li>
 </ol>
 <p>Only the black regions (internal RAM and the RAM card) can be edited. Typing over ROM or grey areas changes nothing and the bottom line says why.</p>
+
+<h3 id="debug-checksum">Checksum</h3>
+<figure><img src="images-en/checksum.png" alt="Checksum"><figcaption>Checksum over a start–end range, both ends inclusive</figcaption></figure>
+<p>The <b>Checksum</b> button sums a range of memory, so a machine language program typed in from a magazine can be checked against the checksum printed with it. The start box is filled with the caret address and the end box with the address <code>FF</code>h further on; change them as needed and press Compute (or <kbd>Enter</kbd>).</p>
+<table>
+<tr><th>Bytes</th><td>Number of bytes in the range (hex and decimal)</td></tr>
+<tr><th>Sum (8-bit / 16-bit / 32-bit)</th><td>The low 8, 16 and 32 bits of the sum of every byte</td></tr>
+<tr><th>XOR (8-bit)</th><td>The exclusive OR of every byte</td></tr>
+</table>
+<p>Copy puts the result on the clipboard. The checksum only reads memory; nothing is changed.</p>
 
 <h3 id="debug-bin">Loading and saving BIN files</h3>
 <div class="grid">

@@ -311,6 +311,20 @@ internal static class SmokeTest
                 if(Native.e500_peek(core.Handle,0xc0000)!=romBytes[0])throw new Exception("Typing over ROM changed it");
                 hex.Jump(0xfffff);
                 if(hex.Address+hex.VisibleRows()*16!=0x100000 || hex.TestScrollValue!=hex.TestScrollMax)throw new Exception("Hex view cannot scroll to the end of memory");
+                // Checksums: the sums of a known range, both ends inclusive, and a
+                // refused range that leaves the dialog with a message rather than a sum.
+                core.Write(ramTop,[0xff,0xff,0x01,0x10]);
+                var sums=Checksum.Of(core,ramTop,ramTop+3);
+                if(sums.Length!=4 || sums.Sum8!=0x0f || sums.Sum16!=0x020f || sums.Sum32!=0x020f || sums.Xor8!=0x11)throw new Exception("Checksum arithmetic is wrong");
+                if(Checksum.Of(new byte[0x10000].Select(_=>(byte)0xff).ToArray()).Sum32!=0xff0000L)throw new Exception("32-bit checksum overflowed");
+                using(var dialog=new ChecksumDialog(()=>core,ramTop)) {
+                    dialog.TestSet(ramTop.ToString("X5"),(ramTop+3).ToString("X5"));dialog.Compute();
+                    if(dialog.Last!=sums || !dialog.TestResult.Contains("020F"))throw new Exception("Checksum dialog did not show the sums");
+                    dialog.TestSet("C0000","BFFFF");dialog.Compute();
+                    if(dialog.Last is not null)throw new Exception("Checksum dialog accepted an end below the start");
+                    dialog.TestSet("zz","0");dialog.Compute();
+                    if(dialog.Last is not null)throw new Exception("Checksum dialog accepted a non-hex address");
+                }
                 core.Write(ramTop,keep);
                 // BIN transfer: a headerless file goes to the typed address, a SAVE M
                 // file back to its own, and a dump comes out with the header it needs.
@@ -341,7 +355,7 @@ internal static class SmokeTest
             Key("N");core.Run(4096000);
             if(core.InternalKB!=capacity || (Native.e500_status(core.Handle)&4)!=0)throw new Exception("Declining the all-reset did not resume the machine");
             // Dispose without FormClosing: tests must not create or overwrite the user's automatic save.
-            File.WriteAllText(Path.Combine(output,"smoke-result.txt"),"PASS: ROM boot and trailer version display, BASIC calculation/program, snapshot restore, UI shifted input and fast multiline paste, LCD ROM-font text recognition, all physical key mappings/bounds, all appearances, all six internal RAM files and card image roundtrips, card image attach/detach/snapshot rules, settings/dialog, Windows waveOut and its bounded backlog, focus-free toolbar, key input budget, modeless sub-windows, debug register/memory window with in-place hex editing and BIN load/save, and UI renders.\n");
+            File.WriteAllText(Path.Combine(output,"smoke-result.txt"),"PASS: ROM boot and trailer version display, BASIC calculation/program, snapshot restore, UI shifted input and fast multiline paste, LCD ROM-font text recognition, all physical key mappings/bounds, all appearances, all six internal RAM files and card image roundtrips, card image attach/detach/snapshot rules, settings/dialog, Windows waveOut and its bounded backlog, focus-free toolbar, key input budget, modeless sub-windows, debug register/memory window with in-place hex editing, range checksums and BIN load/save, and UI renders.\n");
         } catch(Exception ex) {File.WriteAllText(Path.Combine(output,"smoke-result.txt"),ex.ToString());Environment.ExitCode=1;}
     }
 }

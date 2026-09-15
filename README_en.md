@@ -115,6 +115,12 @@ Bytes are coloured by region.
 
 Click a byte to place the caret and type `0`–`9`, `A`–`F`. Digits go in high nibble first and the caret advances after two. Only internal RAM and the RAM card can be edited; typing over ROM or unmapped space changes nothing and the reason is shown at the bottom. Edits are autosaved like any other RAM change.
 
+### Checksum
+
+![Checksum](app/manual/images-en/checksum.png)
+
+The Checksum button shows the 8-, 16- and 32-bit sums, the XOR and the byte count of the range between a start and an end address (both inclusive), for checking a machine language program typed in from a listing. The start box is filled with the caret address.
+
 ### Load BIN / Save BIN
 
 | ![Load BIN](app/manual/images-en/bin-load.png) | ![Save BIN](app/manual/images-en/bin-save.png) |
