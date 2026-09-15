@@ -4,6 +4,7 @@
 !/app/ram/
 !/app/drive-x/
 !/app/manual/
+!/app/README.txt
 /app/rom/*.rom
 /app/rom/*.bin
 /app/ram/*.ram

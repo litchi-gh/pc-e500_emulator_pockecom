@@ -8,6 +8,8 @@
     <AssemblyName>PC-E500</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
+    <Version>0.0.1</Version>
+    <Product>PC-E500 Emulator (PokeCom)</Product>
   </PropertyGroup>
   <ItemGroup>
     <None Include="../../bin/e500core.dll" Link="e500core.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
