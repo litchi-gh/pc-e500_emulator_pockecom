@@ -67,6 +67,7 @@
     <li><a href="#reset">9. リセット</a></li>
     <li><a href="#debug">10. デバッグ</a></li>
     <li class="sub"><a href="#debug-edit">メモリの書き換え</a></li>
+    <li class="sub"><a href="#debug-checksum">チェックサム</a></li>
     <li class="sub"><a href="#debug-bin">BINの読み書き</a></li>
     <li><a href="#save">11. 保存と復元</a></li>
     <li><a href="#faq">12. こんなときは</a></li>
@@ -272,6 +273,16 @@ FILES "X:"               ' 一覧</pre>
 <li>矢印キーでカーソルを動かせます。書き換えた内容は通常のRAMと同じく自動保存されます。</li>
 </ol>
 <p>書き換えられるのは黒い領域（内蔵RAM・RAMカード）だけです。ROMや灰色の領域に打っても変わらず、下段に理由が表示されます。</p>
+
+<h3 id="debug-checksum">チェックサム</h3>
+<figure><img src="images/checksum.png" alt="チェックサム"><figcaption>チェックサム。開始・終了アドレス（どちらも含む）の範囲を合計します</figcaption></figure>
+<p>「チェックサム」ボタンで、指定した範囲のメモリの合計を表示します。雑誌などに載った機械語プログラムを打ち込んだあと、掲載されているチェックサムと照らし合わせるのに使います。開始欄にはカーソル位置が入り、終了欄はその <code>FF</code>h 後ろが入るので、必要に応じて書き換えて「計算」（または <kbd>Enter</kbd>）を押してください。</p>
+<table>
+<tr><th>バイト数</th><td>範囲に含まれるバイト数（16進と10進）</td></tr>
+<tr><th>合計 (8bit / 16bit / 32bit)</th><td>全バイトを足した値の下位 8・16・32ビット</td></tr>
+<tr><th>XOR (8bit)</th><td>全バイトの排他的論理和</td></tr>
+</table>
+<p>「コピー」で結果をクリップボードへ写せます。この機能はメモリを読むだけで、書き換えはしません。</p>
 
 <h3 id="debug-bin">BINの読み書き</h3>
 <div class="grid">

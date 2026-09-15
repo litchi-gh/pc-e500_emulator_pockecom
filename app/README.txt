@@ -1,4 +1,4 @@
-PC-E500 / PC-E650 / PC-U6000 Emulator for Windows (PokeCom) 0.0.2
+PC-E500 / PC-E650 / PC-U6000 Emulator for Windows (PokeCom) 0.0.3
 https://github.com/litchi-gh/pc-e500_emulator_pockecom
 
 使い方は manual\index.html（English: manual\index_en.html）をブラウザで開いてください（起動後は「使い方」ボタンでも開けます）。
