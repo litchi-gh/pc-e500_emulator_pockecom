@@ -66,7 +66,7 @@ internal sealed class AudioOutput : IDisposable
         timeBeginPeriod(1);
         var format=new Format{tag=1,channels=1,rate=48000,bytes=96000,align=2,bits=16};
         uint result=waveOutOpen(out device,uint.MaxValue,ref format,IntPtr.Zero,IntPtr.Zero,0);
-        if(result!=0){device=IntPtr.Zero;Error=$"音声出力を開けません (MMRESULT {result})";}
+        if(result!=0){device=IntPtr.Zero;Error=L.T($"音声出力を開けません (MMRESULT {result})",$"Could not open the audio output (MMRESULT {result})");}
         worker=new Thread(Pump){IsBackground=true,Name="PokeCom audio"};
         worker.Start();
     }
@@ -130,7 +130,7 @@ internal sealed class AudioOutput : IDisposable
         Marshal.Copy(pcm,0,data,pcm.Length);Marshal.StructureToPtr(new Header{data=data,length=(uint)pcm.Length*2},header,false);
         uint size=(uint)Marshal.SizeOf<Header>(),result=waveOutPrepareHeader(device,header,size);
         if(result==0){result=waveOutWrite(device,header,size);if(result!=0)waveOutUnprepareHeader(device,header,size);}
-        if(result!=0){Marshal.FreeHGlobal(data);Marshal.FreeHGlobal(header);Error=$"音声再生に失敗 (MMRESULT {result})";return;}
+        if(result!=0){Marshal.FreeHGlobal(data);Marshal.FreeHGlobal(header);Error=L.T($"音声再生に失敗 (MMRESULT {result})",$"Audio playback failed (MMRESULT {result})");return;}
         pending.Add((header,data));outstanding=pending.Count;Delivered+=pcm.Length;
     }
 

@@ -37,7 +37,7 @@ internal sealed class DebugDialog : Form
     readonly TextBox cpu=new(){Multiline=true,ReadOnly=true,WordWrap=false,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Font=new Font("Consolas",10),BackColor=Color.White};
     internal readonly HexView Memory;
     readonly TextBox addressBox=new(){Width=88,Font=new Font("Consolas",10),Text="B0000"};
-    readonly CheckBox live=new(){Text="自動更新",Checked=true,AutoSize=true,Margin=new Padding(4,9,0,0)};
+    readonly CheckBox live=new(){Text=L.T("自動更新","Auto refresh"),Checked=true,AutoSize=true,Margin=new Padding(4,9,0,0)};
     readonly Label region=new(){Dock=DockStyle.Bottom,Height=24,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,0,0,0)};
     readonly Label note=new(){Dock=DockStyle.Bottom,Height=24,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,0,0,0),ForeColor=Color.FromArgb(0,80,160)};
     readonly System.Windows.Forms.Timer timer=new(){Interval=250};
@@ -45,7 +45,7 @@ internal sealed class DebugDialog : Form
     {
         this.read=read;
         Memory=new HexView(read){Dock=DockStyle.Fill};
-        Text="デバッグ / CPUレジスタ・メモリ";
+        Text=L.T("デバッグ / CPUレジスタ・メモリ","Debug / CPU registers and memory");
         StartPosition=FormStartPosition.CenterScreen;Font=new Font("Yu Gothic UI",10);
         // Both panes are fixed-width hex, so measure the font rather than guess:
         // the internal RAM rows are 51 columns and the memory rows 72.
@@ -60,7 +60,7 @@ internal sealed class DebugDialog : Form
         Controls.Add(main);Controls.Add(note);Controls.Add(region);
 
         var bar=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Margin=new Padding(0)};main.Controls.Add(bar,0,0);
-        bar.Controls.Add(new Label{Text="アドレス",AutoSize=true,Margin=new Padding(0,9,4,0)});
+        bar.Controls.Add(new Label{Text=L.T("アドレス","Address"),AutoSize=true,Margin=new Padding(0,9,4,0)});
         bar.Controls.Add(addressBox);
         void Jump(string text,Func<Core,int> target) {
             var b=new Button{Text=text,AutoSize=true,Margin=new Padding(3,0,0,0)};
@@ -69,11 +69,11 @@ internal sealed class DebugDialog : Form
         }
         Jump("PC",c=>(int)c.Register(RegP));Jump("S",c=>(int)c.Register(RegS));
         Jump("X",c=>(int)c.Register(RegX));Jump("Y",c=>(int)c.Register(RegY));Jump("U",c=>(int)c.Register(RegU));
-        Jump("内蔵RAM",c=>0xc0000-c.InternalKB*1024);Jump("カード",_=>0x40000);Jump("ROM",_=>0xc0000);
-        var refresh=new Button{Text="更新",AutoSize=true,Margin=new Padding(12,0,0,0)};
+        Jump(L.T("内蔵RAM","Internal RAM"),c=>0xc0000-c.InternalKB*1024);Jump(L.T("カード","Card"),_=>0x40000);Jump("ROM",_=>0xc0000);
+        var refresh=new Button{Text=L.T("更新","Refresh"),AutoSize=true,Margin=new Padding(12,0,0,0)};
         refresh.Click+=(_,_)=>Render();bar.Controls.Add(refresh);bar.Controls.Add(live);
-        var load=new Button{Text="BIN書込み",AutoSize=true,Margin=new Padding(12,0,0,0)};
-        var save=new Button{Text="BIN書出し",AutoSize=true,Margin=new Padding(3,0,0,0)};
+        var load=new Button{Text=L.T("BIN書込み","Load BIN"),AutoSize=true,Margin=new Padding(12,0,0,0)};
+        var save=new Button{Text=L.T("BIN書出し","Save BIN"),AutoSize=true,Margin=new Padding(3,0,0,0)};
         load.Click+=(_,_)=>Transfer(false);save.Click+=(_,_)=>Transfer(true);
         bar.Controls.Add(load);bar.Controls.Add(save);
 
@@ -95,7 +95,7 @@ internal sealed class DebugDialog : Form
         // Open on the machine own RAM rather than on its mirror below it.
         Shown+=(_,_)=>{if(read() is {} core)Memory.Jump(0xc0000-core.InternalKB*1024);Render();timer.Start();};
         FormClosed+=(_,_)=>timer.Stop();
-        note.Text="メモリ欄をクリックして16進を入力すると、その場で書き換えます（内蔵RAM・RAMカードのみ）。灰色は未定義、紺色はROMです。";
+        note.Text=L.T("メモリ欄をクリックして16進を入力すると、その場で書き換えます（内蔵RAM・RAMカードのみ）。灰色は未定義、紺色はROMです。","Click a byte and type hex digits to edit it in place (internal RAM and RAM card only). Grey is unmapped, navy is ROM.");
     }
     protected override void Dispose(bool disposing){if(disposing)timer.Dispose();base.Dispose(disposing);}
     internal static bool TryParseAddress(string text,out int value) {
@@ -107,26 +107,26 @@ internal sealed class DebugDialog : Form
     void Transfer(bool saving) {
         using var dialog=new BinaryTransferDialog(read,saving,Memory.Caret>=0?Memory.Caret:Memory.Address);
         if(dialog.ShowDialog(this)!=DialogResult.OK||dialog.Done is not {} at)return;
-        note.Text=saving?$"{at:X5} からメモリを書き出しました。":$"{at:X5} へ書き込みました。";
+        note.Text=saving?L.T($"{at:X5} からメモリを書き出しました。",$"Memory saved from {at:X5}."):L.T($"{at:X5} へ書き込みました。",$"Written at {at:X5}.");
         Memory.Jump(at);Render();
     }
     void UpdateRegion() {
         var core=read();
         if(core is null){region.Text="";return;}
         int rows=Memory.VisibleRows(),address=Memory.Address;
-        string caret=Memory.Caret>=0?$"   カーソル {Memory.Caret:X5} ({MemoryMap.Name(core,Memory.Caret)})":"";
+        string caret=Memory.Caret>=0?L.T($"   カーソル {Memory.Caret:X5} ({MemoryMap.Name(core,Memory.Caret)})",$"   Caret {Memory.Caret:X5} ({MemoryMap.Name(core,Memory.Caret)})"):"";
         region.Text=$"{address:X5}-{address+rows*Columns-1:X5}   {MemoryMap.Name(core,address)}{caret}";
     }
     internal void Render() {
         var core=read();
-        if(core is null){LiveText.Update(cpu,"ROMが読み込まれていません。");Memory.Reload();region.Text="";return;}
+        if(core is null){LiveText.Update(cpu,L.T("ROMが読み込まれていません。","No ROM is loaded."));Memory.Reload();region.Text="";return;}
         int status=Native.e500_status(core.Handle);
         uint ba=core.Register(RegBA),i=core.Register(RegI),f=core.Register(RegF);
         byte[] imem=core.InternalMemory();
         var text=new StringBuilder();
-        text.AppendLine("== CPUレジスタ ==");
-        text.AppendLine($"状態      {((status&4)!=0?"エラー停止":(status&1)!=0?"電源OFF":(status&2)!=0?"HALT":"実行中")}");
-        text.AppendLine($"サイクル  {core.Cycles:N0}");
+        text.AppendLine(L.T("== CPUレジスタ ==","== CPU registers =="));
+        text.AppendLine($"{L.T("状態    ","State   ")}  {((status&4)!=0?L.T("エラー停止","Fault"):(status&1)!=0?L.T("電源OFF","Power OFF"):(status&2)!=0?"HALT":L.T("実行中","Running"))}");
+        text.AppendLine(L.T($"サイクル  {core.Cycles:N0}",$"Cycles    {core.Cycles:N0}"));
         text.AppendLine();
         text.AppendLine($"A  = {core.Register(RegA):X2}        B  = {ba>>8:X2}");
         text.AppendLine($"BA = {ba:X4}      I  = {i:X4}");
@@ -135,14 +135,14 @@ internal sealed class DebugDialog : Form
         text.AppendLine($"U  = {core.Register(RegU):X5}     S  = {core.Register(RegS):X5}");
         text.AppendLine($"PC = {core.Register(RegP):X5}     F  = {f:X2} (C={f&1} Z={(f>>1)&1})");
         text.AppendLine();
-        text.AppendLine("== 内部RAMのポインタ・I/Oレジスタ ==");
+        text.AppendLine(L.T("== 内部RAMのポインタ・I/Oレジスタ ==","== Internal RAM pointers and I/O registers =="));
         for(int p=0;p<Ports.Length;p+=4) {
             var line=new StringBuilder();
             for(int q=p;q<Math.Min(p+4,Ports.Length);q++)line.Append($"{Ports[q].Name,-3} {Ports[q].Address:X2}={imem[Ports[q].Address]:X2}  ");
             text.AppendLine(line.ToString().TrimEnd());
         }
         text.AppendLine();
-        text.AppendLine("== 内部RAM 256バイト (SC62015) ==");
+        text.AppendLine(L.T("== 内部RAM 256バイト (SC62015) ==","== Internal RAM, 256 bytes (SC62015) =="));
         for(int row=0;row<256;row+=Columns) {
             var line=new StringBuilder($"{row:X2}  ");
             for(int c=0;c<Columns;c++)line.Append($"{imem[row+c]:X2} ");

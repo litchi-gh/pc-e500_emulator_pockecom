@@ -11,7 +11,7 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         try {
             if(args.Length>0 && args[0]=="--smoke-test") {SmokeTest.Run(args[1],args[2]);return;}
-            if(args.Length>0 && args[0]=="--manual-shots") {ManualShots.Run(args[1],args[2]);return;}
+            if(args.Length>0 && args[0]=="--manual-shots") {ManualShots.Run(args[1],args[2],args.Length>3?args[3]:"ja");return;}
             Application.Run(new MainForm(args.FirstOrDefault()));
         } catch(Exception ex) {MessageBox.Show(ex.ToString(),"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Error);Environment.ExitCode=1;}
     }
@@ -51,8 +51,8 @@ internal sealed class MainForm : Form
     // Every sub-window is modeless so the machine stays usable while one is open.
     // One instance each: reopening brings the existing window forward.
     readonly Dictionary<string,Form> windows=new();
-    readonly ToolButton pause=new(){Text="一時停止",AutoSize=true};
-    readonly ToolButton speed=new(){Text="速度 1x",AutoSize=true,ForeColor=Color.Black,BackColor=Color.FromArgb(227,229,225)};
+    readonly ToolButton pause=new(){Text=L.T("一時停止","Pause"),AutoSize=true};
+    readonly ToolButton speed=new(){Text=L.T("速度 1x","Speed 1x"),AutoSize=true,ForeColor=Color.Black,BackColor=Color.FromArgb(227,229,225)};
     int speedIndex=1;
     readonly string root;
     int inputWait;
@@ -64,6 +64,7 @@ internal sealed class MainForm : Form
         this.testing=testing;
         if(!testing) {
             settings=HardwareSettings.Load(Path.Combine(root,"state","settings.json"));
+            L.Set(settings.Language);
             audio=new AudioOutput();audio.Muted=settings.Muted;audio.Volume=settings.Volume/100f;
         }
         if(string.IsNullOrWhiteSpace(settings.DiskFolder))settings=settings with{DiskFolder=Path.Combine(root,"drive-x")};
@@ -79,12 +80,12 @@ internal sealed class MainForm : Form
         main.RowStyles.Add(new RowStyle(SizeType.Absolute,28));main.RowStyles.Add(new RowStyle(SizeType.Absolute,28));Controls.Add(main);
         // The buttons wrap onto a second row rather than running off a narrow window.
         var bar=new FlowLayoutPanel{Dock=DockStyle.Fill,WrapContents=true,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Margin=new Padding(0,0,0,6)};main.Controls.Add(bar,0,0);
-        AddAction(bar,"ROMを開く",OpenRom);bar.Controls.Add(pause);pause.Click+=(_,_)=>{paused=!paused;pause.Text=paused?"再開":"一時停止";ReleaseKeys();audio?.Flush();UpdateDisplay();};
-        AddAction(bar,"保存",SaveState);AddAction(bar,"読込",LoadState);AddAction(bar,"設定",ConfigureHardware);
-        AddAction(bar,"CE-140F",ShowDisk);AddAction(bar,"文字入出力",ShowTextTransfer);AddAction(bar,"オールリセット",AllReset);AddAction(bar,"デバッグ",ShowDebugger);AddAction(bar,"使い方",Help);
-        speed.Click+=(_,_)=>{speedIndex=(speedIndex+1)%4;speed.Text="速度 "+new[]{"0.5x","1x","2x","4x"}[speedIndex];audio?.Flush();};bar.Controls.Add(speed);
+        AddAction(bar,L.T("ROMを開く","Open ROM"),OpenRom);bar.Controls.Add(pause);pause.Click+=(_,_)=>{paused=!paused;pause.Text=paused?L.T("再開","Resume"):L.T("一時停止","Pause");ReleaseKeys();audio?.Flush();UpdateDisplay();};
+        AddAction(bar,L.T("保存","Save"),SaveState);AddAction(bar,L.T("読込","Load"),LoadState);AddAction(bar,L.T("設定","Settings"),ConfigureHardware);
+        AddAction(bar,"CE-140F",ShowDisk);AddAction(bar,L.T("文字入出力","Text I/O"),ShowTextTransfer);AddAction(bar,L.T("オールリセット","All Reset"),AllReset);AddAction(bar,L.T("デバッグ","Debug"),ShowDebugger);AddAction(bar,L.T("使い方","Help"),Help);
+        speed.Click+=(_,_)=>{speedIndex=(speedIndex+1)%4;speed.Text=L.T("速度 ","Speed ")+new[]{"0.5x","1x","2x","4x"}[speedIndex];audio?.Flush();};bar.Controls.Add(speed);
         main.Controls.Add(surface,0,1);
-        main.Controls.Add(new Label{Text="初回 PF1 → BASIC  /  F6: MENU  F7: BASIC  F8: 2ndF  Esc: ON/BRK  /  SHIFT・CTRLは次の1キーまで保持",Dock=DockStyle.Fill,Font=new Font("Yu Gothic UI",9)},0,2);
+        main.Controls.Add(new Label{Text=L.T("初回 PF1 → BASIC  /  F6: MENU  F7: BASIC  F8: 2ndF  Esc: ON/BRK  /  SHIFT・CTRLは次の1キーまで保持","First run: PF1 → BASIC  /  F6: MENU  F7: BASIC  F8: 2ndF  Esc: ON/BRK  /  SHIFT and CTRL stay held for the next key"),Dock=DockStyle.Fill,Font=new Font("Yu Gothic UI",9)},0,2);
         status.Dock=DockStyle.Fill;status.Font=new Font("Yu Gothic UI",9);main.Controls.Add(status,0,3);
         surface.KeyClicked+=name=>{
             if(core is null||paused)return;
@@ -100,7 +101,7 @@ internal sealed class MainForm : Form
             if(core is null)return;
             try {ReleaseKeys();SavePersistent();settings.Save(Path.Combine(root,"state","settings.json"));}
             catch(Exception ex) {
-                if(MessageBox.Show("状態を保存できませんでした。終了しますか？\n"+ex.Message,"PC-E500",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.No)e.Cancel=true;
+                if(MessageBox.Show(L.T("状態を保存できませんでした。終了しますか？\n","Could not save the state. Quit anyway?\n")+ex.Message,"PC-E500",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.No)e.Cancel=true;
             }
         };
         FormClosed+=(_,_)=>{foreach(var window in windows.Values.ToArray())window.Close();timer.Dispose();audio?.Dispose();core?.Dispose();};
@@ -205,7 +206,7 @@ internal sealed class MainForm : Form
         if(keyData==(Keys.Control|Keys.C)){TryAction(ShowTextTransfer);return true;}
         if(keyData==(Keys.Control|Keys.D)){TryAction(ShowDebugger);return true;}
         if(keyData==(Keys.Control|Keys.V)){TryAction(()=>{
-            if(!Clipboard.ContainsText(TextDataFormat.UnicodeText))throw new InvalidOperationException("クリップボードに文字列がありません。");
+            if(!Clipboard.ContainsText(TextDataFormat.UnicodeText))throw new InvalidOperationException(L.T("クリップボードに文字列がありません。","The clipboard has no text."));
             PasteText(Clipboard.GetText(TextDataFormat.UnicodeText));
         });return true;}
         // The arrows, Enter and Tab are dialog keys, so WinForms takes them here before
@@ -229,7 +230,7 @@ internal sealed class MainForm : Form
     void OnKeyPress(object? sender,KeyPressEventArgs e) {
         if(char.IsControl(e.KeyChar))return;
         if(AcceptKey(charRepeats) && !QueueCharacter(e.KeyChar,false))
-            status.Text=$"未対応のPC文字: {e.KeyChar}（画面のSHIFTとポケコンのキーで入力してください）";
+            status.Text=L.T($"未対応のPC文字: {e.KeyChar}（画面のSHIFTとポケコンのキーで入力してください）",$"Unsupported PC character: {e.KeyChar} (use the on-screen SHIFT and pocket computer keys)");
         // Consumed: a WM_CHAR that arrives without its WM_KEYDOWN is a fresh keystroke.
         charRepeats=false;e.Handled=true;
     }
@@ -240,17 +241,17 @@ internal sealed class MainForm : Form
         return false;
     }
     string PasteText(string value) {
-        if(core is null)return "ROMが読み込まれていません。";
-        if(paused)return "一時停止を解除してから貼り付けてください。";
-        if(value.Length>4096)return "貼り付けは一度に4096文字までです。";
+        if(core is null)return L.T("ROMが読み込まれていません。","No ROM is loaded.");
+        if(paused)return L.T("一時停止を解除してから貼り付けてください。","Resume the machine before pasting.");
+        if(value.Length>4096)return L.T("貼り付けは一度に4096文字までです。","Paste up to 4096 characters at a time.");
         value=value.Replace("\r\n","\n").Replace('\r','\n');int queued=0,skipped=0;
         foreach(char character in value) {
             if(character=='\n'){QueueKey(Keyboard.Codes["ENTER"],true);queued++;continue;}
             if(character=='\t'){for(int i=0;i<4;i++)QueueCharacter(' ',true);queued+=4;continue;}
             if(QueueCharacter(character,true))queued++;else skipped++;
         }
-        string message=$"{queued}文字をキー入力へ送信しました。";
-        if(skipped>0)message+=$" 未対応の{skipped}文字は省略しました。";
+        string message=L.T($"{queued}文字をキー入力へ送信しました。",$"Sent {queued} characters as key input.");
+        if(skipped>0)message+=L.T($" 未対応の{skipped}文字は省略しました。",$" Skipped {skipped} unsupported characters.");
         status.Text=message;return message;
     }
     void ReleaseKeys() {
@@ -270,7 +271,7 @@ internal sealed class MainForm : Form
             if(!testing && (now-lastSaved>=5 || (off&&!lastOff))) {SavePersistent();lastSaved=now;}
             bool powerChanged=off!=lastOff;lastOff=off;
             if((++tick&1)==0 || powerChanged)UpdateDisplay();
-        } catch(Exception ex) {paused=true;pause.Text="再開";ReleaseKeys();MessageBox.Show(ex.Message,"実行停止");}
+        } catch(Exception ex) {paused=true;pause.Text=L.T("再開","Resume");ReleaseKeys();MessageBox.Show(ex.Message,L.T("実行停止","Execution stopped"));}
     }
     void RunCycles(int cycles) {
         if(core is null)return;
@@ -284,12 +285,12 @@ internal sealed class MainForm : Form
         if(core is null)return;
         core.Refresh();surface.Invalidate();
         int s=Native.e500_status(core.Handle);
-        string card=core.HasCard?$"RAMカード {core.CardKB}KB ({core.CardName})":"RAMカード なし";
-        status.Text=$"{((s&1)!=0?"電源OFF / EscでON":paused?"一時停止":"実行中")}   ROM Ver.{core.RomVersion} / {core.RomKB}KB ({(core.IsE650Family?"E650/U6000":"E500")})   内蔵 {core.InternalKB}KB / {card}   CE-140F {DiskStatus()}   {audio?.Error ?? (settings.Muted?"消音":"音声ON")}";
+        string card=core.HasCard?L.T($"RAMカード {core.CardKB}KB ({core.CardName})",$"RAM card {core.CardKB}KB ({core.CardName})"):L.T("RAMカード なし","RAM card: none");
+        status.Text=$"{((s&1)!=0?L.T("電源OFF / EscでON","Power OFF / Esc turns ON"):paused?L.T("一時停止","Pause"):L.T("実行中","Running"))}   ROM Ver.{core.RomVersion} / {core.RomKB}KB ({(core.IsE650Family?"E650/U6000":"E500")})   {L.T("内蔵","Internal")} {core.InternalKB}KB / {card}   CE-140F {DiskStatus()}   {audio?.Error ?? (settings.Muted?L.T("消音","Muted"):L.T("音声ON","Sound ON"))}";
     }
     string DiskStatus() {
-        if(core is null)return "未接続";int d=Native.e500_disk_status(core.Handle);
-        return (d&1)==0?"未接続":(d&8)!=0?"エラー":(d&4)!=0?"通信中":(d&2)!=0?"読取専用":"接続";
+        if(core is null)return L.T("未接続","Not connected");int d=Native.e500_disk_status(core.Handle);
+        return (d&1)==0?L.T("未接続","Not connected"):(d&8)!=0?L.T("エラー","Error"):(d&4)!=0?L.T("通信中","Busy"):(d&2)!=0?L.T("読取専用","Read-only"):L.T("接続","Connected");
     }
     void SwitchRom(string path,bool restore) {
         var next=new Core(path,settings.InternalKB,settings.CardPath);
@@ -300,7 +301,7 @@ internal sealed class MainForm : Form
             settings=settings with{InternalKB=core.InternalKB};
             if(!testing)settings.Save(Path.Combine(root,"state","settings.json"));
         }
-        paused=false;pause.Text="一時停止";
+        paused=false;pause.Text=L.T("一時停止","Pause");
         if(restore && !testing) {
             core.MemoryFiles(MemoryDirectory(),true);
             string snapshot=AutoSavePath();
@@ -311,7 +312,7 @@ internal sealed class MainForm : Form
             DateTime newest=banks.Where(File.Exists).Select(f=>File.GetLastWriteTimeUtc(f!)).DefaultIfEmpty(DateTime.MinValue).Max();
             if(File.Exists(snapshot)&&File.GetLastWriteTimeUtc(snapshot)>=newest) {
                 try {core.Load(snapshot);}
-                catch(Exception ex) {MessageBox.Show("状態を復元できなかったため、保存RAMから起動します。\n"+ex.Message,"PC-E500");}
+                catch(Exception ex) {MessageBox.Show(L.T("状態を復元できなかったため、保存RAMから起動します。\n","Could not restore the snapshot, starting from the saved RAM.\n")+ex.Message,"PC-E500");}
             }
         }
         if(!testing)core.MountDisk(settings.DiskEnabled?settings.DiskFolder:null,settings.DiskReadOnly);
@@ -339,14 +340,18 @@ internal sealed class MainForm : Form
         });
     }
     void ApplyHardware(HardwareSettings next) {
-        if(next.DiskEnabled&&string.IsNullOrWhiteSpace(next.DiskFolder))throw new InvalidDataException("CE-140Fの保存先を指定してください。");
+        if(next.DiskEnabled&&string.IsNullOrWhiteSpace(next.DiskFolder))throw new InvalidDataException(L.T("CE-140Fの保存先を指定してください。","Specify the CE-140F folder."));
         bool memory=next.InternalKB!=settings.InternalKB||
             !string.Equals(next.CardPath,settings.CardPath,StringComparison.OrdinalIgnoreCase);
-        if(core is not null&&(Native.e500_disk_status(core.Handle)&16)!=0)throw new InvalidOperationException("CE-140Fの通信・OPENをCLOSEしてから設定してください。");
+        if(core is not null&&(Native.e500_disk_status(core.Handle)&16)!=0)throw new InvalidOperationException(L.T("CE-140Fの通信・OPENをCLOSEしてから設定してください。","CLOSE the CE-140F transfer or open file before changing settings."));
         if(memory&&core is not null)using(var validation=new Core(core.RomPath,next.InternalKB,next.CardPath)){}
         SavePersistent();
         if(core is not null)core.MountDisk(next.DiskEnabled?next.DiskFolder:null,next.DiskReadOnly);
+        bool language=next.Language!=settings.Language&&!string.IsNullOrEmpty(settings.Language);
         settings=next;settings.Save(Path.Combine(root,"state","settings.json"));
+        // Every window builds its strings when it opens, so a new language takes
+        // effect by starting over; the close path saves the machine first.
+        if(language&&!testing){Application.Restart();return;}
         surface.SetModel(settings.Appearance);Text=settings.Appearance+" Emulator | PokeCom";
         surface.SetDotLines(settings.LcdDotLines);
         if(audio is not null){audio.Muted=settings.Muted;audio.Volume=settings.Volume/100f;}
@@ -359,18 +364,18 @@ internal sealed class MainForm : Form
     void ShowTextTransfer()=>ShowWindow("text",()=>new ScreenTextDialog(()=>core?.ScreenText()??"",PasteText));
     void ShowDebugger()=>ShowWindow("debug",()=>new DebugDialog(()=>core));
     void OpenRom() {
-        using var d=new OpenFileDialog{Filter="PC-E500/E650/U6000 ROM (*.rom;*.bin)|*.rom;*.bin|すべてのファイル|*.*",InitialDirectory=Path.Combine(root,"rom")};
+        using var d=new OpenFileDialog{Filter=L.T("PC-E500/E650/U6000 ROM (*.rom;*.bin)|*.rom;*.bin|すべてのファイル|*.*","PC-E500/E650/U6000 ROM (*.rom;*.bin)|*.rom;*.bin|All files|*.*"),InitialDirectory=Path.Combine(root,"rom")};
         if(d.ShowDialog(this)==DialogResult.OK)SwitchRom(d.FileName,true);
     }
     void SaveState() {
         if(core is null)return;ReleaseKeys();
-        using var d=new SaveFileDialog{Filter="PC-E500シリーズ state|*.e500state",FileName=settings.Appearance+".e500state"};
+        using var d=new SaveFileDialog{Filter=L.T("PC-E500シリーズ state|*.e500state","PC-E500 series state|*.e500state"),FileName=settings.Appearance+".e500state"};
         if(d.ShowDialog(this)==DialogResult.OK)core.Save(d.FileName);
     }
     void LoadState() {
         if(core is null)return;ReleaseKeys();
-        if((Native.e500_disk_status(core.Handle)&16)!=0)throw new InvalidOperationException("CE-140Fの通信・OPENをCLOSEしてから状態を読み込んでください。");
-        using var d=new OpenFileDialog{Filter="PC-E500シリーズ state|*.e500state"};
+        if((Native.e500_disk_status(core.Handle)&16)!=0)throw new InvalidOperationException(L.T("CE-140Fの通信・OPENをCLOSEしてから状態を読み込んでください。","CLOSE the CE-140F transfer or open file before loading a state."));
+        using var d=new OpenFileDialog{Filter=L.T("PC-E500シリーズ state|*.e500state","PC-E500 series state|*.e500state")};
         if(d.ShowDialog(this)==DialogResult.OK) {core.Load(d.FileName);settings=settings with{InternalKB=core.InternalKB};audio?.Flush();UpdateDisplay();}
     }
     void ResetPin() {
@@ -385,22 +390,24 @@ internal sealed class MainForm : Form
     // reset; everything the prompt does afterwards is the ROM's own code.
     void AllReset() {
         if(core is null)return;
-        if((Native.e500_disk_status(core.Handle)&16)!=0)throw new InvalidOperationException("CE-140Fの通信・OPENをCLOSEしてからリセットしてください。");
+        if((Native.e500_disk_status(core.Handle)&16)!=0)throw new InvalidOperationException(L.T("CE-140Fの通信・OPENをCLOSEしてからリセットしてください。","CLOSE the CE-140F transfer or open file before resetting."));
         ReleaseKeys();SavePersistent();
         if(!testing)core.Save(Path.Combine(root,"state","before-reset-"+DateTime.Now.ToString("yyyyMMdd-HHmmss-fff")+".e500state"));
         int on=Keyboard.Codes["ON/BRK"];
         Native.e500_reset(core.Handle,0);
         core.Key(on,true);core.Run(2048000);core.Key(on,false);
         audio?.Flush();core.Run(1024000);UpdateDisplay();
-        status.Text="オールリセット: 画面のY／Nで、全データを消去するか選んでください。";
+        status.Text=L.T("オールリセット: 画面のY／Nで、全データを消去するか選んでください。","All reset: answer Y/N on the screen to choose whether to erase all data.");
     }
-    // The HTML manual beside the executable; the summary box stands in when it is missing.
+    // The HTML manual beside the executable, in the UI language; the summary
+    // box stands in when it is missing.
     void Help() {
-        string manual=Path.Combine(root,"manual","index.html");
+        string manual=Path.Combine(root,"manual",L.En?"index_en.html":"index.html");
         if(File.Exists(manual)){Process.Start(new ProcessStartInfo(manual){UseShellExecute=true});return;}
         HelpSummary();
     }
-    void HelpSummary() => MessageBox.Show("初回：PF1 → BASIC（PCのF7）\nRUN表示：1+2 → Enter、BEEP 1 → Enter\nプログラム：BASICでPROに切替 → 10 PRINT 123 → Enter\nBASICでRUNに戻す → RUN → Enter\n\n文字入出力：LCD文字の範囲コピー／クリップボードからキー入力\nCtrl+C：文字入出力を開く / Ctrl+V：直接貼り付け\nCtrl+D：デバッグ（CPUレジスタ、内部RAM、メモリの表示・書換え、BINの読み書き）\nCE-140F：SAVE \"X:TEST.BAS\" / LOAD \"X:TEST.BAS\"\n保存先・書込み禁止は「設定」で変更できます。\n内蔵RAMは容量ごとに内容を保存し、OFFやアプリ終了でも保持します。\nRAMカードは「設定」でイメージファイルを作成・装着・取り外しします。内容はそのファイルへ書き込みます。\nE650/U6000の384KB ROMでは内蔵RAMは実機標準の64KB、増設改造相当の128KB・256KBから選べます。\nRESET穴はCPUを再起動し、内蔵RAMとカードを保持します。\n「オールリセット」は実機のON＋RESETと同じで、ROMが「スベテノ データヲ ショウキョ シマスカ?」とY／Nで聞いてきます。\n\nSHIFT / CTRLをクリックすると次のキーまで保持します。\nF8は2ndF、EscはON/BRKです。\n詳細はEmulatorフォルダのREADME.mdを参照してください。", "使い方 / PC-E500シリーズ");
+    void HelpSummary() => MessageBox.Show(L.En?HelpEnglish:"初回：PF1 → BASIC（PCのF7）\nRUN表示：1+2 → Enter、BEEP 1 → Enter\nプログラム：BASICでPROに切替 → 10 PRINT 123 → Enter\nBASICでRUNに戻す → RUN → Enter\n\n文字入出力：LCD文字の範囲コピー／クリップボードからキー入力\nCtrl+C：文字入出力を開く / Ctrl+V：直接貼り付け\nCtrl+D：デバッグ（CPUレジスタ、内部RAM、メモリの表示・書換え、BINの読み書き）\nCE-140F：SAVE \"X:TEST.BAS\" / LOAD \"X:TEST.BAS\"\n保存先・書込み禁止は「設定」で変更できます。\n内蔵RAMは容量ごとに内容を保存し、OFFやアプリ終了でも保持します。\nRAMカードは「設定」でイメージファイルを作成・装着・取り外しします。内容はそのファイルへ書き込みます。\nE650/U6000の384KB ROMでは内蔵RAMは実機標準の64KB、増設改造相当の128KB・256KBから選べます。\nRESET穴はCPUを再起動し、内蔵RAMとカードを保持します。\n「オールリセット」は実機のON＋RESETと同じで、ROMが「スベテノ データヲ ショウキョ シマスカ?」とY／Nで聞いてきます。\n\nSHIFT / CTRLをクリックすると次のキーまで保持します。\nF8は2ndF、EscはON/BRKです。\n詳細はEmulatorフォルダのREADME.mdを参照してください。", L.T("使い方 / PC-E500シリーズ","Help / PC-E500 series"));
+    const string HelpEnglish="First run: PF1 → BASIC (F7 on the PC)\nRUN mode: 1+2 → Enter, BEEP 1 → Enter\nProgram: BASIC switches to PRO → 10 PRINT 123 → Enter\nBASIC back to RUN → RUN → Enter\n\nText I/O: copy LCD text / type from the clipboard\nCtrl+C: open Text I/O / Ctrl+V: paste directly\nCtrl+D: Debug (registers, internal RAM, memory view and editing, BIN load/save)\nCE-140F: SAVE \"X:TEST.BAS\" / LOAD \"X:TEST.BAS\"\nFolder and write protection are in Settings.\nInternal RAM is kept per capacity and survives OFF and exit.\nRAM cards are image files created, attached and detached in Settings; contents are written to that file.\nE650/U6000 384KB ROMs offer 64KB (stock) or 128KB/256KB (expansion mod) internal RAM.\nThe RESET hole restarts the CPU and keeps internal RAM and the card.\nAll Reset is the real ON+RESET: the ROM asks whether to erase all data (Y/N).\n\nClicking SHIFT / CTRL holds it for the next key.\nF8 is 2ndF, Esc is ON/BRK.\nSee README.md in the Emulator folder for details.";
     void TryAction(Action action) {ReleaseKeys();try {action();}catch(Exception ex) {MessageBox.Show(ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Error);}}
     internal Core TestCore=>core??throw new InvalidOperationException("ROM not loaded");
     internal string TestRoot=>root;

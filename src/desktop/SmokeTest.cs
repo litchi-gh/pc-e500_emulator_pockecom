@@ -195,7 +195,7 @@ internal static class SmokeTest
                     if(expanded.InternalKB!=kb)throw new Exception($"E650/U6000 internal RAM expansion to {kb}KB was not applied");
                 }
             }
-            var settings=new HardwareSettings(128,cardPath,true,true,Path.Combine(output,"disk"),false,70,false,"PC-E650");
+            var settings=new HardwareSettings(128,cardPath,true,true,Path.Combine(output,"disk"),false,70,false,"PC-E650",L.Default);
             using(var diskCore=new Core(rom)) {
                 diskCore.MountDisk(settings.DiskFolder,false);
                 if((Native.e500_disk_status(diskCore.Handle)&1)==0)throw new Exception("Workspace/OneDrive disk mount failed");

@@ -48,7 +48,7 @@
 <body>
 <header>
   <h1>PC-E500 / PC-E650 / PC-U6000 エミュレータ 取扱説明書</h1>
-  <p>Windows用デスクトップエミュレータ「PokeCom」の使い方</p>
+  <p>Windows用デスクトップエミュレータ「PokeCom」の使い方 &nbsp;·&nbsp; <a href="index_en.html" style="color:#c8d0da">English</a></p>
 </header>
 
 <div class="wrap">
@@ -97,6 +97,7 @@
 <figcaption>メインウィンドウ。上がツールバー、中央が本体、下の2行が操作ヒントと状態表示です。</figcaption>
 </figure>
 <p>いちばん下の行には、実行状態・ROMのバージョン・内蔵RAMとRAMカードの容量・CE-140Fの接続状態・音声の状態を常に表示します。</p>
+<div class="box tip">表示言語（日本語／English）は「設定」で切り替えられます。初回はWindowsの表示言語に合わせます。</div>
 </section>
 
 <section id="first">
@@ -153,7 +154,7 @@
 <tr><td>ROMを開く</td><td>別のROMイメージ（PC-E500の256KB、またはPC-E650/PC-U6000の384KB）に切り替えます</td></tr>
 <tr><td>一時停止 / 再開</td><td>機械の実行を止めます。止めている間はキー入力を受け付けません</td></tr>
 <tr><td>保存 / 読込</td><td>現在の状態をスナップショットとしてファイルへ保存・復元します（<a href="#save">11章</a>）</td></tr>
-<tr><td>設定</td><td>外観、内蔵RAM、RAMカード、CE-140F、音量などを変更します（<a href="#settings">6章</a>）</td></tr>
+<tr><td>設定</td><td>言語、外観、内蔵RAM、RAMカード、CE-140F、音量などを変更します（<a href="#settings">6章</a>）</td></tr>
 <tr><td>CE-140F</td><td>X:ドライブの通信履歴を表示し、保存フォルダを開けます（<a href="#disk">7章</a>）</td></tr>
 <tr><td>文字入出力</td><td>液晶の文字をコピーしたり、クリップボードの文字を入力したりします（<a href="#text">8章</a>）</td></tr>
 <tr><td>オールリセット</td><td>実機の ON＋RESET と同じ操作をします（<a href="#reset">9章</a>）</td></tr>
@@ -198,6 +199,7 @@
 <p>ツールバーの <b>設定</b> で開きます。変更は <b>適用</b> で反映され、内蔵RAMやRAMカードに関わる変更は現在の内容を保存してから再起動します。</p>
 <table>
 <tr><th>項目</th><th>内容</th></tr>
+<tr><td>言語 / Language</td><td>すべてのウィンドウとメッセージを日本語または英語にします。適用するとエミュレータを再起動します（状態は保存されます）</td></tr>
 <tr><td>本体の外観</td><td>PC-E500 / PC-E650 の筐体を切り替えます。PC-U6000はPC-E650と同じ筐体です。外観を変えてもROMは自動で変わらないので、機種に合うROMは「ROMを開く」で選んでください</td></tr>
 <tr><td>内蔵RAM (KB)</td><td>8〜256KB。容量ごとに内容を別々に保持するので、元の容量に戻せば以前の内容が戻ります。E650/U6000（384KB ROM）では実機標準の64KBと、増設改造相当の128KB・256KBから選びます</td></tr>
 <tr><td>RAMカード</td><td><a href="#ramcard">5章</a>を参照</td></tr>

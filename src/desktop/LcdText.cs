@@ -31,7 +31,7 @@ internal sealed class LcdTextDecoder
     }
     internal string Decode(byte[] pixels)
     {
-        if(!FontFound)return "（このROMの文字フォントを検出できません）";
+        if(!FontFound)return L.T("（このROMの文字フォントを検出できません）","(The character font of this ROM was not found)");
         string[] lines=new string[4];
         for(int row=0;row<4;row++) {
             char[] text=new char[40];
@@ -65,29 +65,29 @@ internal sealed class ScreenTextDialog : Form
     readonly Func<string> read;
     internal ScreenTextDialog(Func<string> read,Func<string,string> paste)
     {
-        this.read=read;Text="LCD文字のコピー・貼り付け";ClientSize=new(760,330);MinimumSize=new Size(580,280);StartPosition=FormStartPosition.CenterParent;
+        this.read=read;Text=L.T("LCD文字のコピー・貼り付け","LCD text copy and paste");ClientSize=new(760,330);MinimumSize=new Size(580,280);StartPosition=FormStartPosition.CenterParent;
         Font=new Font("Yu Gothic UI",10);
-        var note=new Label{Dock=DockStyle.Top,Height=62,Text="LCDを40桁×4行の文字として読み取ります。範囲を選択してコピーできます。\n貼り付けはASCII文字と改行をPC-E500のキー入力として送ります。",Padding=new Padding(8,5,0,0)};
+        var note=new Label{Dock=DockStyle.Top,Height=62,Text=L.T("LCDを40桁×4行の文字として読み取ります。範囲を選択してコピーできます。\n貼り付けはASCII文字と改行をPC-E500のキー入力として送ります。","Reads the LCD as 40 columns by 4 rows of text. Select a range to copy it.\nPaste sends ASCII characters and line breaks as PC-E500 key input."),Padding=new Padding(8,5,0,0)};
         var buttons=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=45,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(4)};
-        var close=new Button{Text="閉じる",AutoSize=true,DialogResult=DialogResult.Cancel};
-        var pasteButton=new Button{Text="クリップボードから貼り付け",AutoSize=true};
-        var copy=new Button{Text="選択範囲をコピー",AutoSize=true};
-        var all=new Button{Text="全選択",AutoSize=true};var refresh=new Button{Text="画面を更新",AutoSize=true};
+        var close=new Button{Text=L.T("閉じる","Close"),AutoSize=true,DialogResult=DialogResult.Cancel};
+        var pasteButton=new Button{Text=L.T("クリップボードから貼り付け","Paste from clipboard"),AutoSize=true};
+        var copy=new Button{Text=L.T("選択範囲をコピー","Copy selection"),AutoSize=true};
+        var all=new Button{Text=L.T("全選択","Select all"),AutoSize=true};var refresh=new Button{Text=L.T("画面を更新","Refresh screen"),AutoSize=true};
         close.Click+=(_,_)=>Close();
         refresh.Click+=(_,_)=>RefreshText();
         all.Click+=(_,_)=>{text.SelectAll();text.Focus();};
         copy.Click+=(_,_)=>{try {
             string value=text.SelectionLength>0?text.SelectedText:text.Text;
-            if(value.Length==0){result.Text="コピーする文字がありません。";return;}
-            Clipboard.SetText(value,TextDataFormat.UnicodeText);result.Text=$"{value.Length}文字をコピーしました。";
-        }catch(Exception ex){result.Text="コピーできません: "+ex.Message;}};
+            if(value.Length==0){result.Text=L.T("コピーする文字がありません。","Nothing to copy.");return;}
+            Clipboard.SetText(value,TextDataFormat.UnicodeText);result.Text=L.T($"{value.Length}文字をコピーしました。",$"Copied {value.Length} characters.");
+        }catch(Exception ex){result.Text=L.T("コピーできません: ","Could not copy: ")+ex.Message;}};
         pasteButton.Click+=(_,_)=>{try {
-            if(!Clipboard.ContainsText(TextDataFormat.UnicodeText)){result.Text="クリップボードに文字列がありません。";return;}
+            if(!Clipboard.ContainsText(TextDataFormat.UnicodeText)){result.Text=L.T("クリップボードに文字列がありません。","The clipboard has no text.");return;}
             result.Text=paste(Clipboard.GetText(TextDataFormat.UnicodeText));
-        }catch(Exception ex){result.Text="貼り付けできません: "+ex.Message;}};
+        }catch(Exception ex){result.Text=L.T("貼り付けできません: ","Could not paste: ")+ex.Message;}};
         buttons.Controls.Add(close);buttons.Controls.Add(pasteButton);buttons.Controls.Add(copy);buttons.Controls.Add(all);buttons.Controls.Add(refresh);
         Controls.Add(text);Controls.Add(result);Controls.Add(buttons);Controls.Add(note);CancelButton=close;
         Shown+=(_,_)=>RefreshText();
     }
-    void RefreshText(){int start=text.SelectionStart,length=text.SelectionLength;text.Text=read();text.Select(Math.Min(start,text.TextLength),Math.Min(length,Math.Max(0,text.TextLength-start)));result.Text="画面を読み取りました。";}
+    void RefreshText(){int start=text.SelectionStart,length=text.SelectionLength;text.Text=read();text.Select(Math.Min(start,text.TextLength),Math.Min(length,Math.Max(0,text.TextLength-start)));result.Text=L.T("画面を読み取りました。","Screen read.");}
 }

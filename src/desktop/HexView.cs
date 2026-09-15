@@ -14,14 +14,14 @@ internal static class MemoryMap
         return MemoryKind.Unmapped;
     }
     internal static string Name(Core core,int a) {
-        if(a>=0xc0000)return "内蔵ROM (CE2)";
-        if(a>=0xc0000-core.InternalKB*1024)return $"内蔵RAM {core.InternalKB}KB";
-        if(a>=0x80000)return $"内蔵RAM {core.InternalKB}KBのミラー";
-        if(a>=0x40000)return core.CardKB>0?$"RAMカード {core.CardKB}KB とそのミラー":"カードスロット (未装着)";
-        if(a>=0x20000)return core.IsE650Family?"拡張ROM (CE3)":"CE3 (未使用)";
-        if(a>=0x10000)return "CE6 (未使用)";
-        if(a>=0x2000&&a<0x4000)return "LCDコントローラの窓 (表示に影響しない生の値)";
-        return "内部エリア";
+        if(a>=0xc0000)return L.T("内蔵ROM (CE2)","Internal ROM (CE2)");
+        if(a>=0xc0000-core.InternalKB*1024)return L.T($"内蔵RAM {core.InternalKB}KB",$"Internal RAM {core.InternalKB}KB");
+        if(a>=0x80000)return L.T($"内蔵RAM {core.InternalKB}KBのミラー",$"Mirror of internal RAM {core.InternalKB}KB");
+        if(a>=0x40000)return core.CardKB>0?L.T($"RAMカード {core.CardKB}KB とそのミラー",$"RAM card {core.CardKB}KB and its mirrors"):L.T("カードスロット (未装着)","Card slot (empty)");
+        if(a>=0x20000)return core.IsE650Family?L.T("拡張ROM (CE3)","Extension ROM (CE3)"):L.T("CE3 (未使用)","CE3 (unused)");
+        if(a>=0x10000)return L.T("CE6 (未使用)","CE6 (unused)");
+        if(a>=0x2000&&a<0x4000)return L.T("LCDコントローラの窓 (表示に影響しない生の値)","LCD controller window (raw bus, display unaffected)");
+        return L.T("内部エリア","Internal area");
     }
 }
 
@@ -134,13 +134,13 @@ internal sealed class HexView : Control
     // refuses the rest, and the note says why nothing changed.
     void Edit(int digit) {
         var core=read();
-        if(core is null||cursor<0){Note?.Invoke("書き換える位置をクリックしてください。");return;}
-        if(MemoryMap.Kind(core,cursor)!=MemoryKind.Ram){Note?.Invoke($"{cursor:X5} は {MemoryMap.Name(core,cursor)} のため書き換えできません。内蔵RAM・RAMカードのみ書き換えられます。");return;}
+        if(core is null||cursor<0){Note?.Invoke(L.T("書き換える位置をクリックしてください。","Click the byte to edit."));return;}
+        if(MemoryMap.Kind(core,cursor)!=MemoryKind.Ram){Note?.Invoke(L.T($"{cursor:X5} は {MemoryMap.Name(core,cursor)} のため書き換えできません。内蔵RAM・RAMカードのみ書き換えられます。",$"{cursor:X5} is {MemoryMap.Name(core,cursor)} and cannot be edited. Only internal RAM and the RAM card are writable."));return;}
         byte old=core.Dump(cursor,1)[0];
         byte value=nibble==0?(byte)((digit<<4)|(old&0x0f)):(byte)((old&0xf0)|digit);
         try {core.Write(cursor,[value]);}
         catch(Exception ex){Note?.Invoke(ex.Message);return;}
-        Note?.Invoke($"{cursor:X5}: {old:X2} → {value:X2}");
+        Note?.Invoke(L.T($"{cursor:X5}: {old:X2} → {value:X2}",$"{cursor:X5}: {old:X2} → {value:X2}"));
         if(nibble==0)nibble=1;
         else {nibble=0;if(cursor<0xfffff)cursor++;}
         EnsureVisible();Reload();Moved?.Invoke();
@@ -166,7 +166,7 @@ internal sealed class HexView : Control
     protected override void OnPaint(PaintEventArgs e) {
         var g=e.Graphics;g.Clear(BackColor);
         if(shown is null||data.Length==0) {
-            TextRenderer.DrawText(g,"ROMが読み込まれていません。",Font,new Point(4,2),Color.Gray,TextFormatFlags.NoPadding);return;
+            TextRenderer.DrawText(g,L.T("ROMが読み込まれていません。","No ROM is loaded."),Font,new Point(4,2),Color.Gray,TextFormatFlags.NoPadding);return;
         }
         const TextFormatFlags flags=TextFormatFlags.NoPadding|TextFormatFlags.SingleLine;
         int rows=(data.Length+Columns-1)/Columns;

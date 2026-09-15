@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PC-E500 Emulator User Manual</title>
+<style>
+  :root{--ink:#222;--sub:#5a6470;--line:#dde2e8;--accent:#2b5fa8;--bg:#fafbfc;--panel:#fff;--code:#f1f3f6;--warn:#fff6e0;--tip:#e9f4ff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Yu Gothic UI","Meiryo","Segoe UI",sans-serif;font-size:15px;line-height:1.75;color:var(--ink);background:var(--bg)}
+  header{background:#2c3440;color:#fff;padding:26px 32px}
+  header h1{margin:0;font-size:24px;font-weight:600}
+  header p{margin:6px 0 0;color:#c8d0da}
+  .wrap{display:flex;gap:32px;max-width:1240px;margin:0 auto;padding:24px 20px 60px}
+  nav{flex:0 0 230px;position:sticky;top:16px;align-self:flex-start;font-size:14px}
+  nav ol{list-style:none;padding:0;margin:0;border-left:3px solid var(--line)}
+  nav li a{display:block;padding:5px 12px;color:var(--sub);text-decoration:none}
+  nav li a:hover{color:var(--accent)}
+  nav li.sub a{padding-left:26px;font-size:13px}
+  main{flex:1;min-width:0}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:22px 28px;margin-bottom:22px}
+  h2{margin:0 0 14px;font-size:21px;border-bottom:2px solid var(--accent);padding-bottom:6px}
+  h3{margin:22px 0 8px;font-size:17px;color:var(--accent)}
+  p{margin:8px 0}
+  figure{margin:14px 0;text-align:center}
+  figure img{max-width:100%;border:1px solid var(--line);border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  figure.small img{max-width:520px}
+  figcaption{font-size:13px;color:var(--sub);margin-top:6px}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#f3f5f8;white-space:nowrap}
+  code,kbd{font-family:Consolas,"Courier New",monospace;font-size:13.5px}
+  code{background:var(--code);padding:1px 5px;border-radius:3px}
+  kbd{display:inline-block;border:1px solid #b9c0c8;border-bottom-width:2px;border-radius:4px;padding:0 6px;background:#fff;font-size:12.5px;line-height:1.6}
+  pre{background:var(--code);padding:12px 14px;border-radius:6px;overflow:auto;font-size:13.5px;line-height:1.5}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:10px 0}
+  .steps li{position:relative;padding:6px 0 6px 40px;margin:0}
+  .steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:7px;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;text-align:center;line-height:26px;font-size:13px;font-weight:600}
+  .box{border-left:4px solid;border-radius:4px;padding:10px 14px;margin:12px 0;font-size:14px}
+  .tip{background:var(--tip);border-color:var(--accent)}
+  .warn{background:var(--warn);border-color:#e0a300}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .swatch{display:inline-block;width:14px;height:14px;border:1px solid #999;vertical-align:-2px;margin-right:6px}
+  footer{max-width:1240px;margin:0 auto;padding:0 20px 40px;color:var(--sub);font-size:13px}
+  @media (max-width:860px){.wrap{flex-direction:column}nav{position:static;flex:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>PC-E500 / PC-E650 / PC-U6000 Emulator User Manual</h1>
+  <p>How to use "PokeCom", the Windows desktop emulator &nbsp;·&nbsp; <a href="index.html" style="color:#c8d0da">日本語版</a></p>
+</header>
+
+<div class="wrap">
+<nav>
+  <ol>
+    <li><a href="#start">1. Starting up and the window</a></li>
+    <li><a href="#first">2. First steps</a></li>
+    <li><a href="#keys">3. Keys</a></li>
+    <li><a href="#toolbar">4. Toolbar buttons</a></li>
+    <li><a href="#ramcard">5. RAM cards</a></li>
+    <li class="sub"><a href="#ramcard-create">Creating a card</a></li>
+    <li class="sub"><a href="#ramcard-swap">Swapping and removing</a></li>
+    <li><a href="#settings">6. Settings</a></li>
+    <li><a href="#disk">7. CE-140F (drive X:)</a></li>
+    <li><a href="#text">8. Copying and pasting text</a></li>
+    <li><a href="#reset">9. Reset</a></li>
+    <li><a href="#debug">10. Debug</a></li>
+    <li class="sub"><a href="#debug-edit">Editing memory</a></li>
+    <li class="sub"><a href="#debug-bin">Loading and saving BIN files</a></li>
+    <li><a href="#save">11. Saving and restoring</a></li>
+    <li><a href="#faq">12. Troubleshooting</a></li>
+    <li><a href="#romdump">13. Dumping the ROM from a real machine</a></li>
+    <li class="sub"><a href="#romdump-savem">Dumping with SAVEM</a></li>
+    <li class="sub"><a href="#romdump-header">The header and how to fix files</a></li>
+    <li class="sub"><a href="#romdump-tool">Using the merge tool</a></li>
+    <li><a href="#scope">14. Scope and license</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="start">
+<h2>1. Starting up and the window</h2>
+<p>Double-click <code>PC-E500.exe</code> in the <code>app</code> folder (or <code>Start-PC-E500.cmd</code> one folder up). The .NET runtime is bundled, so nothing else needs to be installed.</p>
+<p>Everything the emulator reads and writes lives inside the <code>app</code> folder. You can copy the whole <code>app</code> folder somewhere else and it keeps working.</p>
+<table>
+<tr><th>Folder</th><th>Contents</th></tr>
+<tr><td><code>app\rom\</code></td><td>Internal ROM images, loaded at start-up</td></tr>
+<tr><td><code>app\ram\</code></td><td>RAM card image files (<a href="#ramcard">chapter 5</a>)</td></tr>
+<tr><td><code>app\drive-x\</code></td><td>Folder used by the CE-140F (drive X:) (<a href="#disk">chapter 7</a>)</td></tr>
+<tr><td><code>app\state\</code></td><td>Settings, internal RAM contents, automatic snapshots, backups taken before a reset</td></tr>
+<tr><td><code>app\manual\</code></td><td>This manual</td></tr>
+</table>
+<figure>
+<img src="images-en/main-e500.png" alt="Main window">
+<figcaption>The main window: toolbar on top, the machine in the middle, a hint line and a status line at the bottom.</figcaption>
+</figure>
+<p>The bottom line always shows the run state, ROM version, internal RAM and RAM card sizes, CE-140F connection and sound state.</p>
+<div class="box tip">The UI language (Japanese / English) is chosen in <b>Settings</b>. The first run follows the Windows display language.</div>
+</section>
+
+<section id="first">
+<h2>2. First steps</h2>
+<p>On the first start (or whenever memory is empty) the machine asks you to initialise memory, just like the real one.</p>
+<ol class="steps">
+<li>
+<figure class="small"><img src="images-en/lcd-new-card.png" alt="Initialisation prompt"><figcaption>"New card / PF1 initialises" (<code>NEW CARD</code> on English ROMs; the Japanese ROM shown here says the same in katakana)</figcaption></figure>
+Press <b>PF1</b> (<kbd>F1</kbd> on the PC keyboard) to initialise memory. When you attach a new RAM card the machine asks the same for the card. Large capacities take a few seconds.
+</li>
+<li>
+<figure class="small"><img src="images-en/lcd-initialized.png" alt="After initialisation"><figcaption>Right after initialisation</figcaption></figure>
+Press <b>BASIC</b> (<kbd>F7</kbd>). <b>RUN</b> lights up at the top of the LCD and BASIC is ready.
+</li>
+<li>
+<figure class="small"><img src="images-en/lcd-run.png" alt="1+2"><figcaption>Type <code>1+2</code> and Enter; the answer 3 appears at the right</figcaption></figure>
+Type <code>1+2</code> and press <kbd>Enter</kbd>. The result is displayed.
+</li>
+</ol>
+
+<h3>Entering a program</h3>
+<p>Numbered program lines are entered in <b>PRO</b> mode. Pressing BASIC again toggles between RUN and PRO.</p>
+<figure class="small"><img src="images-en/lcd-pro.png" alt="PRO mode"><figcaption><code>10 PRINT 123</code> entered in PRO mode</figcaption></figure>
+<p>When you are done, press BASIC to return to <b>RUN</b>, type <code>RUN</code> and press Enter.</p>
+<figure class="small"><img src="images-en/lcd-program.png" alt="RUN result"><figcaption>Result of <code>RUN</code></figcaption></figure>
+<div class="box warn">Entering a numbered line while in RUN mode gives <code>Syntax error</code>. Switch to PRO before typing a program.</div>
+</section>
+
+<section id="keys">
+<h2>3. Keys</h2>
+<p>Click the keys on the screen or use the PC keyboard. Letters are sent to the pocket computer as upper case.</p>
+<table>
+<tr><th>PC key</th><th>Pocket computer</th></tr>
+<tr><td>Letters, digits, space, operators</td><td>The matching key. Symbols such as <code>"</code> <code>:</code> <code>$</code> are turned into SHIFT sequences automatically</td></tr>
+<tr><td><kbd>Enter</kbd> / <kbd>BackSpace</kbd> / <kbd>Delete</kbd> / <kbd>Insert</kbd></td><td>ENTER / BS / DEL / INS</td></tr>
+<tr><td>Arrow keys</td><td>Cursor movement</td></tr>
+<tr><td><kbd>F1</kbd>–<kbd>F5</kbd></td><td>PF1–PF5 (function keys)</td></tr>
+<tr><td><kbd>F6</kbd></td><td>MENU</td></tr>
+<tr><td><kbd>F7</kbd></td><td>BASIC (toggles RUN / PRO)</td></tr>
+<tr><td><kbd>F8</kbd></td><td>2ndF</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>ON/BRK (power on, break)</td></tr>
+<tr><td><kbd>Ctrl</kbd> / <kbd>Shift</kbd></td><td>CTRL / SHIFT</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Open Text I/O / paste the clipboard / open Debug</td></tr>
+</table>
+<div class="box tip">Clicking <b>SHIFT</b> or <b>CTRL</b> on the screen holds it down until the next key. Click again to release.</div>
+<p>The real machine scans the keyboard 64 times a second, so about 18 keys per second is the limit. A held key repeats as fast as the machine can take and stops as soon as it is released. Input through a Japanese IME is not supported.</p>
+</section>
+
+<section id="toolbar">
+<h2>4. Toolbar buttons</h2>
+<figure><img src="images-en/toolbar.png" alt="Toolbar"><figcaption>The toolbar</figcaption></figure>
+<table>
+<tr><th>Button</th><th>What it does</th></tr>
+<tr><td>Open ROM</td><td>Switches to another ROM image (256KB PC-E500 or 384KB PC-E650/PC-U6000)</td></tr>
+<tr><td>Pause / Resume</td><td>Stops the machine. Keys are not accepted while paused</td></tr>
+<tr><td>Save / Load</td><td>Saves the current state to a snapshot file, or restores one (<a href="#save">chapter 11</a>)</td></tr>
+<tr><td>Settings</td><td>Language, appearance, internal RAM, RAM card, CE-140F, volume and more (<a href="#settings">chapter 6</a>)</td></tr>
+<tr><td>CE-140F</td><td>Shows the drive X: transfer log and opens its folder (<a href="#disk">chapter 7</a>)</td></tr>
+<tr><td>Text I/O</td><td>Copies the LCD text or types clipboard text into the machine (<a href="#text">chapter 8</a>)</td></tr>
+<tr><td>All Reset</td><td>The real machine's ON+RESET (<a href="#reset">chapter 9</a>)</td></tr>
+<tr><td>Debug</td><td>CPU registers, memory view and editing, BIN load/save (<a href="#debug">chapter 10</a>)</td></tr>
+<tr><td>Help</td><td>Opens this manual</td></tr>
+<tr><td>Speed</td><td>Cycles 0.5x → 1x → 2x → 4x. Use 1x when checking sound</td></tr>
+</table>
+<p>Settings, CE-140F, Text I/O and Debug stay open while the machine runs. Pressing the same button again brings the open window to the front.</p>
+</section>
+
+<section id="ramcard">
+<h2>5. RAM cards</h2>
+<p>A RAM card is the memory card that plugs into the real machine's card slot. In this emulator <b>one card is one image file</b>: the file size is the card's capacity (8 / 16 / 32 / 64 / 128 / 256 KB) and its bytes are the card's contents. Make as many cards as you like and swap them just as you would real ones.</p>
+<p>The card's contents are written back to its image file every 5 seconds, at power off, at exit and when the card is removed.</p>
+<figure><img src="images-en/settings.png" alt="RAM card in Settings"><figcaption>The RAM card row in Settings, where cards are created, attached and detached</figcaption></figure>
+
+<h3 id="ramcard-create">Creating a card</h3>
+<ol class="steps">
+<li>Open <b>Settings</b> from the toolbar and press <b>Create...</b> in the RAM card row.</li>
+<li>
+<figure class="small"><img src="images-en/card-size.png" alt="Create RAM card"><figcaption>Choose the capacity</figcaption></figure>
+Choose a capacity and press <b>OK</b>. You are asked where to save the file; keep it in <code>app\ram\</code> (any file name is fine).
+</li>
+<li>Press <b>Apply</b>. The current contents are saved, the machine restarts with the card attached.</li>
+<li>The ROM asks to initialise the new card: press <b>PF1</b> (<kbd>F1</kbd>).</li>
+</ol>
+<p>The status line shows <code>RAM card 64KB (card-64KB.ram)</code> or similar once the card is in.</p>
+
+<h3 id="ramcard-swap">Swapping and removing</h3>
+<table>
+<tr><th>Task</th><th>How</th></tr>
+<tr><td>Swap to another card</td><td>Settings → <b>Attach...</b>, pick another image file, <b>Apply</b>. The current card is saved to its file before the switch</td></tr>
+<tr><td>Remove the card</td><td>Settings → <b>Detach</b> → <b>Apply</b>. The slot is empty</td></tr>
+<tr><td>Duplicate a card</td><td>Copy the image file in Explorer (with the emulator closed or the card detached)</td></tr>
+</table>
+<div class="box tip">Swapping RAM cards does not touch internal RAM, and changing the internal RAM size does not touch the card.</div>
+<div class="box warn">Do not modify the attached image file with other software while the emulator is running: the 5-second autosave will overwrite it.</div>
+</section>
+
+<section id="settings">
+<h2>6. Settings</h2>
+<p>Open with the <b>Settings</b> button. Changes take effect with <b>Apply</b>; changes to internal RAM or the RAM card save the current contents and restart the machine.</p>
+<table>
+<tr><th>Item</th><th>Meaning</th></tr>
+<tr><td>Language / 言語</td><td>Japanese or English for all windows and messages. Applying a new language restarts the emulator (the state is saved first)</td></tr>
+<tr><td>Appearance</td><td>PC-E500 or PC-E650 case. The PC-U6000 has the same case as the PC-E650. Appearance does not change the ROM: pick the matching ROM with Open ROM</td></tr>
+<tr><td>Internal RAM (KB)</td><td>8–256KB. Contents are kept per capacity, so switching back restores what that size held. With an E650/U6000 (384KB) ROM the choices are the stock 64KB or the 128KB/256KB expansion mod</td></tr>
+<tr><td>RAM card</td><td>See <a href="#ramcard">chapter 5</a></td></tr>
+<tr><td>Connect CE-140F (X:)</td><td>Drive X: connection, write protection and folder</td></tr>
+<tr><td>Volume / Mute</td><td>BEEP and key click volume</td></tr>
+<tr><td>Show lines between LCD dots</td><td>Draws the gaps between dots, like the real display</td></tr>
+</table>
+<div class="grid">
+<figure><img src="images-en/main-e650.png" alt="PC-E650 appearance"><figcaption>Appearance set to PC-E650</figcaption></figure>
+<figure><img src="images-en/lcd-dot-lines.png" alt="Dot lines"><figcaption>LCD with "lines between dots" enabled</figcaption></figure>
+</div>
+</section>
+
+<section id="disk">
+<h2>7. CE-140F (drive X:)</h2>
+<p>The CE-140F floppy drive is emulated with a PC folder as the disk. The default folder is <code>app\drive-x\</code>.</p>
+<pre>SAVE "X:TEST.BAS"        ' save a program
+SAVE "X:TEXT.BAS",A      ' save as ASCII
+LOAD "X:TEST.BAS"        ' load
+FILES "X:"               ' list</pre>
+<p>OPEN / PRINT # / INPUT # file I/O and COPY, NAME, KILL, SET and INIT work too. File names are 8.3 with letters, digits, <code>_</code> and <code>-</code>.</p>
+<figure><img src="images-en/disk-trace.png" alt="CE-140F window"><figcaption>The CE-140F window; the log refreshes every 0.5 seconds</figcaption></figure>
+<div class="box warn"><code>INIT</code> deletes the disk files in the folder. Point the CE-140F at a folder of its own.</div>
+</section>
+
+<section id="text">
+<h2>8. Copying and pasting text</h2>
+<p><b>Text I/O</b> on the toolbar (or <kbd>Ctrl</kbd>+<kbd>C</kbd>) reads the LCD as 40 columns by 4 rows of text. Drag to select and press "Copy selection" to put it on the clipboard.</p>
+<figure><img src="images-en/text-transfer.png" alt="Text I/O window"><figcaption>The Text I/O window</figcaption></figure>
+<p>"Paste from clipboard" (or <kbd>Ctrl</kbd>+<kbd>V</kbd>) sends the clipboard text to the machine as key presses. Line breaks become ENTER and tabs become four spaces, which makes it easy to feed in a long BASIC listing. Up to 4096 characters at a time, typed at the real machine's key rate; raise the speed for long listings.</p>
+</section>
+
+<section id="reset">
+<h2>9. Reset</h2>
+<table>
+<tr><th>Action</th><th>Effect</th></tr>
+<tr><td>Click the RESET hole (between BASIC and A)</td><td>Restarts only the CPU. Internal RAM and the RAM card are kept</td></tr>
+<tr><td><b>All Reset</b> on the toolbar</td><td>The real machine's ON+RESET. The ROM asks whether to erase all data: <b>Y</b> erases everything, <b>N</b> resumes as before</td></tr>
+</table>
+<figure class="small"><img src="images-en/lcd-all-reset.png" alt="All reset prompt"><figcaption>Right after All Reset; answer Y or N</figcaption></figure>
+<p>The state just before an All Reset is saved to <code>app\state\before-reset-&lt;date&gt;.e500state</code>, so an accidental erase can be undone with Load. Neither reset erases the RAM card.</p>
+</section>
+
+<section id="debug">
+<h2>10. Debug</h2>
+<p>Open with <b>Debug</b> on the toolbar (or <kbd>Ctrl</kbd>+<kbd>D</kbd>). It follows the running machine and refreshes every 0.25 s (untick "Auto refresh" to update only with the Refresh button).</p>
+<figure><img src="images-en/debugger.png" alt="Debug window"><figcaption>CPU registers and the SC62015 internal RAM on the left, memory on the right</figcaption></figure>
+<table>
+<tr><th>Left</th><td>A, B, BA, I, IL, IH, X, Y, U, S, PC, flags, run state and cycle count, then the 256 bytes of internal RAM with the BP/PX/PY pointers and the KOL–SSR I/O registers</td></tr>
+<tr><th>Right</th><td>Memory from <code>00000</code> to <code>FFFFF</code> in hex and ASCII. Move with the scrollbar, the mouse wheel, the arrow keys, PageUp/PageDown and <kbd>Ctrl</kbd>+<kbd>Home</kbd>/<kbd>End</kbd></td></tr>
+<tr><th>Address box</th><td>Type a hex address and press Enter (<code>B8000</code>, <code>&amp;HB8000</code> or <code>0xB8000</code>). PC, S, X, Y and U jump to where each register points; Internal RAM, Card and ROM jump to the start of each region</td></tr>
+<tr><th>Bottom</th><td>Which region the visible range and the caret are in</td></tr>
+</table>
+
+<h3>Region colours</h3>
+<table>
+<tr><th><span class="swatch" style="background:#000"></span>Black</th><td>Internal RAM, the RAM card and their mirrors — <b>editable</b></td></tr>
+<tr><th><span class="swatch" style="background:#00008c"></span>Navy</th><td>Internal ROM (CE2) and the E650/U6000 extension ROM (CE3) — read only</td></tr>
+<tr><th><span class="swatch" style="background:#a0a0a0"></span>Grey</th><td>Nothing connected (the card slot without a card, CE6, the internal area, …)</td></tr>
+</table>
+<div class="grid">
+<figure><img src="images-en/debugger-ram-rom.png" alt="RAM to ROM boundary"><figcaption>Internal RAM (black) turning into internal ROM (navy) at <code>C0000</code></figcaption></figure>
+<figure><img src="images-en/debugger-slot-mirror.png" alt="Card slot to mirror boundary"><figcaption>The empty card slot (grey) meeting the internal RAM mirror (black) at <code>80000</code></figcaption></figure>
+</div>
+
+<h3 id="debug-edit">Editing memory (hex editor)</h3>
+<ol class="steps">
+<li>Click the byte you want to change. The caret lands on it and the bottom line names its address and region.</li>
+<li>Type <kbd>0</kbd>–<kbd>9</kbd> or <kbd>A</kbd>–<kbd>F</kbd>. Each digit is written immediately, high nibble first; after two digits the caret moves to the next byte, so you can keep typing.</li>
+<li>The arrow keys move the caret. Edits are autosaved like any other RAM change.</li>
+</ol>
+<p>Only the black regions (internal RAM and the RAM card) can be edited. Typing over ROM or grey areas changes nothing and the bottom line says why.</p>
+
+<h3 id="debug-bin">Loading and saving BIN files</h3>
+<div class="grid">
+<figure><img src="images-en/bin-load.png" alt="Load BIN"><figcaption>Load BIN, with a SAVEM header detected</figcaption></figure>
+<figure><img src="images-en/bin-save.png" alt="Save BIN"><figcaption>Save BIN; with the header the file goes back where it came from</figcaption></figure>
+</div>
+<table>
+<tr><th>Load BIN</th><td>Writes a file into memory at the given address. Files made by the CE-140F <code>SAVE M</code> carry a 16-byte header; it is detected and the data goes to the start address recorded in it (untick the box to load anywhere). The target must lie entirely in RAM, otherwise nothing is written</td></tr>
+<tr><th>Save BIN</th><td>Writes the given length (hex) from the given address to a file. By default the same header as <code>SAVE M</code> is added, so the file can be put back with <code>LOAD M</code> or Load BIN</td></tr>
+</table>
+<div class="box tip">When trying machine code, reserve an area BASIC does not use rather than writing at the very start of internal RAM (<code>B8000</code> on a 32KB PC-E500, <code>B0000</code> on a 64KB E650/U6000). Edits are autosaved at once; if you break a system area, an All Reset (<a href="#reset">chapter 9</a>) puts things right.</div>
+</section>
+
+<section id="save">
+<h2>11. Saving and restoring</h2>
+<p>Memory survives power off and exit without you doing anything.</p>
+<table>
+<tr><th>Internal RAM</th><td>Saved under <code>app\state\memory\</code> every 5 seconds, at power off and at exit; one file per capacity</td></tr>
+<tr><th>RAM card</th><td>Saved to the attached image file at the same moments</td></tr>
+<tr><th>Snapshot</th><td>CPU, internal RAM, LCD and timers are saved automatically to <code>app\state\</code>; the next start resumes from there</td></tr>
+<tr><th>Settings</th><td><code>app\state\settings.json</code></td></tr>
+</table>
+<p><b>Save</b> and <b>Load</b> on the toolbar keep and restore a snapshot (<code>.e500state</code>) of your choice.</p>
+<div class="box tip">A snapshot holds the CPU and internal RAM. The RAM card is not part of it: after a load the card keeps what its image file holds. A snapshot cannot be loaded with a card of a different capacity in the slot (one saved without a card is loaded without a card).</div>
+<p>Snapshots cannot be saved or loaded during a CE-140F transfer or with a file OPEN. <code>CLOSE</code> first.</p>
+</section>
+
+<section id="faq">
+<h2>12. Troubleshooting</h2>
+<table>
+<tr><th>"NEW CARD" (or its katakana equivalent) at start-up</th><td>Normal. Press <kbd>F1</kbd> to initialise (<a href="#first">chapter 2</a>)</td></tr>
+<tr><th>Keys do nothing</th><td>The machine may be off: press <kbd>Esc</kbd> (ON/BRK). Also check that it is not paused</td></tr>
+<tr><th>Syntax error when entering numbered lines</th><td>You are in RUN mode. Press BASIC (<kbd>F7</kbd>) for PRO</td></tr>
+<tr><th>No sound, or choppy sound</th><td>Check Mute and Volume in Settings. At 2x and 4x the audio is not in sync with the real machine; check at 1x</td></tr>
+<tr><th>The card capacity did not change</th><td>Did you press <b>Apply</b> in Settings? The status line names the attached card</td></tr>
+<tr><th>Load says the RAM card differs</th><td>Attach (or detach) a card of the same capacity as at save time before loading (<a href="#save">chapter 11</a>)</td></tr>
+<tr><th>I want to wipe internal RAM</th><td>All Reset and answer <b>Y</b>. The previous state is backed up automatically (<a href="#reset">chapter 9</a>)</td></tr>
+<tr><th>I broke memory by mistake</th><td>Load <code>app\state\before-reset-*.e500state</code> or a snapshot you saved</td></tr>
+<tr><th>I want to use a PC-E650 / PC-U6000</th><td>Put the merged 384KB ROM image (<a href="#romdump">chapter 13</a>) in <code>app\rom\</code>, pick it with Open ROM and set the appearance to PC-E650</td></tr>
+<tr><th>Open ROM refuses the file</th><td>Check that it is 256KB or 384KB (plus 16 bytes if it still has the header) and that it is not S3B alone (<a href="#romdump-header">chapter 13</a>)</td></tr>
+</table>
+</section>
+
+<section id="romdump">
+<h2>13. Dumping the ROM from a real machine</h2>
+<p>The emulator ships without the internal ROM. Take the ROM image from your own machine and put it in <code>app\rom\</code>. The machine's <code>SAVEM</code> command (write memory to a file) does the dumping.</p>
+
+<h3>What you need</h3>
+<table>
+<tr><th>The machine</th><td>PC-E500 / PC-E550 / PC-1490UII etc. (256KB ROM), or PC-E650 / PC-U6000 (384KB ROM)</td></tr>
+<tr><th>Somewhere to save</th><td>A CE-140F floppy drive or any other device on the 11-pin connector that can save files. A PC running CE-140F emulation software over an 11-pin cable works too. Anything that ends up as a file the PC can read is fine</td></tr>
+</table>
+
+<h3 id="romdump-savem">Dumping with SAVEM</h3>
+<p>The syntax is as follows. <code>d:</code> is the device name of whatever you connected, and addresses are hex written with <code>&amp;H</code>.</p>
+<pre>SAVEM "d:filename",start address,end address</pre>
+<ol class="steps">
+<li>Switch the machine on and press BASIC until <b>RUN</b> shows.</li>
+<li>Dump the main ROM (every model). It is 256KB, so it can take a few minutes.
+<pre>SAVEM "L:S3A.ROM",&amp;HC0000,&amp;HFFFFF</pre></li>
+<li><b>PC-E650 / PC-U6000 also need this one.</b> Dump the extension ROM (128KB).
+<pre>SAVEM "L:S3B.ROM",&amp;H20000,&amp;H3FFFF</pre></li>
+<li>Bring the files over to the PC.</li>
+</ol>
+<div class="box tip"><code>L:</code> is just an example. Use the device name of what you connected, for example <code>X:</code> for a CE-140F.</div>
+<table>
+<tr><th>File</th><th>Range</th><th>Size</th><th>Contents</th></tr>
+<tr><td><code>S3A.ROM</code></td><td><code>C0000-FFFFF</code></td><td>256KB + 16 bytes</td><td>Main ROM (CE2), needed for every model</td></tr>
+<tr><td><code>S3B.ROM</code></td><td><code>20000-3FFFF</code></td><td>128KB + 16 bytes</td><td>Extension ROM (CE3), PC-E650 / PC-U6000 only</td></tr>
+</table>
+
+<h3 id="romdump-header">The header and how to fix files</h3>
+<p>A file written by <code>SAVEM</code> begins with a <b>16-byte header</b>, which makes it 16 bytes larger than the ROM itself.</p>
+<table>
+<tr><th>Offset</th><th>Contents</th></tr>
+<tr><td>0–3</td><td><code>FF 00 06 01</code> (marks a machine-code file)</td></tr>
+<tr><td>4</td><td><code>10</code></td></tr>
+<tr><td>5–7</td><td>Data length, 3 bytes little-endian, e.g. <code>00 00 04</code> = 0x40000 = 256KB</td></tr>
+<tr><td>8–10</td><td>Start address, 3 bytes little-endian, e.g. <code>00 00 0C</code> = C0000</td></tr>
+<tr><td>11–15</td><td><code>FF FF FF 00 0F</code></td></tr>
+</table>
+<p>What to do depends on the model.</p>
+<table>
+<tr><th>PC-E500 family<br>(256KB ROM)</th><td>
+<b>Nothing.</b> Put <code>S3A.ROM</code> in <code>app\rom\</code> with its header, or pick it with Open ROM: the emulator recognises the header and loads just the ROM.<br>
+If you want a clean 256KB file, use the merge tool's <code>--strip</code> below, or drop the first 16 bytes in PowerShell:
+<pre>$b = [IO.File]::ReadAllBytes("S3A.ROM"); [IO.File]::WriteAllBytes("PC-E500.rom", $b[16..($b.Length-1)])</pre>
+</td></tr>
+<tr><th>PC-E650 / PC-U6000<br>(384KB ROM)</th><td>
+<code>S3A.ROM</code> and <code>S3B.ROM</code> must be <b>merged into one 384KB file</b> (extension ROM first, main ROM after it). The merge tool below does this. Opening <code>S3B.ROM</code> on its own shows a message saying so.
+</td></tr>
+</table>
+<div class="box warn">A 256KB file whose name contains <code>E650</code> or <code>U6000</code> is refused as an unmerged dump. Name PC-E500 ROMs something like <code>PC-E500.rom</code>.</div>
+
+<h3 id="romdump-tool">Using the merge tool (tools\merge_savem_rom.py)</h3>
+<p>Python 3 is required (<a href="https://www.python.org/">python.org</a>). Run the commands from a Command Prompt or PowerShell in the folder above <code>app</code> (the one that contains <code>tools</code>).</p>
+<table>
+<tr><th>Inspect the headers</th><td><pre>python tools\merge_savem_rom.py S3A.ROM S3B.ROM --info</pre>Shows start address, length, range and how much of the data is FF. Length mismatches and unknown headers are reported</td></tr>
+<tr><th>Build the 384KB image for a PC-E650 / PC-U6000</th><td><pre>python tools\merge_savem_rom.py S3A.ROM S3B.ROM -o app\rom\PC-U6000-full.rom</pre>Merges the two dumps. A dump covering <code>20000-3FFFF</code> selects the full (384KB) layout automatically</td></tr>
+<tr><th>Build the 256KB image for a PC-E500 (strip the header)</th><td><pre>python tools\merge_savem_rom.py S3A.ROM -o app\rom\PC-E500.rom</pre></td></tr>
+<tr><th>Strip the header only (in place)</th><td><pre>python tools\merge_savem_rom.py S3A.ROM S3B.ROM --strip</pre>Removes the first 16 bytes from each file without merging. The originals are overwritten, so copy them first if you want to keep them</td></tr>
+<tr><th>Merge with an already stripped main ROM</th><td><pre>python tools\merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o app\rom\PC-U6000-full.rom</pre>Pass a main ROM that is already a clean 256KB file with <code>--main-rom</code></td></tr>
+</table>
+<p>The tool prints the coverage. Anything but <b>100.0%</b> means the dump is incomplete: check the missing ranges and dump again. The <code>SHA-256</code> it prints lets you compare ROM images.</p>
+
+<h3>Checking the result</h3>
+<ol class="steps">
+<li>Put the file in <code>app\rom\</code> and pick it with Open ROM (a 256KB PC-E500 ROM is loaded automatically at start-up).</li>
+<li>Check that the status line shows something like <code>ROM Ver.7.2 / 256KB (E500)</code>. The version is read from the ROM contents, not the file name.</li>
+<li>When the initialisation prompt appears and the calculation from <a href="#first">chapter 2</a> works, you are done.</li>
+</ol>
+</section>
+
+<section id="scope">
+<h2>14. Scope and license</h2>
+<p>Implemented: SC62015 CPU, 256KB / 384KB ROM, internal RAM and RAM card, two HD61102 LCD controllers (240×32 dots), key matrix, timer interrupts, ON/BRK and OFF, speed selection, state save/restore, BEEP, folder-based CE-140F.</p>
+<p><b>Not implemented:</b> printer, cassette, RS-232C, clock. LCD busy time is not simulated. Machine-code programs and programs that use peripherals may behave differently from the real machine.</p>
+<p>Ported from <a href="https://github.com/matsumo/PockEmul">matsumo/PockEmul</a> (CPU core Copyright (C) Matsumo 1998,1999) and provided under the GPL. See <code>app\LICENSE</code> and <code>app\THIRD_PARTY_NOTICES.md</code>. ROM images are not included; dump them from your own machine (<a href="#romdump">chapter 13</a>).</p>
+<p>Developer information (building, tests, memory map details) is in <code>README_en.md</code> one folder up.</p>
+</section>
+
+</main>
+</div>
+<footer>The pictures in this manual are rendered by the emulator itself at build time with <code>PC-E500.exe --manual-shots</code>.</footer>
+</body>
+</html>

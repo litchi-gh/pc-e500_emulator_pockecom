@@ -1,5 +1,7 @@
 ﻿# PC-E500 / PC-E650 / PC-U6000 Emulator for Windows (PokeCom)
 
+[English README](README_en.md)
+
 シャープのポケットコンピュータ PC-E500 シリーズの内蔵ROMを SC62015 CPU で実行する、Windows用デスクトップエミュレータです。PC-E500の256KB ROMとPC-E650/PC-U6000の384KB ROMに対応します。実機写真に合わせたキー配置・形状、LCD状態表示、BEEP、CE-140F、内蔵RAM／RAMカードを実装しています。BASICはROMに含まれる実機の処理をそのまま実行します。
 
 ![メインウィンドウ（PC-E500）](app/manual/images/main-e500.png)
@@ -9,7 +11,7 @@
 | ![PC-E650の外観](app/manual/images/main-e650.png) | ![デバッグウィンドウ](app/manual/images/debugger.png) |
 | 外観をPC-E650にしたところ | デバッグウィンドウ（レジスタ・内部RAM・メモリの表示と書換え） |
 
-利用者向けの画像付き説明書は [app/manual/index.html](app/manual/index.html) にあります（ツールバーの「使い方」からも開けます）。
+利用者向けの画像付き説明書は [app/manual/index.html](app/manual/index.html) にあります（ツールバーの「使い方」からも開けます。英語版は [index_en.html](app/manual/index_en.html)）。画面表示は日本語／英語を「設定」で切り替えられます。
 
 **ROMイメージは含まれていません。** お手持ちの実機から吸い出してください（[実機からのROM吸い出し](#実機からのrom吸い出しと-toolsmerge_savem_rompy)）。
 
@@ -28,7 +30,7 @@ CE-2S01について行った実機試験、ROM解析、失敗した方法、実�
 | `app/ram/` | RAMカードのイメージファイル（作成・装着先の既定） |
 | `app/drive-x/` | CE-140F（X:ドライブ）の既定の保存フォルダ |
 | `app/state/` | 設定、内蔵RAMの内容、自動保存スナップショット、リセット前のバックアップ |
-| `app/manual/` | 画像付きの取扱説明書（HTML）。ツールバーの「使い方」で開きます |
+| `app/manual/` | 画像付きの取扱説明書（`index.html` 日本語、`index_en.html` 英語）。ツールバーの「使い方」で開きます |
 
 - `app/rom/` にあるROMを読み込みます。「ROMを開く」で256KBまたは384KBのROMを選択できます。実機の `SAVEM` で吸い出したままの16バイトヘッダー付きファイル（256KB+16）もそのまま開けます。実機から吸い出したPC-E500 ROM（Ver.7.2）と、S3A+S3Bを結合したPC-E650 ROM（Ver.8.5）で動作確認しています。
 - このPC上でビルド・動作確認しています。他のWindowsバージョンやARM版Windowsでの動作は未確認です。
@@ -133,7 +135,7 @@ ROMは64Hzでキー行列を走査するため、1キーあたり約55ms（毎�
 
 ## ハードウェア設定とBEEP
 
-「設定」で本体の外観（PC-E500 / PC-E650）、内蔵RAMの容量、RAMカードの作成・装着・取り外し、CE-140Fの接続・保存先・書込み禁止、音量・消音、LCDドット間の線の表示を変更できます。
+「設定」で表示言語（日本語／English。適用時にエミュレータを再起動します）、本体の外観（PC-E500 / PC-E650）、内蔵RAMの容量、RAMカードの作成・装着・取り外し、CE-140Fの接続・保存先・書込み禁止、音量・消音、LCDドット間の線の表示を変更できます。
 
 ![設定ウィンドウ](app/manual/images/settings.png)LCDは既定ではドットを隙間なく拡大します。「LCDのドット間に線を表示」を有効にすると、各ドットの境目が見える実機風表示になります。
 
@@ -260,7 +262,7 @@ SC62015命令実行、256KB ROM、内蔵RAM／RAMカードとミラー、HD61102
 
 ## 取扱説明書
 
-利用者向けの説明は [app/manual/index.html](app/manual/index.html) にまとめています。ツールバーの「使い方」ボタンでも開きます。掲載している画像は `PC-E500.exe --manual-shots <ROM> <出力フォルダ>` でエミュレータ自身が描画したもので、`build.ps1` がビルドのたびに `app/manual/images/` を作り直します。
+利用者向けの説明は [app/manual/index.html](app/manual/index.html)（英語版 [index_en.html](app/manual/index_en.html)）にまとめています。ツールバーの「使い方」ボタンは表示言語に合わせた方を開きます。掲載している画像は `PC-E500.exe --manual-shots <ROM> <出力フォルダ> [ja|en]` でエミュレータ自身が描画したもので、`build.ps1` がビルドのたびに `app/manual/images/`（日本語UI）と `app/manual/images-en/`（英語UI）を作り直します。
 
 ## 開発
 
@@ -273,7 +275,7 @@ cd Emulator
 ```
 
 - `src/native/`: CPUコアとハードウェア、C ABI DLL
-- `src/desktop/`: C# / Windows Formsの画面・入力・保存
+- `src/desktop/`: C# / Windows Formsの画面・入力・保存（`Lang.cs` が言語切替。表示文字列は使用箇所で `L.T(日本語, 英語)` と書きます）
 - `tests/test_core.cpp`: CPU・全RAM容量・デバッガ書込み・LCD・タイマー・音声・CE-140F・保存形式の92チェック
 - `src/desktop/ManualShots.cs`: 取扱説明書用の画面画像の生成（`--manual-shots`）
 - `src/desktop/SmokeTest.cs`: 配置ROM、UI入力、内蔵RAMファイルとRAMカードイメージの復元、設定画面、デバッガのメモリ書換えとBIN入出力、Windows音声出力の結合テスト

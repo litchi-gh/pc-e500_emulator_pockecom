@@ -10,7 +10,7 @@
 /app/ram/*.ram
 /app/drive-x/*
 !/app/drive-x/.gitkeep
-/app/manual/images/manual-shots.txt
+/app/manual/images*/manual-shots.txt
 /bin/
 /tmp/
 /backups/

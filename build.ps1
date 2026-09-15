@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
     & cmd /d /c tools\build-native.cmd
@@ -9,9 +9,11 @@ try {
     # re-render them so they always match the build.
     $rom = Join-Path $PSScriptRoot 'app/rom/PC-E500.rom'
     if (Test-Path $rom) {
-        $images = Join-Path $PSScriptRoot 'app/manual/images'
-        $shots = Start-Process -FilePath (Join-Path $PSScriptRoot 'app/PC-E500.exe') -ArgumentList @('--manual-shots', ('"' + $rom + '"'), ('"' + $images + '"')) -WindowStyle Hidden -PassThru -Wait
-        if ($shots.ExitCode -ne 0) { Get-Content -LiteralPath (Join-Path $images 'manual-shots.txt'); throw 'Manual screenshots failed.' }
+        foreach ($lang in @('ja', 'en')) {
+            $images = Join-Path $PSScriptRoot ('app/manual/' + $(if ($lang -eq 'ja') { 'images' } else { 'images-en' }))
+            $shots = Start-Process -FilePath (Join-Path $PSScriptRoot 'app/PC-E500.exe') -ArgumentList @('--manual-shots', ('"' + $rom + '"'), ('"' + $images + '"'), $lang) -WindowStyle Hidden -PassThru -Wait
+            if ($shots.ExitCode -ne 0) { Get-Content -LiteralPath (Join-Path $images 'manual-shots.txt'); throw 'Manual screenshots failed.' }
+        }
     }
     Write-Host 'Ready: app\PC-E500.exe'
 } finally { Pop-Location }

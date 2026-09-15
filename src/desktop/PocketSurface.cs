@@ -212,7 +212,7 @@ internal sealed class PocketSurface : Control
     void DrawLcd(Graphics g) {
         var ink=Ink;
         float pixelX=IsWide?76:84,pixelY=IsWide?101:113,pixelW=IsWide?432:348,pixelH=IsWide?72:62;
-        if(Core is null){TextAt(g,"ROMを開いてください",pixelX+6,pixelY+10,12,ink);return;}
+        if(Core is null){TextAt(g,L.T("ROMを開いてください","Open a ROM"),pixelX+6,pixelY+10,12,ink);return;}
         g.SmoothingMode=SmoothingMode.None;
         if(showDotLines) {
             using var brush=new SolidBrush(ink);
