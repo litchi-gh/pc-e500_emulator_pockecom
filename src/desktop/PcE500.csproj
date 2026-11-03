@@ -8,7 +8,7 @@
     <AssemblyName>PC-E500</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>0.0.3</Version>
+    <Version>0.0.4</Version>
     <Product>PC-E500 Emulator (PokeCom)</Product>
   </PropertyGroup>
   <ItemGroup>

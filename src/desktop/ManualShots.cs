@@ -6,8 +6,13 @@ namespace PokeCom;
 // manual (app/manual) embeds: the main window, the LCD, every sub-window and
 // dialog, each in a known state. Runs in testing mode so the user's own state
 // files are never read or written.
+/// <summary>HTML のマニュアル（app/manual）に載せる画像を、決まった状態で撮る。</summary>
 internal static class ManualShots
 {
+    /// <summary>画像を撮る。</summary>
+    /// <param name="rom">ROM ファイル</param>
+    /// <param name="output">画像を書くフォルダ</param>
+    /// <param name="language">表示言語（ja か en）</param>
     internal static void Run(string rom,string output,string language="ja")
     {
         L.Set(language);
@@ -20,10 +25,12 @@ internal static class ManualShots
             var core=form.TestCore;
             void Key(string key){int code=Keyboard.Codes[key];core.Key(code,true);core.Run(100000);core.Key(code,false);core.Run(100000);}
             void Settle(){form.TestRefresh();Application.DoEvents();}
-            void Shot(Form window,string name) {
+            void Shot(Control window,string name) {
                 Application.DoEvents();
                 using var bitmap=new Bitmap(window.Width,window.Height);
                 window.DrawToBitmap(bitmap,new Rectangle(0,0,window.Width,window.Height));
+                // A see-through colour (the case-only view's corners) is see-through in the picture too.
+                if(window is Form{TransparencyKey.IsEmpty:false} keyed)bitmap.MakeTransparent(keyed.TransparencyKey);
                 bitmap.Save(Path.Combine(output,name+".png"),ImageFormat.Png);
             }
             void Crop(Form window,Rectangle area,string name) {
@@ -63,6 +70,17 @@ internal static class ManualShots
             form.TestAppearance("PC-E500");form.TestDotLines(true);Settle();
             Crop(form,Client(form.TestSurface.LcdArea(),form.TestSurface),"lcd-dot-lines");
             form.TestDotLines(false);Settle();
+            // The right-click menu, opened over the case.
+            var menu=form.TestMenu;menu.Show(form.TestSurface,new Point(40,40));Shot(menu,"context-menu");menu.Close();
+            // The display window, and the window with only the case, then only the screen, left.
+            using(var display=new DisplayDialog(false,PocketSurface.DefaultContrast,WindowView.Normal)){display.Show(form);Shot(display,"display");display.Close();}
+            form.TestSetView(WindowView.Body);Settle();Shot(form,"window-body");
+            form.TestSetView(WindowView.Screen);Settle();Shot(form,"window-screen");
+            form.TestSetView(WindowView.Normal);Settle();
+            // The new-version notice, for a release one past this one.
+            var next=new Version(UpdateCheck.Current.Major,UpdateCheck.Current.Minor,UpdateCheck.Current.Build+1);
+            var sample=new Release(next,"v"+next,"PC-E500 Emulator "+next,UpdateCheck.Releases,L.T("## 変更点\r\n- （リリースの本文がここに表示されます）","## Changes\r\n- (the release notes show here)"));
+            using(var update=new UpdateDialog(sample)){update.StartPosition=FormStartPosition.CenterScreen;update.Show(form);Shot(update,"update");update.Close();}
 
             // Settings with a card in the slot, and the create-card prompt.
             // Shown with relative app/ram and app/drive-x paths rather than this
@@ -84,6 +102,9 @@ internal static class ManualShots
             core.MountDisk(diskFolder,false);form.TestText("FILES \"X:\"");for(int i=0;i<4;i++)core.Run(10240000);Settle();
             using(var disk=new DiskTraceDialog(()=>core,()=>Path.Combine("app","drive-x"),a=>a())){disk.Show(form);Shot(disk,"disk-trace");disk.Close();}
             core.MountDisk(null,false);Key("ON/BRK");core.Run(1024000);
+            // The CE-126P's paper: a line, the program listed, a number.
+            form.TestText("LPRINT \"PC-E500 + CE-126P\"");form.TestText("LLIST");form.TestText("LPRINT 1/3");Settle();
+            var printer=(PrinterDialog)form.TestWindow("printer");printer.Render();Shot(printer,"printer");printer.Close();
 
             var debugger=form.TestDebugger();
             Application.DoEvents();debugger.Render();

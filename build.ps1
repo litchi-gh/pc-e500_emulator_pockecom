@@ -7,8 +7,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Desktop build failed.' }
     # The HTML manual in app/manual embeds pictures of the running program;
     # re-render them so they always match the build.
-    $rom = Join-Path $PSScriptRoot 'app/rom/PC-E500.rom'
-    if (Test-Path $rom) {
+    # The PC-E500 ROM Ver.7.2, named model(version).ROM, or the older PC-E500.rom.
+    $rom = @('PC-E500(7.2).ROM', 'PC-E500.rom') | ForEach-Object { Join-Path $PSScriptRoot ('app/rom/' + $_) } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if ($rom) {
         foreach ($lang in @('ja', 'en')) {
             $images = Join-Path $PSScriptRoot ('app/manual/' + $(if ($lang -eq 'ja') { 'images' } else { 'images-en' }))
             $shots = Start-Process -FilePath (Join-Path $PSScriptRoot 'app/PC-E500.exe') -ArgumentList @('--manual-shots', ('"' + $rom + '"'), ('"' + $images + '"'), $lang) -WindowStyle Hidden -PassThru -Wait

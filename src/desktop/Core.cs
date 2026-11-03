@@ -5,6 +5,10 @@ using System.Text.Json;
 
 namespace PokeCom;
 
+/// <summary>
+/// ネイティブのエミュレーションコア（e500core.dll）の公開 API の宣言。
+/// 関数の仕様は src/native/machine.cpp の各 e500_* 関数のコメントを参照。
+/// </summary>
 internal static class Native
 {
     const string Dll = "e500core.dll";
@@ -17,6 +21,12 @@ internal static class Native
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl,CharSet=CharSet.Unicode)] internal static extern int e500_disk_mount(IntPtr m,string? path,int readOnly);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_disk_status(IntPtr m);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_disk_trace(IntPtr m,[Out]byte[] output,int length);
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern void e500_printer_connect(IntPtr m,int on);
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_can_save(IntPtr m);
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_can_load(IntPtr m);
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_printer_status(IntPtr m);
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_printer_read(IntPtr m,[Out]byte[] output,int length);
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_printer_columns();
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern void e500_destroy(IntPtr m);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_run(IntPtr m, int cycles);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern void e500_key(IntPtr m, int row, int bit, int down);
@@ -31,31 +41,61 @@ internal static class Native
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_imem(IntPtr m,[Out] byte[] data);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern ulong e500_cycles(IntPtr m);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_state_size();
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_state_card(byte[] data,int size);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_save(IntPtr m, [Out] byte[] data, int size);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_load(IntPtr m, byte[] data, int size);
 }
 
+/// <summary>状態保存ファイル（*.e500state、JSON）の中身。</summary>
+/// <param name="Version">ファイル形式の版（1〜3。3 はスナップショットが E500ST04 の形式）</param>
+/// <param name="RomSha256">保存したときの ROM の SHA-256（別の ROM では読み込まない）</param>
+/// <param name="DataSha256">Data の SHA-256（壊れていないかの確認）</param>
+/// <param name="Data">ネイティブのスナップショット（e500_save の出力）</param>
 internal sealed record SavedState(int Version, string RomSha256, string DataSha256, byte[] Data);
+/// <summary>
+/// エミュレーションコア1台分。ROM と RAM の構成を受け取ってネイティブの本体を作り、
+/// 実行・キー入力・画面・状態保存・RAM の保存・周辺機器を扱う。使い終わったら Dispose する。
+/// </summary>
 internal sealed class Core : IDisposable
 {
     readonly LcdTextDecoder textDecoder;
+    /// <summary>ネイティブの本体（Machine）へのハンドル。</summary>
     internal IntPtr Handle {get; private set;}
+    /// <summary>ROM ファイルの絶対パス。</summary>
     internal string RomPath {get;}
+    /// <summary>ROM の SHA-256（16進）。Hash も同じ値。状態保存ファイルと自動保存の名前に使う。</summary>
     internal string RomHash {get;}
     internal string Hash {get;}
     // The RAM card is an image file: its size is the card's capacity and its
     // bytes are the card's contents, written back whenever the internal RAM is.
+    /// <summary>RAM カードのイメージファイルのパス（カードなしは null）。</summary>
     internal string? CardPath {get;}
     internal string? CardName=>CardPath is null?null:Path.GetFileName(CardPath);
     internal bool HasCard=>CardPath is not null;
+    /// <summary>ROM の容量（KB）。256 は PC-E500・E550・1480U・1490U・1490UII、384 は PC-E650・PC-U6000。</summary>
     internal int RomKB {get;}
+    /// <summary>ROM の版（末尾16バイトの先頭2バイト）。読めなければ「不明」。</summary>
     internal string RomVersion {get;}
     internal bool IsE650Family=>RomKB==384;
+    /// <summary>LCD の 240×32 ドット（Refresh で更新、1 なら点灯）。</summary>
     internal byte[] Pixels {get;} = new byte[240*32];
+    /// <summary>ROM の文字フォント（20h から、1文字6バイト）。</summary>
+    internal byte[] Font=>textDecoder.Font;
+    // Where Run hands what the CE-126P printed; without one it stays in the native buffer.
+    /// <summary>CE-126P の印字を受け取る紙。null なら印字はネイティブ側にたまったまま。</summary>
+    internal PrinterPaper? Paper {get;set;}
+    readonly byte[] printed=new byte[4096];
+    /// <summary>内蔵 RAM と RAM カードの容量（KB）。</summary>
     internal int InternalKB=>Native.e500_capacity(Handle,0);
     internal int CardKB=>Native.e500_capacity(Handle,1);
+    /// <summary>ROM を読み込み、ネイティブの本体を作る。</summary>
+    /// <param name="path">ROM ファイル（256KB・384KB、または SAVEM ヘッダー付きの吸い出し）</param>
+    /// <param name="ram">内蔵 RAM の容量（KB）。機種に合わなければ標準の容量にする</param>
+    /// <param name="cardPath">RAM カードのイメージファイル（なしは null）</param>
+    /// <exception cref="InvalidDataException">ROM やカードの大きさ・形式が正しくない</exception>
     internal Core(string path,int ram=32,string? cardPath=null)
     {
+        // ROM を読み、SAVEM ヘッダー付きなら本体 ROM（C0000-FFFFF）だけを取り出す。
         var rom=File.ReadAllBytes(path);
         // A dump straight from the machine (SAVEM "d:S3A.ROM",&HC0000,&HFFFFF)
         // carries the 16-byte SAVEM header; take the main ROM out of it as it is.
@@ -64,11 +104,13 @@ internal sealed class Core : IDisposable
             else if(dumpStart==0x20000)throw new InvalidDataException(L.T($"これは拡張ROM（S3B、{dumpStart:X5}-{dumpStart+dumpLength-1:X5}）のダンプです。単独では起動できないので、tools/merge_savem_rom.py で本体ROM（S3A）と結合した384KBイメージを開いてください。",$"This is a dump of the extension ROM (S3B, {dumpStart:X5}-{dumpStart+dumpLength-1:X5}). It cannot boot alone: merge it with the main ROM (S3A) into a 384KB image with tools/merge_savem_rom.py."));
             else throw new InvalidDataException(L.T($"SAVEMダンプの範囲 {dumpStart:X5}-{dumpStart+dumpLength-1:X5} は内蔵ROM（C0000-FFFFF）ではありません。SAVEM \"d:S3A.ROM\",&HC0000,&HFFFFF で吸い出してください。",$"The SAVEM dump covers {dumpStart:X5}-{dumpStart+dumpLength-1:X5}, not the internal ROM (C0000-FFFFF). Dump it with SAVEM \"d:S3A.ROM\",&HC0000,&HFFFFF."));
         }
+        // 大きさと、ファイル名から分かる機種の食い違いを確かめる。
         if(rom.Length!=256*1024 && rom.Length!=384*1024)
-            throw new InvalidDataException(L.T("PC-E500の256KB ROM、またはPC-E650/PC-U6000の384KB ROMを選択してください。SAVEMヘッダー付きの吸い出しファイルはそのまま開けます。","Choose a 256KB PC-E500 ROM or a 384KB PC-E650/PC-U6000 ROM. A dump with its SAVEM header opens as it is."));
+            throw new InvalidDataException(L.T("PC-E500・PC-E550・PC-1480U・PC-1490U・PC-1490UIIの256KB ROM、またはPC-E650/PC-U6000の384KB ROMを選択してください。SAVEMヘッダー付きの吸い出しファイルはそのまま開けます。","Choose a 256KB ROM of a PC-E500, PC-E550, PC-1480U, PC-1490U or PC-1490UII, or a 384KB PC-E650/PC-U6000 ROM. A dump with its SAVEM header opens as it is."));
         string fileName=Path.GetFileNameWithoutExtension(path);
         if(rom.Length==256*1024 && (fileName.Contains("E650",StringComparison.OrdinalIgnoreCase) || fileName.Contains("U6000",StringComparison.OrdinalIgnoreCase)))
             throw new InvalidDataException(L.T("PC-E650/PC-U6000には追加128KBを先頭へ結合した384KB ROMが必要です。tools/merge_savem_rom.pyでfullイメージを作成してください。","PC-E650/PC-U6000 needs a 384KB ROM with the 128KB extension in front. Build the full image with tools/merge_savem_rom.py."));
+        // RAM カードのイメージを読み、容量を確かめる。
         byte[]? card=null;
         if(!string.IsNullOrWhiteSpace(cardPath)) {
             CardPath=Path.GetFullPath(cardPath);
@@ -93,12 +135,29 @@ internal sealed class Core : IDisposable
         // The E650/U6000 character generator table resides in the CE3 extension.
         textDecoder=new LcdTextDecoder(rom);
     }
+    // Every run hands what was printed to Paper, so no caller can leave lines in a
+    // core it then disposes. With nothing printed that is one call returning 0.
+    /// <summary>CPU を指定のサイクル数だけ実行し、印字された行を紙へ渡す。</summary>
+    /// <param name="cycles">実行するサイクル数（1,024,000 で約1秒）</param>
+    /// <exception cref="InvalidOperationException">未定義の命令で止まった</exception>
     internal void Run(int cycles)
     {
-        if(Native.e500_run(Handle,cycles)!=0)
+        int result=Native.e500_run(Handle,cycles);
+        DrainPrinter();
+        if(result!=0)
             throw new InvalidOperationException(L.T($"未定義命令で停止しました。PC={Native.e500_reg(Handle,9):X5}",$"Stopped on an undefined instruction. PC={Native.e500_reg(Handle,9):X5}"));
     }
+    /// <summary>ネイティブ側にたまった印字を、すべて紙（Paper）へ移す。</summary>
+    void DrainPrinter()
+    {
+        if(Paper is null)return;
+        int n;while((n=Native.e500_printer_read(Handle,printed,printed.Length))>0)Paper.Feed(printed.AsSpan(0,n));
+    }
+    /// <summary>LCD のドットを Pixels に読み直す。</summary>
     internal void Refresh() => Native.e500_pixels(Handle,Pixels);
+    /// <summary>メモリを読む（LCD の I/O に触れない、デバッガ用）。</summary>
+    /// <param name="address">先頭アドレス（00000〜FFFFF）</param>
+    /// <param name="length">バイト数</param>
     internal byte[] Dump(int address,int length) {
         var data=new byte[length];
         if(Native.e500_dump(Handle,address,data,length)==0)throw new ArgumentOutOfRangeException(nameof(address),L.T("アドレスが範囲外です。","Address out of range."));
@@ -106,64 +165,128 @@ internal sealed class Core : IDisposable
     }
     // Debugger writes: RAM only, so a poke can never patch ROM or fall into
     // unmapped space by accident, and all or nothing.
+    /// <summary>メモリに書く（デバッガ用）。範囲がすべて RAM のときだけ書く。</summary>
+    /// <param name="address">先頭アドレス</param>
+    /// <param name="data">書くバイト列</param>
+    /// <exception cref="InvalidOperationException">RAM 以外を含む</exception>
     internal void Write(int address,byte[] data) {
         if(data.Length==0)return;
         if(Native.e500_write(Handle,address,data,data.Length)==0)
             throw new InvalidOperationException(L.T($"{address:X5}-{(long)address+data.Length-1:X5} はRAM以外の領域を含むため書き込めません。内蔵RAM・RAMカードの範囲を指定してください。",$"{address:X5}-{(long)address+data.Length-1:X5} includes non-RAM space and cannot be written. Stay within internal RAM or the RAM card."));
     }
+    /// <summary>CPU の内部メモリ（256バイト）を読む。</summary>
     internal byte[] InternalMemory() {var data=new byte[256];Native.e500_imem(Handle,data);return data;}
+    /// <summary>起動からの CPU のサイクル数。</summary>
     internal ulong Cycles=>Native.e500_cycles(Handle);
+    /// <summary>CPU のレジスタの値（id はネイティブの REGNAME）。</summary>
     internal uint Register(int id)=>Native.e500_reg(Handle,id);
+    /// <summary>LCD の表示を、ROM のフォントと照らして文字列（40桁×4行）に読み取る。</summary>
     internal string ScreenText() {Refresh();return textDecoder.Decode(Pixels);}
+    /// <summary>キーを押す・離す。</summary>
+    /// <param name="code">キーコード（行×8＋ビット、Keyboard.Codes の値）</param>
+    /// <param name="down">押すなら true</param>
     internal void Key(int code,bool down) => Native.e500_key(Handle,code/8,code%8,down?1:0);
+    /// <summary>すべてのキーを離す。</summary>
     internal void Release() => Native.e500_release_keys(Handle);
+    // Raised with each native layout, so that a build that cannot read a newer
+    // file says so: 3 came with E500ST04. Older ones load still.
+    /// <summary>保存するファイル形式の版（ネイティブの形式が変わるたびに上げる。3 は E500ST04）。</summary>
+    const int CurrentVersion=3;
+    /// <summary>状態を保存する（一時ファイルに書いてから置き換える）。</summary>
+    /// <param name="path">保存先（*.e500state）</param>
+    /// <exception cref="InvalidOperationException">今は保存できない状態（CannotSave を参照）</exception>
     internal void Save(string path)
     {
         byte[] data=new byte[Native.e500_state_size()];
-        if(Native.e500_save(Handle,data,data.Length)==0) throw new InvalidOperationException(L.T("CE-140Fの通信中・ファイルOPEN中、またはCPUのエラー中は状態保存できません。CLOSE後に保存してください。","The state cannot be saved during a CE-140F transfer, with a file OPEN, or after a CPU fault. Save after CLOSE."));
-        var json=JsonSerializer.Serialize(new SavedState(2,Hash,Convert.ToHexString(SHA256.HashData(data)),data));
+        if(Native.e500_save(Handle,data,data.Length)==0) throw new InvalidOperationException(CannotSave);
+        var json=JsonSerializer.Serialize(new SavedState(CurrentVersion,Hash,Convert.ToHexString(SHA256.HashData(data)),data));
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";
         try {File.WriteAllText(temp,json);File.Move(temp,path,true);}
         finally {if(File.Exists(temp))File.Delete(temp);}
     }
+    /// <summary>状態を読み込む。RAM カードはファイルの中身のまま使い、スナップショットからは戻さない。</summary>
+    /// <param name="path">状態保存ファイル</param>
+    /// <exception cref="InvalidDataException">ファイルが不正、ROM が違う、カードの容量が違う、または知らない形式</exception>
     internal void Load(string path)
     {
         if(new FileInfo(path).Length>2000000) throw new InvalidDataException(L.T("保存ファイルのサイズが不正です。","The state file has an invalid size."));
+        // ファイルの形式・ROM・中身のハッシュを確かめる。
         var state=JsonSerializer.Deserialize<SavedState>(File.ReadAllText(path));
-        if(state is null || (state.Version!=1 && state.Version!=2) || state.RomSha256!=Hash || state.Data is null ||
+        if(state is not null && state.Version>CurrentVersion)
+            throw new InvalidDataException(L.T("保存ファイルは新しい版のエミュレータで作られています。","The state file was made by a newer version of the emulator."));
+        if(state is null || state.Version<1 || state.RomSha256!=Hash || state.Data is null ||
            state.DataSha256!=Convert.ToHexString(SHA256.HashData(state.Data)))
             throw new InvalidDataException(L.T("保存ファイルが不正、またはROMが異なります。","The state file is invalid or belongs to another ROM."));
         // The snapshot carries the card slot too, but the card is a file of its
         // own: a snapshot must not swap in another card's bytes, and it cannot be
-        // resumed with a card of another capacity in the slot. Version 2 keeps the
-        // card capacity at offset 12; the v1 layout had no card at all.
-        int snapshotCard=state.Data.Length==Native.e500_state_size()?BitConverter.ToInt32(state.Data,12):0;
+        // resumed with a card of another capacity in the slot. The native core reads
+        // the capacity, so the layouts are known in one place; a layout it does not
+        // know is no card question but an invalid file.
+        // カードの容量はネイティブ側が読む（形式の知識はネイティブ側だけに置く）。
+        int snapshotCard=Native.e500_state_card(state.Data,state.Data.Length);
+        if(snapshotCard<0)throw new InvalidDataException(L.T("保存ファイルが不正、または対応していない形式です。","The state file is invalid or in a format this version does not support."));
         if(snapshotCard!=CardKB)
             throw new InvalidDataException(L.T($"保存時のRAMカード({(snapshotCard==0?"未装着":snapshotCard+"KB")})と現在のRAMカード({(CardKB==0?"未装着":CardKB+"KB")})が異なります。同じ容量のカードを装着してから読み込んでください。",$"The RAM card at save time ({(snapshotCard==0?"none":snapshotCard+"KB")}) differs from the current one ({(CardKB==0?"none":CardKB+"KB")}). Attach a card of the same capacity before loading."));
+        // カードの中身は読み込みの前に取っておき、読み込んだあと書き戻す。
         byte[]? card=CardKB>0?CardImage():null;
         if(Native.e500_load(Handle,state.Data,state.Data.Length)==0)
             throw new InvalidDataException(L.T("保存ファイルが不正、またはROMが異なります。","The state file is invalid or belongs to another ROM."));
         if(card is not null)Native.e500_memory(Handle,1,card,card.Length,1);
         Refresh();
     }
+    /// <summary>RAM カードの今の中身（カードなしは空）。</summary>
     internal byte[] CardImage() {
         var data=new byte[CardKB*1024];
         if(data.Length>0)Native.e500_memory(Handle,1,data,data.Length,0);
         return data;
     }
     // Writes the card's contents back into its image file.
+    /// <summary>RAM カードの中身をイメージファイルへ書き戻す。</summary>
     internal void SaveCard() {
         if(CardPath is null || CardKB==0)return;
         AtomicFile.Write(CardPath,CardImage());
     }
+    /// <summary>CE-140F にフォルダを接続する。</summary>
+    /// <param name="path">フォルダ（null なら取り外す）</param>
+    /// <param name="readOnly">書き込み禁止にするか</param>
+    /// <exception cref="IOException">フォルダを開けない</exception>
     internal void MountDisk(string? path,bool readOnly) {
         if(Native.e500_disk_mount(Handle,path,readOnly?1:0)==0)throw new IOException(L.T("CE-140Fの保存フォルダを開けません。","Could not open the CE-140F folder."));
     }
+    /// <summary>CE-126P が接続されているか（設定するとネイティブ側の接続を切り替える）。</summary>
+    internal bool PrinterConnected {
+        get=>(Native.e500_printer_status(Handle)&1)!=0;
+        set=>Native.e500_printer_connect(Handle,value?1:0);
+    }
+    // The native rule, the same one Save and Load meet: no save with the CE-140F
+    // mid-transfer or a file open, or after a CPU fault; no load over a CE-140F
+    // transfer or open file. The CE-126P goes into the snapshot, mid-line or not.
+    /// <summary>今、状態保存できるか（ネイティブの e500_can_save と同じ規則）。</summary>
+    internal bool CanSnapshot=>Native.e500_can_save(Handle)!=0;
+    /// <summary>今、状態を読み込めるか（ネイティブの e500_can_load と同じ規則）。</summary>
+    internal bool CanLoad=>Native.e500_can_load(Handle)!=0;
+    /// <summary>CPU が未定義の命令で止まっているか（状態保存はできないが、リセットで立ち直れる）。</summary>
+    internal bool Faulted=>(Native.e500_status(Handle)&4)!=0;
+    /// <summary>状態を読み込めないときに示すメッセージ。</summary>
+    internal static string CannotLoad=>L.T(DiskJa+"は状態を読み込めません。CLOSEの後に読み込んでください。",$"A state cannot be loaded {DiskEn}. Load after CLOSE.");
+    // The CE-140F's part, the same in every message about it.
+    /// <summary>状態を保存・読み込みできない理由のうち、CE-140F の分（各メッセージで共通）。</summary>
+    const string DiskJa="CE-140Fの通信中・ファイルOPEN中",DiskEn="during a CE-140F transfer or with a file OPEN";
+    /// <summary>CPU のエラー中でないのに状態保存できないときに示すメッセージ（理由は CE-140F だけ）。</summary>
+    internal static string DiskBusy=>L.T(DiskJa+"は状態保存できません。CLOSEの後にやり直してください。",$"The state cannot be saved {DiskEn}. Try again after CLOSE.");
+    /// <summary>状態保存できないときに示すメッセージ。</summary>
+    internal static string CannotSave=>L.T(DiskJa+"、またはCPUのエラー中は状態保存できません。CLOSEの後に保存してください。",$"The state cannot be saved {DiskEn}, or after a CPU fault. Save after CLOSE.");
+    /// <summary>CE-140F のトレース（コマンドとエラーの記録）。</summary>
     internal string DiskTrace() {byte[] b=new byte[16385];int n=Native.e500_disk_trace(Handle,b,b.Length);return System.Text.Encoding.UTF8.GetString(b,0,n);}
     // The internal RAM file for the current capacity: one per capacity, so
     // switching back to a size restores what it held.
+    /// <summary>今の容量の内蔵 RAM を保存するファイルのパス（容量ごとに別のファイル）。</summary>
+    /// <param name="directory">保存先のフォルダ</param>
     internal string InternalFile(string directory)=>Path.Combine(directory,$"internal-{InternalKB}KB.ram");
+    /// <summary>内蔵 RAM をファイルから読む、またはファイルへ書く。</summary>
+    /// <param name="directory">保存先のフォルダ</param>
+    /// <param name="load">true なら読む（ファイルがなければ何もしない）、false なら書く</param>
     internal void MemoryFiles(string directory,bool load) {
         Directory.CreateDirectory(directory);
         string path=InternalFile(directory);
@@ -177,15 +300,23 @@ internal sealed class Core : IDisposable
     }
     // A fresh card is all 0xFF, which is what the ROM sees in a card that was
     // never initialised, so the first PF1 formats it.
+    /// <summary>新しい RAM カードのイメージ（すべて FFh）を作る。</summary>
+    /// <param name="path">作るファイル</param>
+    /// <param name="kb">容量（8〜256KB）</param>
     internal static void CreateCardImage(string path,int kb) {
         if(!HardwareSettings.Sizes.Contains(kb))throw new ArgumentOutOfRangeException(nameof(kb));
         var data=new byte[kb*1024];Array.Fill(data,(byte)0xff);
         AtomicFile.Write(path,data);
     }
+    /// <summary>ネイティブの本体を破棄する。</summary>
     public void Dispose() {if(Handle!=IntPtr.Zero) {Native.e500_destroy(Handle);Handle=IntPtr.Zero;}}
 }
 
+/// <summary>ファイルを一時ファイル経由で置き換える（書き込みの途中で失敗しても元のファイルは壊れない）。</summary>
 internal static class AtomicFile {
+    /// <summary>bytes を path に書く。フォルダがなければ作る。</summary>
+    /// <param name="path">書き込み先</param>
+    /// <param name="bytes">中身</param>
     internal static void Write(string path,byte[] bytes) {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";

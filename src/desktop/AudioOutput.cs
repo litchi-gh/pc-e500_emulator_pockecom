@@ -2,6 +2,10 @@
 using System.Runtime.InteropServices;
 namespace PokeCom;
 
+/// <summary>
+/// 音声の出力（Windows の waveOut、48kHz・モノラル）。
+/// UI スレッドは Submit でサンプルを預けるだけで、デバイスへの書き込みは専用のスレッドが行う。
+/// </summary>
 internal sealed class AudioOutput : IDisposable
 {
     [StructLayout(LayoutKind.Sequential,Pack=2)] struct Format {public ushort tag,channels;public uint rate,bytes;public ushort align,bits,extra;}
@@ -51,15 +55,20 @@ internal sealed class AudioOutput : IDisposable
     volatile int outstanding;
     // Kept for the smoke test: it is the only way to see the starvation collapse,
     // which is silent from the outside apart from the audio being wrong.
+    /// <summary>デバイスに渡したサンプル数と、デバイスが空になって再開した回数（テスト用）。</summary>
     internal long Delivered;
     internal int Restarts;
+    /// <summary>消音するか。</summary>
     internal bool Muted;
+    /// <summary>音量（0〜1）。</summary>
     internal float Volume=0.5f;
+    /// <summary>再生のエラー（なければ null）。</summary>
     internal string? Error {get;private set;}
     // What the device is holding, and everything buffered ahead of it.
     internal int PendingCount=>outstanding;
     internal int BufferedSamples {get{lock(gate)return queued.Count+outstanding*Chunk;}}
 
+    /// <summary>デバイスを開き、書き込み用のスレッドを始める。</summary>
     internal AudioOutput() {
         // A default Windows timer only fires every ~15.6 ms, which is both the audio
         // cushion this has to keep and the emulator's input latency.
@@ -76,6 +85,9 @@ internal sealed class AudioOutput : IDisposable
     // only ever takes the cushion, so the rest would sit here adding permanent lag
     // that nothing drains. Drop the oldest samples instead: a few skipped
     // milliseconds once beats hearing every click late for the rest of the session.
+    /// <summary>サンプルを預ける。たまりすぎたら古いものから捨てる。</summary>
+    /// <param name="samples">サンプル（48kHz）</param>
+    /// <param name="count">使うサンプル数</param>
     internal void Submit(short[] samples,int count) {
         if(device==IntPtr.Zero)return;
         lock(gate) {
@@ -86,11 +98,13 @@ internal sealed class AudioOutput : IDisposable
         work.Set();
     }
 
+    /// <summary>預けたサンプルを捨て、デバイスを止めてやり直す（一時停止や ROM の切り替えのとき）。</summary>
     internal void Flush() {
         lock(gate)queued.Clear();
         resetWanted=true;work.Set();
     }
 
+    /// <summary>書き込み用のスレッド：再生が終わったバッファを片付け、デバイスが持つ量が足りなければ書き足す。</summary>
     void Pump() {
         while(running) {
             if(resetWanted) {
@@ -110,6 +124,7 @@ internal sealed class AudioOutput : IDisposable
 
     // Hold the first chunks back until there is a cushion to hand over: the device
     // goes silent the moment its queue runs out, and every one of those gaps clicks.
+    /// <summary>預けたサンプルから1チャンク取り出す（最初は十分たまるまで待つ）。</summary>
     short[]? Take() {
         lock(gate) {
             if(!primed) {
@@ -123,6 +138,7 @@ internal sealed class AudioOutput : IDisposable
         }
     }
 
+    /// <summary>1チャンクを、直流分を除いて音量を掛け、デバイスに書く。</summary>
     void Write(short[] samples) {
         var data=Marshal.AllocHGlobal(samples.Length*2);var header=Marshal.AllocHGlobal(Marshal.SizeOf<Header>());
         short[] pcm=new short[samples.Length];
@@ -134,12 +150,14 @@ internal sealed class AudioOutput : IDisposable
         pending.Add((header,data));outstanding=pending.Count;Delivered+=pcm.Length;
     }
 
+    /// <summary>再生が終わったバッファを解放する。</summary>
     void Reap() {
         for(int i=pending.Count-1;i>=0;i--){var p=pending[i];if((Marshal.PtrToStructure<Header>(p.Header).flags&1)==0)continue;
             waveOutUnprepareHeader(device,p.Header,(uint)Marshal.SizeOf<Header>());Marshal.FreeHGlobal(p.Data);Marshal.FreeHGlobal(p.Header);pending.RemoveAt(i);}
         outstanding=pending.Count;
     }
 
+    /// <summary>スレッドを止め、デバイスを閉じる。</summary>
     public void Dispose() {
         running=false;work.Set();worker.Join(1000);
         lock(gate)queued.Clear();

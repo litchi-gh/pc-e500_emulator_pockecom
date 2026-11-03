@@ -4,12 +4,16 @@ using System.Runtime.InteropServices;
 using System.Text;
 namespace PokeCom;
 
+/// <summary>テキストボックスの中身を、スクロール位置を保ち、ちらつかせずに入れ替える。</summary>
 internal static class LiveText
 {
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window,int message,IntPtr w,IntPtr l);
     const int EM_GETFIRSTVISIBLELINE=0xce,EM_LINESCROLL=0xb6,WM_SETREDRAW=0x0b;
     // Assigning Text scrolls a TextBox back to the top and repaints the whole
     // control, which a periodic refresh would turn into a flicker.
+    /// <summary>中身を入れ替える（同じなら何もしない）。</summary>
+    /// <param name="box">テキストボックス</param>
+    /// <param name="value">新しい中身</param>
     internal static void Update(TextBox box,string value) {
         if(box.Text==value)return;
         var top=SendMessage(box.Handle,EM_GETFIRSTVISIBLELINE,IntPtr.Zero,IntPtr.Zero);
@@ -21,6 +25,10 @@ internal static class LiveText
     }
 }
 
+/// <summary>
+/// デバッグウィンドウ：CPU のレジスタ・内部メモリ・I/O ポートの表示と、
+/// 1MB のメモリの HEX 表示・書き換え、BIN の読込・保存、チェックサム。
+/// </summary>
 internal sealed class DebugDialog : Form
 {
     // e500_reg ids, in the order of the SC62015 REGNAME enum.
@@ -35,12 +43,15 @@ internal sealed class DebugDialog : Form
     const int Columns=HexView.Columns;
     readonly Func<Core?> read;
     readonly TextBox cpu=new(){Multiline=true,ReadOnly=true,WordWrap=false,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Font=new Font("Consolas",10),BackColor=Color.White};
+    /// <summary>メモリの HEX 表示。</summary>
     internal readonly HexView Memory;
     readonly TextBox addressBox=new(){Width=88,Font=new Font("Consolas",10),Text="B0000"};
     readonly CheckBox live=new(){Text=L.T("自動更新","Auto refresh"),Checked=true,AutoSize=true,Margin=new Padding(4,9,0,0)};
     readonly Label region=new(){Dock=DockStyle.Bottom,Height=24,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,0,0,0)};
     readonly Label note=new(){Dock=DockStyle.Bottom,Height=24,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,0,0,0),ForeColor=Color.FromArgb(0,80,160)};
     readonly System.Windows.Forms.Timer timer=new(){Interval=250};
+    /// <summary>ウィンドウを作る。</summary>
+    /// <param name="read">今のコアを返す関数（ROM の切り替えに追従するため）</param>
     internal DebugDialog(Func<Core?> read)
     {
         this.read=read;
@@ -100,12 +111,18 @@ internal sealed class DebugDialog : Form
         note.Text=L.T("メモリ欄をクリックして16進を入力すると、その場で書き換えます（内蔵RAM・RAMカードのみ）。灰色は未定義、紺色はROMです。","Click a byte and type hex digits to edit it in place (internal RAM and RAM card only). Grey is unmapped, navy is ROM.");
     }
     protected override void Dispose(bool disposing){if(disposing)timer.Dispose();base.Dispose(disposing);}
+    /// <summary>16進のアドレスを読む（&H・0x・$・&amp; の付いた形も受け付ける）。</summary>
+    /// <param name="text">入力</param>
+    /// <param name="value">読んだ値</param>
+    /// <returns>読めたか</returns>
     internal static bool TryParseAddress(string text,out int value) {
         text=text.Trim();
         if(text.StartsWith("&H",StringComparison.OrdinalIgnoreCase)||text.StartsWith("0x",StringComparison.OrdinalIgnoreCase))text=text[2..];
         else if(text.StartsWith('$')||text.StartsWith('&'))text=text[1..];
         return int.TryParse(text,NumberStyles.HexNumber,CultureInfo.InvariantCulture,out value);
     }
+    /// <summary>BIN の読込・保存のウィンドウを開き、終わったらその位置を表示する。</summary>
+    /// <param name="saving">保存なら true</param>
     void Transfer(bool saving) {
         using var dialog=new BinaryTransferDialog(read,saving,Memory.Caret>=0?Memory.Caret:Memory.Address);
         if(dialog.ShowDialog(this)!=DialogResult.OK||dialog.Done is not {} at)return;
@@ -117,6 +134,7 @@ internal sealed class DebugDialog : Form
         using var dialog=new ChecksumDialog(read,Memory.Caret>=0?Memory.Caret:Memory.Address);
         dialog.ShowDialog(this);
     }
+    /// <summary>表示している範囲とカーソルの位置が、どの領域（ROM・RAM など）かを表示する。</summary>
     void UpdateRegion() {
         var core=read();
         if(core is null){region.Text="";return;}
@@ -124,6 +142,7 @@ internal sealed class DebugDialog : Form
         string caret=Memory.Caret>=0?L.T($"   カーソル {Memory.Caret:X5} ({MemoryMap.Name(core,Memory.Caret)})",$"   Caret {Memory.Caret:X5} ({MemoryMap.Name(core,Memory.Caret)})"):"";
         region.Text=$"{address:X5}-{address+rows*Columns-1:X5}   {MemoryMap.Name(core,address)}{caret}";
     }
+    /// <summary>レジスタ・内部メモリ・メモリの表示を読み直す。</summary>
     internal void Render() {
         var core=read();
         if(core is null){LiveText.Update(cpu,L.T("ROMが読み込まれていません。","No ROM is loaded."));Memory.Reload();region.Text="";return;}

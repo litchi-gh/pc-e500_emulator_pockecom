@@ -4,10 +4,17 @@ namespace PokeCom;
 // Reads a binary file straight into RAM at an address, or writes a range of
 // memory out to one. A PC-E500 SAVE M file starts with a 16-byte header that
 // names its own load address, so such a file can go back where it came from.
+/// <summary>メモリとバイナリファイルのやり取り（デバッガの BIN 読込・保存）。</summary>
 internal static class BinaryTransfer
 {
+    /// <summary>SAVEM ヘッダーの長さ。</summary>
     internal const int HeaderLength=16;
     // FF 00 06 01 10 <length:3> <start:3> ... as CE-140F SAVE M writes it.
+    /// <summary>SAVEM ヘッダー（CE-140F の SAVE M が付ける）を読む。</summary>
+    /// <param name="file">ファイルの中身</param>
+    /// <param name="start">書き込み先の先頭アドレス</param>
+    /// <param name="length">データの長さ</param>
+    /// <returns>ヘッダーがあったか</returns>
     internal static bool TryReadHeader(byte[] file,out int start,out int length) {
         start=length=0;
         if(file.Length<HeaderLength || file[0]!=0xff || file[1]!=0 || file[2]!=6 || file[3]!=1 || file[4]!=0x10)return false;
@@ -15,6 +22,12 @@ internal static class BinaryTransfer
         return length>0 && length==file.Length-HeaderLength && start<=0xfffff;
     }
     // Writes the file to the machine; returns where it went and how many bytes.
+    /// <summary>ファイルをメモリに書く（RAM の範囲だけ）。</summary>
+    /// <param name="core">書き込み先のコア</param>
+    /// <param name="file">ファイルの中身</param>
+    /// <param name="address">書き込み先（useHeader なら無視してヘッダーの値）</param>
+    /// <param name="useHeader">SAVEM ヘッダーのアドレスを使うか</param>
+    /// <returns>書き込んだ先頭アドレスとバイト数</returns>
     internal static (int Address,int Length) Load(Core core,byte[] file,int address,bool useHeader) {
         byte[] payload=file;
         if(useHeader) {
@@ -26,6 +39,11 @@ internal static class BinaryTransfer
         core.Write(address,payload);
         return (address,payload.Length);
     }
+    /// <summary>メモリを読み、ファイルの中身にする。</summary>
+    /// <param name="core">読み出し元のコア</param>
+    /// <param name="address">先頭アドレス</param>
+    /// <param name="length">バイト数</param>
+    /// <param name="withHeader">SAVEM ヘッダーを付けるか</param>
     internal static byte[] Save(Core core,int address,int length,bool withHeader) {
         if(length<=0||address<0||address>0xfffff||length>0x100000-address)throw new ArgumentOutOfRangeException(nameof(length),L.T("アドレスまたは長さが範囲外です。","Address or length out of range."));
         byte[] data=core.Dump(address,length);
@@ -40,6 +58,7 @@ internal static class BinaryTransfer
     }
 }
 
+/// <summary>BIN の読込・保存のウィンドウ。</summary>
 internal sealed class BinaryTransferDialog : Form
 {
     readonly bool saving;
@@ -51,7 +70,12 @@ internal sealed class BinaryTransferDialog : Form
     readonly Label info=new(){AutoSize=true,MaximumSize=new Size(470,0)};
     byte[]? loaded;
     // Set when the transfer succeeded: where it started, so the caller can show it.
+    /// <summary>成功したときの先頭アドレス（呼び出し元がその位置を表示する）。</summary>
     internal int? Done {get;private set;}
+    /// <summary>ウィンドウを作る。</summary>
+    /// <param name="read">今のコアを返す関数</param>
+    /// <param name="saving">保存なら true、読込なら false</param>
+    /// <param name="suggestedAddress">アドレス欄の初期値</param>
     internal BinaryTransferDialog(Func<Core?> read,bool saving,int suggestedAddress)
     {
         this.read=read;this.saving=saving;
@@ -84,6 +108,7 @@ internal sealed class BinaryTransferDialog : Form
         ok.Click+=(_,_)=>{try{Run();}catch(Exception ex){MessageBox.Show(this,ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Error);}};
         info.Text=saving?L.T("指定した範囲のメモリをそのままファイルへ書き出します。","Writes the selected memory range to a file as it is."):L.T("ファイルの内容を指定アドレスから書き込みます。内蔵RAM・RAMカードの範囲のみ書き込めます。","Loads the file at the given address. Only internal RAM and the RAM card can be written.");
     }
+    /// <summary>ファイルを選ぶ。</summary>
     void Browse() {
         if(saving) {
             using var d=new SaveFileDialog{Filter=L.T("バイナリ (*.bin)|*.bin|すべてのファイル|*.*","Binary (*.bin)|*.bin|All files|*.*"),FileName="MEMORY.BIN"};
@@ -94,6 +119,7 @@ internal sealed class BinaryTransferDialog : Form
         }
     }
     // Describes the chosen file and offers its SAVEM load address when it has one.
+    /// <summary>選んだファイルの大きさと SAVEM ヘッダーを調べて表示する。</summary>
     internal void Inspect() {
         loaded=null;
         if(!File.Exists(file.Text)){info.Text=L.T("ファイルが見つかりません。","File not found.");return;}
@@ -109,6 +135,7 @@ internal sealed class BinaryTransferDialog : Form
         }
     }
     const int HeaderLength=BinaryTransfer.HeaderLength;
+    /// <summary>読込・保存を実行し、成功したらウィンドウを閉じる。</summary>
     void Run() {
         var core=read()??throw new InvalidOperationException(L.T("ROMが読み込まれていません。","No ROM is loaded."));
         if(!DebugDialog.TryParseAddress(address.Text,out int at))throw new FormatException(L.T("アドレスは16進で入力してください。","Enter the address in hex."));
