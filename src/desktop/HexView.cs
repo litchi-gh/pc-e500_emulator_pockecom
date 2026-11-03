@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 namespace PokeCom;
 
+/// <summary>メモリの領域の種類（色分けと、書き換えできるかの判断に使う）。</summary>
 internal enum MemoryKind {Unmapped,Ram,Rom}
 
 // What the bus has at an address, as the debugger colours and names it.
+/// <summary>アドレスがどの領域か（ROM・内蔵 RAM・カード・未使用）を答える。</summary>
 internal static class MemoryMap
 {
+    /// <summary>アドレスの領域の種類。</summary>
     internal static MemoryKind Kind(Core core,int a) {
         if(a>=0xc0000)return MemoryKind.Rom;
         if(a>=0x80000)return MemoryKind.Ram;
@@ -13,6 +16,7 @@ internal static class MemoryMap
         if(a>=0x20000)return core.IsE650Family?MemoryKind.Rom:MemoryKind.Unmapped;
         return MemoryKind.Unmapped;
     }
+    /// <summary>アドレスの領域の名前（表示用）。</summary>
     internal static string Name(Core core,int a) {
         if(a>=0xc0000)return L.T("内蔵ROM (CE2)","Internal ROM (CE2)");
         if(a>=0xc0000-core.InternalKB*1024)return L.T($"内蔵RAM {core.InternalKB}KB",$"Internal RAM {core.InternalKB}KB");
@@ -29,6 +33,10 @@ internal static class MemoryMap
 // with a scrollbar, colours by region, and a caret that edits bytes in place.
 // Owner-drawn rather than a TextBox so that each byte can carry its own colour
 // and a periodic refresh repaints without scrolling or flicker.
+/// <summary>
+/// デバッガのメモリ表示：1MB 全体の HEX ダンプ。領域ごとに色を分け、
+/// カーソルの位置のバイトを16進のキー入力でその場で書き換えられる（RAM のみ）。
+/// </summary>
 internal sealed class HexView : Control
 {
     internal const int Columns=16;
@@ -45,8 +53,11 @@ internal sealed class HexView : Control
     Core? shown;
     // Raised with a one-line note for the status area: a refused write, a
     // successful edit, the region under the caret.
+    /// <summary>知らせたいメッセージ（書き換えた値、書き換えられない理由など）。</summary>
     internal event Action<string>? Note;
+    /// <summary>表示位置かカーソルが動いたときに知らせる。</summary>
     internal event Action? Moved;
+    /// <summary>表示の先頭アドレス、カーソルのアドレス（なければ -1）、カーソルが上位・下位のどちらの桁か。</summary>
     internal int Address=>address;
     internal int Caret=>cursor;
     internal int Nibble=>nibble;
@@ -64,8 +75,11 @@ internal sealed class HexView : Control
         Controls.Add(scroll);
         Resize+=(_,_)=>{Goto(address);};
     }
+    /// <summary>表示できる行数。</summary>
     internal int VisibleRows()=>Math.Max(4,Math.Min(TotalRows,(ClientSize.Height-4)/lineHeight));
     // Scrolls the top row to (the row of) value and rereads the machine.
+    /// <summary>value を含む行が先頭に来るように表示を動かし、読み直す。</summary>
+    /// <param name="value">アドレス</param>
     internal void Goto(int value) {
         int rows=VisibleRows();
         address=Math.Clamp(value,0,0x100000-rows*Columns)&~(Columns-1);
@@ -74,16 +88,20 @@ internal sealed class HexView : Control
         Reload();Moved?.Invoke();
     }
     // Puts the caret on an address and scrolls it into view.
+    /// <summary>カーソルを value に置き、見える位置まで動かす。</summary>
+    /// <param name="value">アドレス</param>
     internal void Jump(int value) {
         cursor=Math.Clamp(value,0,0xfffff);nibble=0;
         Goto(cursor);
     }
+    /// <summary>カーソルが見えていなければ、見える位置まで表示を動かす。</summary>
     void EnsureVisible() {
         if(cursor<0)return;
         int rows=VisibleRows();
         if(cursor<address)Goto(cursor);
         else if(cursor>=address+rows*Columns)Goto(cursor-(rows-1)*Columns);
     }
+    /// <summary>表示している範囲のメモリを読み直す。</summary>
     internal void Reload() {
         var core=read();shown=core;
         int rows=VisibleRows();
@@ -100,6 +118,7 @@ internal sealed class HexView : Control
         }
         return base.IsInputKey(keyData);
     }
+    /// <summary>キー操作：矢印・PageUp/Down・Home/End でカーソルを動かし、0〜9・A〜F で書き換える。</summary>
     protected override void OnKeyDown(KeyEventArgs e) {
         int rows=VisibleRows();
         switch(e.KeyCode) {
@@ -119,12 +138,14 @@ internal sealed class HexView : Control
         e.Handled=e.SuppressKeyPress=true;
         base.OnKeyDown(e);
     }
+    /// <summary>キーを16進の数字にする（数字でなければ -1）。</summary>
     static int HexDigit(Keys key) {
         if(key>=Keys.D0&&key<=Keys.D9)return key-Keys.D0;
         if(key>=Keys.NumPad0&&key<=Keys.NumPad9)return key-Keys.NumPad0;
         if(key>=Keys.A&&key<=Keys.F)return key-Keys.A+10;
         return -1;
     }
+    /// <summary>カーソルを delta バイト動かす。</summary>
     void MoveCursor(int delta) {
         if(cursor<0)cursor=address;
         cursor=Math.Clamp(cursor+delta,0,0xfffff);nibble=0;
@@ -132,6 +153,8 @@ internal sealed class HexView : Control
     }
     // Types one hex digit into the byte under the caret. RAM only: the machine
     // refuses the rest, and the note says why nothing changed.
+    /// <summary>カーソルの位置のバイトの、今の桁を digit に書き換え、次の桁へ進む。</summary>
+    /// <param name="digit">0〜15</param>
     void Edit(int digit) {
         var core=read();
         if(core is null||cursor<0){Note?.Invoke(L.T("書き換える位置をクリックしてください。","Click the byte to edit."));return;}
@@ -145,6 +168,7 @@ internal sealed class HexView : Control
         else {nibble=0;if(cursor<0xfffff)cursor++;}
         EnsureVisible();Reload();Moved?.Invoke();
     }
+    /// <summary>クリックした位置のバイト（と桁）にカーソルを置く。</summary>
     protected override void OnMouseDown(MouseEventArgs e) {
         Focus();
         if(e.Button!=MouseButtons.Left||data.Length==0){base.OnMouseDown(e);return;}
@@ -163,6 +187,7 @@ internal sealed class HexView : Control
     }
     protected override void OnGotFocus(EventArgs e){Invalidate();base.OnGotFocus(e);}
     protected override void OnLostFocus(EventArgs e){Invalidate();base.OnLostFocus(e);}
+    /// <summary>アドレス・HEX・文字を、領域の色で描く。</summary>
     protected override void OnPaint(PaintEventArgs e) {
         var g=e.Graphics;g.Clear(BackColor);
         if(shown is null||data.Length==0) {

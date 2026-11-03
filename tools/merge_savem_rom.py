@@ -29,6 +29,10 @@ LAYOUTS = {
 
 
 def parse_savem(path):
+    """SAVEM ファイルを読み、ヘッダー・開始アドレス・長さ・データ・警告の辞書を返す。
+
+    16バイトより短ければ ValueError。見慣れないヘッダーや長さの食い違いは warn に入れて返す。
+    """
     data = open(path, "rb").read()
     if len(data) < HEADER_LEN:
         raise ValueError(f"{path}: ファイルが小さすぎます ({len(data)} バイト)")
@@ -46,6 +50,7 @@ def parse_savem(path):
 
 
 def describe(f):
+    """ダンプ1つのヘッダー・範囲・FFh の割合・警告を表示する。"""
     p = f["payload"]
     ff = sum(1 for x in p if x == 0xFF)
     print(f"{f['path']}")
@@ -75,6 +80,7 @@ def gaps(covered, regions):
 
 
 def main():
+    """コマンドライン：ダンプを読み、レイアウトに並べて ROM イメージを書き出す。"""
     ap = argparse.ArgumentParser(description="SAVEM 形式の S3 ダンプを結合する")
     ap.add_argument("files", nargs="*", help="S3A.ROM S3B.ROM ... (16バイトSAVEMヘッダ付き)")
     ap.add_argument("-o", "--output", help="出力する ROM イメージ")

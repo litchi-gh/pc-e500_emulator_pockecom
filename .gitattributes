@@ -1,0 +1,9 @@
+# The repository is LF throughout. Pinning it here keeps an editor or a global
+# core.autocrlf from turning a small change into a whole-file line-ending diff.
+* text=auto eol=lf
+# cmd.exe can misread labels and goto in LF batch files.
+*.cmd text eol=crlf
+*.png binary
+*.ico binary
+*.rom binary
+*.ram binary

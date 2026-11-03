@@ -47,7 +47,8 @@
 </head>
 <body>
 <header>
-  <h1>PC-E500 / PC-E650 / PC-U6000 エミュレータ 取扱説明書</h1>
+  <h1>PC-E500 シリーズ エミュレータ 取扱説明書</h1>
+  <p>対応機種：PC-E500・PC-E550・PC-1480U・PC-1490U・PC-1490UII（256KB ROM）、PC-E650・PC-U6000（384KB ROM）</p>
   <p>Windows用デスクトップエミュレータ「PokeCom」の使い方 &nbsp;·&nbsp; <a href="index_en.html" style="color:#c8d0da">English</a></p>
 </header>
 
@@ -58,11 +59,15 @@
     <li><a href="#first">2. 最初の操作</a></li>
     <li><a href="#keys">3. キー操作</a></li>
     <li><a href="#toolbar">4. ツールバーのボタン</a></li>
+    <li class="sub"><a href="#menu">右クリックのメニューと表示の切り替え</a></li>
+    <li class="sub"><a href="#update">新しい版のお知らせと更新</a></li>
     <li><a href="#ramcard">5. RAMカード</a></li>
     <li class="sub"><a href="#ramcard-create">カードを作る</a></li>
     <li class="sub"><a href="#ramcard-swap">入れ替える・外す</a></li>
     <li><a href="#settings">6. 設定</a></li>
-    <li><a href="#disk">7. CE-140F（X:ドライブ）</a></li>
+    <li class="sub"><a href="#display">画面設定（液晶の表示・コントラスト）</a></li>
+    <li><a href="#disk">7. CE-140F と CE-126P</a></li>
+    <li class="sub"><a href="#printer">CE-126P（プリンタ）</a></li>
     <li><a href="#text">8. 文字のコピーと貼り付け</a></li>
     <li><a href="#reset">9. リセット</a></li>
     <li><a href="#debug">10. デバッグ</a></li>
@@ -83,15 +88,21 @@
 
 <section id="start">
 <h2>1. 起動と画面の見かた</h2>
-<p><code>app</code> フォルダの <code>PC-E500.exe</code> をダブルクリックすると起動します（一つ上のフォルダの <code>Start-PC-E500.cmd</code> からも起動できます）。.NETランタイムを同梱しているので、追加のインストールは不要です。</p>
-<p>エミュレータが読み書きするファイルはすべて <code>app</code> フォルダの中にあります。<code>app</code> フォルダごと別の場所へコピーしても、そのまま動作します。</p>
+<p>配布は、インストーラー（<code>…-setup.exe</code>）と zip の2通りです。どちらも .NETランタイムを同梱しているので、ほかに入れるものはありません。</p>
+<p><b>動作環境：</b>Windows 10 / 11（64ビット版、x64）。CPU は 2コア・2GHz 程度以上、メモリは 4GB 以上を推奨します（アプリが使うのは 150MB 程度）。ディスクは約 120MB、画面は 1280×800 以上を推奨します。</p>
+<table>
+<tr><th>形</th><th>起動</th><th>ROM・RAM・設定の置き場所（データフォルダ）</th></tr>
+<tr><td>インストーラー</td><td>スタートメニューの <b>PC-E500 Emulator</b></td><td><code>%LocalAppData%\PockeComE500\</code>（利用者ごと）</td></tr>
+<tr><td>zip</td><td>展開したフォルダの <code>PC-E500.exe</code></td><td><code>PC-E500.exe</code> と同じフォルダ。フォルダごとコピーしてもそのまま動きます</td></tr>
+</table>
+<p>インストーラーは、最初に「自分だけ」か「すべてのユーザー」かを選べます（すべてのユーザーは管理者の権限が要ります）。どちらでもデータフォルダは利用者ごとです。データフォルダは、スタートメニューの <b>PC-E500 Emulator のデータフォルダ</b> や、右クリックのメニューの <b>データフォルダを開く</b> で開けます。アンインストールしても、データフォルダは残ります。</p>
+<p>データフォルダの中は次のとおりです（zip では <code>PC-E500.exe</code> の横にあります）。</p>
 <table>
 <tr><th>フォルダ</th><th>内容</th></tr>
-<tr><td><code>app\rom\</code></td><td>内蔵ROMのイメージ。起動時にここから読み込みます</td></tr>
-<tr><td><code>app\ram\</code></td><td>RAMカードのイメージファイル（<a href="#ramcard">5章</a>）</td></tr>
-<tr><td><code>app\drive-x\</code></td><td>CE-140F（X:ドライブ）の保存先（<a href="#disk">7章</a>）</td></tr>
-<tr><td><code>app\state\</code></td><td>設定、内蔵RAMの内容、自動保存、リセット前のバックアップ</td></tr>
-<tr><td><code>app\manual\</code></td><td>この説明書</td></tr>
+<tr><td><code>rom\</code></td><td>内蔵ROMのイメージ。起動時にここから読み込みます</td></tr>
+<tr><td><code>ram\</code></td><td>RAMカードのイメージファイル（<a href="#ramcard">5章</a>）</td></tr>
+<tr><td><code>drive-x\</code></td><td>CE-140F（X:ドライブ）の保存先（<a href="#disk">7章</a>）</td></tr>
+<tr><td><code>state\</code></td><td>設定、内蔵RAMの内容、自動保存、リセット前のバックアップ</td></tr>
 </table>
 <figure>
 <img src="images/main-e500.png" alt="メインウィンドウ">
@@ -152,18 +163,44 @@
 <figure><img src="images/toolbar.png" alt="ツールバー"><figcaption>ツールバー</figcaption></figure>
 <table>
 <tr><th>ボタン</th><th>働き</th></tr>
-<tr><td>ROMを開く</td><td>別のROMイメージ（PC-E500の256KB、またはPC-E650/PC-U6000の384KB）に切り替えます</td></tr>
+<tr><td>ROMを開く</td><td>別のROMイメージ（PC-E500・E550・1480U・1490U・1490UIIの256KB、またはPC-E650/PC-U6000の384KB）に切り替えます</td></tr>
 <tr><td>一時停止 / 再開</td><td>機械の実行を止めます。止めている間はキー入力を受け付けません</td></tr>
 <tr><td>保存 / 読込</td><td>現在の状態をスナップショットとしてファイルへ保存・復元します（<a href="#save">11章</a>）</td></tr>
 <tr><td>設定</td><td>言語、外観、内蔵RAM、RAMカード、CE-140F、音量などを変更します（<a href="#settings">6章</a>）</td></tr>
+<tr><td>画面</td><td>液晶のリアル表示・コントラストと、ウィンドウの表示を変更します（<a href="#display">6章</a>）</td></tr>
 <tr><td>CE-140F</td><td>X:ドライブの通信履歴を表示し、保存フォルダを開けます（<a href="#disk">7章</a>）</td></tr>
+<tr><td>CE-126P</td><td>プリンタの紙を表示し、テキストや画像で保存・コピーします。プリンタの接続もここで切り替えます（<a href="#printer">7章</a>）</td></tr>
 <tr><td>文字入出力</td><td>液晶の文字をコピーしたり、クリップボードの文字を入力したりします（<a href="#text">8章</a>）</td></tr>
 <tr><td>オールリセット</td><td>実機の ON＋RESET と同じ操作をします（<a href="#reset">9章</a>）</td></tr>
 <tr><td>デバッグ</td><td>CPUレジスタとメモリの表示・書き換え、BINの読み書き（<a href="#debug">10章</a>）</td></tr>
 <tr><td>使い方</td><td>この説明書を開きます</td></tr>
 <tr><td>速度</td><td>0.5x → 1x → 2x → 4x の順に実行速度を切り替えます。音を確認するときは 1x にしてください</td></tr>
 </table>
-<p>「設定」「CE-140F」「文字入出力」「デバッグ」は本体を動かしたまま開いておけます。同じボタンをもう一度押すと、開いているウィンドウを前面に出します。</p>
+<p>「設定」「画面」「CE-140F」「CE-126P」「文字入出力」「デバッグ」は本体を動かしたまま開いておけます。同じボタンをもう一度押すと、開いているウィンドウを前面に出します。</p>
+<h3 id="menu">右クリックのメニューと表示の切り替え</h3>
+<p>本体の絵（またはウィンドウのどこか）を右クリックすると、ツールバーと同じ操作のメニューが出ます。速度、ウィンドウの表示、最小化、終了もここにあります。どの表示でも同じメニューなので、ツールバーやタイトルバーのない表示からもここで戻れます。</p>
+<figure><img src="images/context-menu.png" alt="右クリックのメニュー"><figcaption>右クリックのメニュー</figcaption></figure>
+<p>本体のキーのない所をダブルクリックすると、ウィンドウの表示が次のように切り替わります。キーの上のダブルクリックは、ふつうの2回の入力です。</p>
+<table>
+<tr><th>表示</th><th>内容</th></tr>
+<tr><td>① 通常</td><td>タイトルバー、ツールバー、操作ヒント、状態表示のある、いつもの表示</td></tr>
+<tr><td>② 本体だけ</td><td>ウィンドウの枠や帯がなくなり、本体の絵だけになります。絵をドラッグするとウィンドウを動かせます</td></tr>
+<tr><td>③ 画面だけ</td><td>本体の絵もなくなり、液晶の部分だけになります。ここでダブルクリックすると①に戻ります</td></tr>
+</table>
+<p>切り替えても液晶の位置と大きさは変わりません。キーボードからの入力は、どの表示でもそのまま使えます。</p>
+<p>②③では、本体（または液晶）の縁をドラッグすると大きさを変えられます。縦横の比は保たれ、つかんだ辺の反対側は動きません。表示・大きさ・位置は保存され、次に起動したときもその表示で始まります（保存した位置がどの画面にも入らないときは、位置だけ戻しません）。</p>
+<figure><img src="images/window-body.png" alt="本体だけの表示"><figcaption>② 本体だけの表示</figcaption></figure>
+<figure><img src="images/window-screen.png" alt="画面だけの表示"><figcaption>③ 画面だけの表示</figcaption></figure>
+<h3 id="update">新しい版のお知らせと更新</h3>
+<p>起動したとき、1日に1回まで、GitHub に新しい版が出ていないかを問い合わせます。新しい版があると、ツールバーの右端に <b>新しい版 v0.0.4</b> のようなボタンが出ます（右クリックのメニューの先頭にも出ます）。押すと変更点が表示され、<b>ダウンロードのページを開く</b> でリリースのページを開けます。エミュレータが自分でダウンロードや置き換えをすることはありません。</p>
+<ol>
+<li>エミュレータを終了します。</li>
+<li>リリースのページから、インストーラーで入れた場合は <code>…-setup.exe</code> を、zip で使っている場合は zip をダウンロードします。</li>
+<li>インストーラーは実行します。zip は、中身を今の <code>PC-E500.exe</code> があるフォルダに上書きで展開します。</li>
+</ol>
+<p>どちらでも、ROM・RAM・設定・状態はそのまま残ります（インストーラーはデータフォルダに触れず、zip には <code>rom</code>・<code>ram</code>・<code>drive-x</code>・<code>state</code> の中身が入っていません）。お知らせのウィンドウにも、使っている形に合わせた手順が出ます。</p>
+<p>右クリックのメニューの <b>新しい版を確認...</b> で、いつでも確認できます。<b>この版は通知しない</b> を押した版は、自動の確認では知らせません。自動の確認は「設定」で止められます。</p>
+<figure><img src="images/update.png" alt="新しい版のお知らせ"><figcaption>新しい版のお知らせ</figcaption></figure>
 </section>
 
 <section id="ramcard">
@@ -201,29 +238,54 @@
 <table>
 <tr><th>項目</th><th>内容</th></tr>
 <tr><td>言語 / Language</td><td>すべてのウィンドウとメッセージを日本語または英語にします。適用するとエミュレータを再起動します（状態は保存されます）</td></tr>
-<tr><td>本体の外観</td><td>PC-E500 / PC-E650 の筐体を切り替えます。PC-U6000はPC-E650と同じ筐体です。外観を変えてもROMは自動で変わらないので、機種に合うROMは「ROMを開く」で選んでください</td></tr>
+<tr><td>本体の外観</td><td>PC-E500 / PC-E650 の筐体を切り替えます。PC-U6000はPC-E650と同じ筐体です。PC-E550・PC-1480U・PC-1490U・PC-1490UIIは、PC-E500の外観で使ってください。外観を変えてもROMは自動で変わらないので、機種に合うROMは「ROMを開く」で選んでください</td></tr>
 <tr><td>内蔵RAM (KB)</td><td>8〜256KB。容量ごとに内容を別々に保持するので、元の容量に戻せば以前の内容が戻ります。E650/U6000（384KB ROM）では実機標準の64KBと、増設改造相当の128KB・256KBから選びます</td></tr>
 <tr><td>RAMカード</td><td><a href="#ramcard">5章</a>を参照</td></tr>
 <tr><td>CE-140Fを接続 (X:)</td><td>X:ドライブの接続と、書込み禁止、保存フォルダ</td></tr>
 <tr><td>音量 / 消音</td><td>BEEPやキークリック音の音量</td></tr>
-<tr><td>LCDのドット間に線を表示</td><td>ドットの境目が見える実機風の表示にします</td></tr>
+<tr><td>起動時に新しい版を確認する</td><td>1日に1回まで GitHub に問い合わせ、新しい版があれば知らせます（<a href="#update">4章</a>）。外すと、メニューから確認したときだけ問い合わせます</td></tr>
+</table>
+<h3 id="display">画面設定</h3>
+<p>ツールバーの <b>画面</b> で開きます。変更はすぐに反映され、ウィンドウを閉じると設定に保存されます。</p>
+<figure><img src="images/display.png" alt="画面設定"><figcaption>「画面」のウィンドウ</figcaption></figure>
+<table>
+<tr><th>項目</th><th>内容</th></tr>
+<tr><td>液晶の表示</td><td><b>標準</b>はドットを隙間なく詰めて表示します。<b>リアル</b>は実機の液晶のように、ドットの間を少しあけて表示します</td></tr>
+<tr><td>液晶のコントラスト</td><td>実機のコントラストつまみと同じく、ドットと表示シンボルの濃さが一緒に変わります。下げると薄くなり、消えている表示シンボルは見えなくなります。上げると濃くなり、消えているドットやシンボルも見えてきて、いちばん上（100）では全体が黒くなります。<b>標準に戻す</b>で今までの濃さ（50）に戻ります</td></tr>
+<tr><td>ウィンドウの表示</td><td>通常・本体だけ・画面だけを選びます（<a href="#menu">4章</a>のダブルクリックと同じ）</td></tr>
 </table>
 <div class="grid">
 <figure><img src="images/main-e650.png" alt="PC-E650の外観"><figcaption>外観をPC-E650にしたところ</figcaption></figure>
-<figure><img src="images/lcd-dot-lines.png" alt="ドット間の線"><figcaption>「LCDのドット間に線を表示」を有効にした液晶</figcaption></figure>
+<figure><img src="images/lcd-dot-lines.png" alt="リアル表示"><figcaption>液晶をリアル表示にしたところ</figcaption></figure>
 </div>
 </section>
 
 <section id="disk">
-<h2>7. CE-140F（X:ドライブ）</h2>
-<p>フロッピーディスクドライブ CE-140F をエミュレートし、PCのフォルダをディスクとして使います。既定の保存先は <code>app\drive-x\</code> です。</p>
+<h2>7. CE-140F と CE-126P</h2>
+<h3 id="disk-x">CE-140F（X:ドライブ）</h3>
+<p>フロッピーディスクドライブ CE-140F をエミュレートし、PCのフォルダをディスクとして使います。既定の保存先は、データフォルダ（<a href="#start">1章</a>）の <code>drive-x\</code> です。「設定」で別のフォルダにできます。</p>
 <pre>SAVE "X:TEST.BAS"        ' プログラムを保存
 SAVE "X:TEXT.BAS",A      ' ASCII形式で保存
 LOAD "X:TEST.BAS"        ' 読み込み
 FILES "X:"               ' 一覧</pre>
+<p>ASCII形式のファイルは、CE-140F のエミュレータ（ハード）と同じく、最後に 1Ah（EOF）を付けずに保存します。最後に 1Ah が付いたファイルも、そのまま読み込めます。</p>
 <p>OPEN / PRINT # / INPUT # によるファイル入出力、COPY・NAME・KILL・SET・INIT も使えます。ファイル名は英数字・<code>_</code>・<code>-</code> の 8.3 形式です。</p>
 <figure><img src="images/disk-trace.png" alt="CE-140Fウィンドウ"><figcaption>「CE-140F」ウィンドウ。通信履歴が0.5秒ごとに更新されます</figcaption></figure>
 <div class="box warn"><code>INIT</code> は保存フォルダ内のディスク対象ファイルを削除します。CE-140F専用のフォルダを指定してください。</div>
+<div class="box warn"><b>実機とやり取りするときは、通常の形（<code>,A</code> なし）で。</b>CE-140F のエミュレータ（ハード）でテキスト（ASCII）を LOAD すると、ハードのエミュレータの不具合で、読み込みの最後に「Undefined line」などのエラーになります（最後の行まで改行があれば、全行は届いています）。通常の形・機械語（<code>SAVE M</code>）は、実機で保存したものと同じファイルになり、問題なくやり取りできます。テキストのファイルは、エミュレータで <code>LOAD</code> してから <code>SAVE "X:..."</code> で保存し直すと通常の形になります。</div>
+<h3 id="printer">CE-126P（プリンタ）</h3>
+<p>サーマルプリンタ CE-126P をエミュレートします。ROM のプリンタの処理がそのまま動くので、<code>LPRINT</code>・<code>LLIST</code>・<code>PRINT=LPRINT</code> がそのまま使え、24桁で印字します。</p>
+<pre>LPRINT "HELLO"           ' 1行印字
+LLIST                    ' プログラムの一覧を印字
+PRINT=LPRINT             ' PRINT の出力をプリンタへ（PRINT=PRINT で戻す）</pre>
+<p>ツールバーの <b>CE-126P</b> で紙を表示します。紙は ROM の文字のフォントで描き、<b>文字をコピー</b>・<b>テキストで保存</b>・<b>画像で保存</b>（PNG）ができます。<b>紙を切る</b> で紙を空にします。</p>
+<figure><img src="images/printer.png" alt="CE-126Pウィンドウ"><figcaption>「CE-126P」ウィンドウ。LPRINT と LLIST の印字</figcaption></figure>
+<ul>
+<li><b>接続</b> を外すと、実機でプリンタをつないでいないときと同じく <code>Printer error</code> になります。接続の状態は設定に残ります。</li>
+<li>CE-140F と同じ11ピンにつないだ状態で、両方とも使えます。</li>
+<li>紙は最大2000行で、古い行から消えます。紙は状態保存には含めません（印字の途中で保存した状態を読み込むと、その行をもう一度最後まで印字します）。</li>
+<li>印字にかかる時間は再現していません（すぐに印字します）。テキストで保存すると、<code>¥</code> などの記号も印字のとおりになります。</li>
+</ul>
 </section>
 
 <section id="text">
@@ -241,7 +303,7 @@ FILES "X:"               ' 一覧</pre>
 <tr><td>ツールバーの <b>オールリセット</b></td><td>実機の ON＋RESET と同じです。ROMが「スベテノ データヲ ショウキョ シマスカ? (Y/N)」と聞いてくるので、<b>Y</b> で全消去、<b>N</b> でそのまま復帰します</td></tr>
 </table>
 <figure class="small"><img src="images/lcd-all-reset.png" alt="オールリセットの確認"><figcaption>オールリセット直後。Y か N で答えます</figcaption></figure>
-<p>オールリセットの直前の状態は <code>app\state\before-reset-日時.e500state</code> に保存されるので、誤って消してしまっても「読込」で戻せます。RAMカードはどちらのリセットでも消えません。</p>
+<p>オールリセットの直前の状態はデータフォルダの <code>state\before-reset-日時.e500state</code> に保存されるので、誤って消してしまっても「読込」で戻せます。RAMカードはどちらのリセットでも消えません。</p>
 </section>
 
 <section id="debug">
@@ -298,16 +360,17 @@ FILES "X:"               ' 一覧</pre>
 
 <section id="save">
 <h2>11. 保存と復元</h2>
-<p>何もしなくても、電源を切ったりアプリを終了したりしてもメモリの内容は保持されます。</p>
+<p>何もしなくても、電源を切ったりアプリを終了したりしてもメモリの内容は保持されます。保存先はデータフォルダ（<a href="#start">1章</a>）の中です。</p>
 <table>
-<tr><th>内蔵RAM</th><td>5秒ごと・OFF時・終了時に <code>app\state\memory\</code> の下へ保存。容量ごとに別ファイルです</td></tr>
+<tr><th>内蔵RAM</th><td>5秒ごと・OFF時・終了時に <code>state\memory\</code> の下へ保存。容量ごとに別ファイルです</td></tr>
 <tr><th>RAMカード</th><td>同じタイミングで、装着中のイメージファイル自身へ保存</td></tr>
-<tr><th>スナップショット</th><td>CPU・内蔵RAM・液晶・タイマーの状態を <code>app\state\</code> へ自動保存。次回起動時にそのまま続きから始まります</td></tr>
-<tr><th>設定</th><td><code>app\state\settings.json</code></td></tr>
+<tr><th>スナップショット</th><td>CPU・内蔵RAM・液晶・タイマー・プリンタとCE-140Fのバス上の状態を <code>state\</code> へ自動保存。次回起動時にそのまま続きから始まります</td></tr>
+<tr><th>設定</th><td><code>state\settings.json</code>（ウィンドウの表示・液晶のコントラスト・プリンタの接続なども含みます）</td></tr>
 </table>
 <p>ツールバーの <b>保存</b> / <b>読込</b> で、好きなタイミングのスナップショット（<code>.e500state</code>）をファイルに残して戻せます。</p>
 <div class="box tip">スナップショットに含まれるのは CPU と内蔵RAM です。RAMカードは含まれず、読み込んだときも装着中のイメージファイルの内容がそのまま使われます。保存したときと容量の違うカードを装着していると読み込めないので、同じ容量のカードを装着してから読み込んでください（カードなしで保存したものは、カードなしで読み込みます）。</div>
-<p>CE-140F の通信中やファイルOPEN中はスナップショットを保存・復元できません。<code>CLOSE</code> してから操作してください。</p>
+<p>CE-140F の通信中やファイルOPEN中はスナップショットを保存・復元できません。<code>CLOSE</code> してから操作してください。プリンタの印字中は、いつでも保存できます。</p>
+<p>新しい版で保存したファイルは古い版では読めません（「新しい版のエミュレータで作られています」と出ます）。古い版で保存したファイルは、新しい版で読めます。</p>
 </section>
 
 <section id="faq">
@@ -320,9 +383,15 @@ FILES "X:"               ' 一覧</pre>
 <tr><th>RAMカードを付けたのに容量が変わらない</th><td>設定画面で <b>適用</b> を押しましたか。状態表示の行で装着中のカード名を確認できます</td></tr>
 <tr><th>読込で「RAMカードが異なります」と出る</th><td>保存時と同じ容量のカードを装着（または取り外し）してから読み込んでください（<a href="#save">11章</a>）</td></tr>
 <tr><th>内蔵RAMを全部消したい</th><td>オールリセットで <b>Y</b> と答えてください。直前の状態は自動でバックアップされます（<a href="#reset">9章</a>）</td></tr>
-<tr><th>間違ってメモリを壊した</th><td><code>app\state\before-reset-*.e500state</code> や自分で保存したスナップショットを「読込」で戻せます</td></tr>
-<tr><th>PC-E650 / PC-U6000 で使いたい</th><td>S3A と S3B を結合した384KBのROMイメージ（<a href="#romdump">13章</a>）を <code>app\rom\</code> に置いて「ROMを開く」で選び、設定で外観をPC-E650にしてください</td></tr>
+<tr><th>間違ってメモリを壊した</th><td>データフォルダの <code>state\before-reset-*.e500state</code> や自分で保存したスナップショットを「読込」で戻せます</td></tr>
+<tr><th>PC-E650 / PC-U6000 で使いたい</th><td>S3A と S3B を結合した384KBのROMイメージ（<a href="#romdump">13章</a>）をデータフォルダの <code>rom\</code> に置いて「ROMを開く」で選び、設定で外観をPC-E650にしてください</td></tr>
+<tr><th>Ver.8 の 256KB の ROM で、起動すると横線が出たまま止まる</th><td>Ver.8 系（E650/U6000、E500S）の ROM は、本体（S3A）と拡張（S3B）の組です。本体だけでは起動しません。同じ機械から S3B も吸い出し、結合した 384KB のイメージにしてください（<a href="#romdump">13章</a>）</td></tr>
+<tr><th>ROMやデータをどこに置けばよいか分からない</th><td>右クリックのメニューの <b>データフォルダを開く</b> で開いたフォルダの <code>rom\</code> に置きます（インストーラーで入れた場合は <code>%LocalAppData%\PockeComE500\</code>、zip の場合は <code>PC-E500.exe</code> の横。<a href="#start">1章</a>）</td></tr>
+<tr><th>LPRINT で Printer error になる</th><td>「CE-126P」ウィンドウの <b>接続</b> が外れています（<a href="#printer">7章</a>）</td></tr>
+<tr><th>タイトルバーやボタンが消えた</th><td>「本体だけ」「画面だけ」の表示です。右クリックのメニューの <b>ウィンドウの表示</b> → <b>通常</b> で戻ります（<a href="#menu">4章</a>）</td></tr>
+<tr><th>インストーラーを開くと「Windows によって PC が保護されました」と出る</th><td>インストーラーに署名をしていないためです。<b>詳細情報</b> → <b>実行</b> で進めます</td></tr>
 <tr><th>「ROMを開く」で拒否される</th><td>大きさが 256KB / 384KB（またはヘッダー付きで +16バイト）か、S3B だけを開いていないかを確認してください（<a href="#romdump-header">13章</a>）</td></tr>
+<tr><th>エミュレータで保存したテキスト（<code>,A</code>）を、実機で CE-140F のエミュレータ（ハード）から LOAD すると、最後に Undefined line や I/O error になる</th><td>ハードのエミュレータの不具合で、どんなテキストのファイルでも読み込みの最後にエラーになります。エミュレータで <code>LOAD</code> してから、<code>,A</code> を付けずに <code>SAVE</code> し直したファイルを渡してください（<a href="#disk-x">7章</a>）</td></tr>
 </table>
 </section>
 
@@ -332,7 +401,7 @@ FILES "X:"               ' 一覧</pre>
 
 <h3>必要なもの</h3>
 <table>
-<tr><th>実機</th><td>PC-E500 / PC-E550 / PC-1490UII など（256KB ROM）、または PC-E650 / PC-U6000（384KB ROM）</td></tr>
+<tr><th>実機</th><td>PC-E500 / PC-E550 / PC-1480U / PC-1490U / PC-1490UII（256KB ROM）、または PC-E650 / PC-U6000（384KB ROM）</td></tr>
 <tr><th>保存先の機器</th><td>CE-140F（フロッピー）など、実機の11ピン端子につないでファイルを保存できる機器。PC上でCE-140Fを模擬するソフトを11ピンケーブルで接続する方法もあります。PCで読めるファイルとして取り出せれば何でも構いません</td></tr>
 </table>
 
@@ -375,14 +444,14 @@ FILES "X:"               ' 一覧</pre>
 <code>S3A.ROM</code> と <code>S3B.ROM</code> を <b>1つの384KBファイルに結合</b>する必要があります（拡張ROMを先頭、本体ROMを後ろに置く並びです）。下の結合ツールで作ります。<code>S3B.ROM</code> だけを開くと、その旨のメッセージが出ます。
 </td></tr>
 </table>
-<div class="box warn">256KBのファイルに <code>E650</code> や <code>U6000</code> を含む名前を付けると、結合し忘れとみなして開けません。PC-E500用のROMは <code>PC-E500.rom</code> のような名前にしてください。</div>
+<div class="box warn">256KBのファイルに <code>E650</code> や <code>U6000</code> を含む名前を付けると、結合し忘れとみなして開けません。ROMは <code>機種名(版).ROM</code>（例：<code>PC-E500(7.2).ROM</code>・<code>PC-E650(8.5).ROM</code>）のような名前にすると見分けやすく、起動時の自動の読み込みでも、同じ機種なら新しい版を選びます。版はステータスバーの「ROM Ver.」で確かめられます。</div>
 
 <h3 id="romdump-tool">結合ツールの使い方（tools\merge_savem_rom.py）</h3>
 <p>Python 3 が必要です（<a href="https://www.python.org/">python.org</a> から入れられます）。コマンドプロンプトか PowerShell で、<code>app</code> の一つ上のフォルダ（<code>tools</code> フォルダがある場所）に移動して実行します。</p>
 <table>
 <tr><th>ヘッダーの中身を確認する</th><td><pre>python tools\merge_savem_rom.py S3A.ROM S3B.ROM --info</pre>開始アドレス・長さ・範囲と、FFで埋まっている割合を表示します。長さの不一致や見慣れないヘッダーには警告が出ます</td></tr>
 <tr><th>PC-E650 / PC-U6000 用の384KBイメージを作る</th><td><pre>python tools\merge_savem_rom.py S3A.ROM S3B.ROM -o app\rom\PC-U6000-full.rom</pre>2つのダンプを1つに結合します。<code>20000-3FFFF</code> のダンプがあれば自動で full（384KB）レイアウトになります</td></tr>
-<tr><th>PC-E500 用の256KBイメージを作る（ヘッダー除去）</th><td><pre>python tools\merge_savem_rom.py S3A.ROM -o app\rom\PC-E500.rom</pre></td></tr>
+<tr><th>PC-E500 用の256KBイメージを作る（ヘッダー除去）</th><td><pre>python tools\merge_savem_rom.py S3A.ROM -o "app\rom\PC-E500(7.2).ROM"</pre></td></tr>
 <tr><th>ヘッダーだけを取り除く（上書き）</th><td><pre>python tools\merge_savem_rom.py S3A.ROM S3B.ROM --strip</pre>結合せず、それぞれのファイルから先頭16バイトを取り除いて上書きします。元のファイルは残らないので、必要ならコピーしてから実行してください</td></tr>
 <tr><th>ヘッダー除去済みの本体ROMと結合する</th><td><pre>python tools\merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o app\rom\PC-U6000-full.rom</pre>すでに256KBにしてある本体ROMを <code>--main-rom</code> で渡します</td></tr>
 </table>
@@ -398,10 +467,11 @@ FILES "X:"               ' 一覧</pre>
 
 <section id="scope">
 <h2>14. 対応範囲とライセンス</h2>
-<p>SC62015 CPU、256KB / 384KB ROM、内蔵RAMとRAMカード、HD61102 液晶2個（240×32ドット）、キー行列、タイマー割込み、ON/BRK・OFF、実行速度切替、状態の保存・復元、BEEP、フォルダ型 CE-140F を実装しています。</p>
-<p><b>未対応:</b> プリンタ、カセット、RS-232C、時計など。液晶のBUSY時間は省略しています。機械語プログラムや周辺機器を使うプログラムは、実機と動作が異なる場合があります。</p>
+<p>SC62015 CPU、256KB / 384KB ROM、内蔵RAMとRAMカード、HD61102 液晶2個（240×32ドット）、キー行列、タイマー割込み、ON/BRK・OFF、実行速度切替、状態の保存・復元、BEEP、フォルダ型 CE-140F、プリンタ CE-126P を実装しています。</p>
+<p><b>未対応:</b> CE-126P 以外のプリンタ、カセット、RS-232C、時計など。液晶のBUSY時間は省略しています。機械語プログラムや周辺機器を使うプログラムは、実機と動作が異なる場合があります。</p>
 <p>移植元は <a href="https://github.com/matsumo/PockEmul">matsumo/PockEmul</a>（CPU部分 Copyright (C) Matsumo 1998,1999）で、GPL に基づき提供します。詳細は <code>app\LICENSE</code> と <code>app\THIRD_PARTY_NOTICES.md</code> を参照してください。ROMイメージは本ソフトウェアに含まれません。お手持ちの実機から吸い出してください（<a href="#romdump">13章</a>）。</p>
-<p>開発者向けの情報（ビルド、テスト、メモリマップの詳細）は一つ上のフォルダの <code>README.md</code> にあります。</p>
+<p>開発者向けの情報（ビルド、テスト、メモリマップの詳細）は一つ上のフォルダの <code>MANUAL.md</code> にあります。</p>
+<p>PC-E500・PC-E550・PC-1480U・PC-1490UII・PC-E650・PC-U6000 の ROM で動作確認済みです。</p>
 </section>
 
 </main>

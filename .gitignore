@@ -6,6 +6,7 @@
 !/app/manual/
 !/app/README.txt
 /app/rom/*.rom
+/app/rom/*.ROM
 /app/rom/*.bin
 /app/ram/*.ram
 /app/drive-x/*
@@ -25,3 +26,4 @@
 *.exp
 *.lib
 *.obj
+/dist/
