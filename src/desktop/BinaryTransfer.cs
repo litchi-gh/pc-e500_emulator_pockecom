@@ -64,8 +64,8 @@ internal sealed class BinaryTransferDialog : Form
     readonly bool saving;
     readonly Func<Core?> read;
     readonly TextBox file=new(){Width=360};
-    readonly TextBox address=new(){Width=90,Font=new Font("Consolas",10)};
-    readonly TextBox length=new(){Width=90,Font=new Font("Consolas",10)};
+    readonly TextBox address=new(){Width=90,Font=Fonts.Mono};
+    readonly TextBox length=new(){Width=90,Font=Fonts.Mono};
     readonly CheckBox header=new(){AutoSize=true};
     readonly Label info=new(){AutoSize=true,MaximumSize=new Size(470,0)};
     byte[]? loaded;
@@ -81,7 +81,7 @@ internal sealed class BinaryTransferDialog : Form
         this.read=read;this.saving=saving;
         Text=saving?L.T("BIN書出し (メモリ → ファイル)","Save BIN (memory → file)"):L.T("BIN書込み (ファイル → メモリ)","Load BIN (file → memory)");
         FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;ShowInTaskbar=false;
-        StartPosition=FormStartPosition.CenterParent;Font=new Font("Yu Gothic UI",10);ClientSize=new Size(500,saving?230:250);
+        StartPosition=FormStartPosition.CenterParent;Font=Fonts.Ui;ClientSize=new Size(500,saving?230:250);
         int y=14;
         Control Row(string title,Control c,int rowHeight=30) {
             var r=new FlowLayoutPanel{Location=new Point(14,y),Size=new Size(476,rowHeight),WrapContents=false};
@@ -91,6 +91,8 @@ internal sealed class BinaryTransferDialog : Form
         var fileRow=(FlowLayoutPanel)Row(L.T("ファイル","File"),file);
         var browse=new Button{Text=L.T("参照","Browse"),AutoSize=true};fileRow.Controls.Add(browse);
         browse.Click+=(_,_)=>Browse();
+        // The bytes held belong to the path they came from: a path typed or pasted afterwards is read afresh.
+        file.TextChanged+=(_,_)=>loaded=null;
         address.Text=suggestedAddress.ToString("X5");
         Row(L.T("アドレス (16進)","Address (hex)"),address);
         if(saving) {
@@ -115,7 +117,11 @@ internal sealed class BinaryTransferDialog : Form
             if(d.ShowDialog(this)==DialogResult.OK)file.Text=d.FileName;
         } else {
             using var d=new OpenFileDialog{Filter=L.T("バイナリ (*.bin;*.ram;*.rom)|*.bin;*.ram;*.rom|すべてのファイル|*.*","Binary (*.bin;*.ram;*.rom)|*.bin;*.ram;*.rom|All files|*.*")};
-            if(d.ShowDialog(this)==DialogResult.OK){file.Text=d.FileName;Inspect();}
+            if(d.ShowDialog(this)==DialogResult.OK) {
+                file.Text=d.FileName;
+                // A file that cannot be read says so here, not as an unhandled exception.
+                try {Inspect();} catch(Exception ex) {loaded=null;info.Text=L.T("読み込めません: ","Could not read the file: ")+ex.Message;}
+            }
         }
     }
     // Describes the chosen file and offers its SAVEM load address when it has one.

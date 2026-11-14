@@ -67,7 +67,7 @@ internal sealed class HexView : Control
     {
         this.read=read;
         SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.Selectable|ControlStyles.ResizeRedraw,true);
-        Font=new Font("Consolas",10);BackColor=Color.White;Cursor=Cursors.IBeam;TabStop=true;
+        Font=Fonts.Mono;BackColor=Color.White;Cursor=Cursors.IBeam;TabStop=true;
         var probe=TextRenderer.MeasureText(new string('0',40),Font,Size.Empty,TextFormatFlags.NoPadding);
         charWidth=Math.Max(6,probe.Width/40);lineHeight=Math.Max(12,probe.Height);
         scroll.Minimum=0;scroll.Maximum=TotalRows-1;scroll.SmallChange=1;scroll.LargeChange=1;
@@ -91,8 +91,8 @@ internal sealed class HexView : Control
     /// <summary>カーソルを value に置き、見える位置まで動かす。</summary>
     /// <param name="value">アドレス</param>
     internal void Jump(int value) {
-        cursor=Math.Clamp(value,0,0xfffff);nibble=0;
-        Goto(cursor);
+        cursor=Math.Clamp(value,0,0xfffff);nibble=0;pending=-1;
+        Goto(cursor);Invalidate();
     }
     /// <summary>カーソルが見えていなければ、見える位置まで表示を動かす。</summary>
     void EnsureVisible() {
@@ -102,15 +102,25 @@ internal sealed class HexView : Control
         else if(cursor>=address+rows*Columns)Goto(cursor-(rows-1)*Columns);
     }
     /// <summary>表示している範囲のメモリを読み直す。</summary>
+    (int,int,Core,int,int) kindsFor;
     internal void Reload() {
         var core=read();shown=core;
         int rows=VisibleRows();
-        if(core is null){data=[];kinds=[];Invalidate();return;}
+        if(core is null){data=[];kinds=[];kindsFor=default;Invalidate();return;}
         int count=Math.Min(rows*Columns,0x100000-address);
         byte[] next=core.Dump(address,count);
-        var nextKinds=new MemoryKind[count];
-        for(int i=0;i<count;i++)nextKinds[i]=MemoryMap.Kind(core,address+i);
-        data=next;kinds=nextKinds;Invalidate();
+        // The kinds follow the address and the RAM sizes only, and the view is
+        // repainted only when something it shows has changed: every refresh made
+        // a call per byte and some 1300 text draws for a page that stood still.
+        // 領域の種類は表示位置と RAM の容量が変わったときだけ求め、表示が変わったときだけ描き直す。
+        var at=(address,count,core,core.InternalKB,core.CardKB);
+        if(at!=kindsFor) {
+            var nextKinds=new MemoryKind[count];
+            for(int i=0;i<count;i++)nextKinds[i]=MemoryMap.Kind(core,address+i);
+            kinds=nextKinds;kindsFor=at;data=next;Invalidate();return;
+        }
+        if(next.AsSpan().SequenceEqual(data))return;
+        data=next;Invalidate();
     }
     protected override bool IsInputKey(Keys keyData) {
         switch(keyData&Keys.KeyCode) {
@@ -131,7 +141,10 @@ internal sealed class HexView : Control
         case Keys.Home:if(e.Control)Jump(0);else if(cursor>=0)MoveCursor(-(cursor%Columns));break;
         case Keys.End:if(e.Control)Jump(0xfffff);else if(cursor>=0)MoveCursor(Columns-1-cursor%Columns);break;
         default:
-            int digit=HexDigit(e.KeyCode);
+            // A digit with Ctrl, Alt or Shift is a shortcut or a symbol, not a nibble:
+            // Ctrl+C wrote C into the memory.
+            // Ctrl・Alt・Shift と一緒の数字は書き換えに使わない（Ctrl+C で C を書いていた）。
+            int digit=e.Control||e.Alt||e.Shift?-1:HexDigit(e.KeyCode);
             if(digit<0)return;
             Edit(digit);break;
         }
@@ -148,11 +161,17 @@ internal sealed class HexView : Control
     /// <summary>カーソルを delta バイト動かす。</summary>
     void MoveCursor(int delta) {
         if(cursor<0)cursor=address;
-        cursor=Math.Clamp(cursor+delta,0,0xfffff);nibble=0;
-        EnsureVisible();Reload();Moved?.Invoke();
+        cursor=Math.Clamp(cursor+delta,0,0xfffff);nibble=0;pending=-1;
+        EnsureVisible();Reload();Invalidate();Moved?.Invoke();
     }
     // Types one hex digit into the byte under the caret. RAM only: the machine
-    // refuses the rest, and the note says why nothing changed.
+    // refuses the rest, and the note says why nothing changed. The high digit
+    // waits here for the low one, and the byte is written once, whole: written
+    // straight away, a running program read the half-typed value (C0 for C3).
+    // 上の桁は下の桁がそろうまでここに持ち、バイトは1回で書く（すぐ書くと、動いているプログラムが途中の値を読んだ）。
+    /// <summary>入力済みで、まだ書いていない上の桁（なければ -1）。</summary>
+    int pending=-1;
+    internal int Pending=>pending;
     /// <summary>カーソルの位置のバイトの、今の桁を digit に書き換え、次の桁へ進む。</summary>
     /// <param name="digit">0〜15</param>
     void Edit(int digit) {
@@ -160,13 +179,18 @@ internal sealed class HexView : Control
         if(core is null||cursor<0){Note?.Invoke(L.T("書き換える位置をクリックしてください。","Click the byte to edit."));return;}
         if(MemoryMap.Kind(core,cursor)!=MemoryKind.Ram){Note?.Invoke(L.T($"{cursor:X5} は {MemoryMap.Name(core,cursor)} のため書き換えできません。内蔵RAM・RAMカードのみ書き換えられます。",$"{cursor:X5} is {MemoryMap.Name(core,cursor)} and cannot be edited. Only internal RAM and the RAM card are writable."));return;}
         byte old=core.Dump(cursor,1)[0];
-        byte value=nibble==0?(byte)((digit<<4)|(old&0x0f)):(byte)((old&0xf0)|digit);
+        if(nibble==0) {
+            pending=digit;nibble=1;
+            Note?.Invoke(L.T($"{cursor:X5}: {old:X2} → {digit:X}_（下の桁を入力してください）",$"{cursor:X5}: {old:X2} → {digit:X}_ (type the low digit)"));
+            Invalidate();Moved?.Invoke();return;
+        }
+        byte value=pending>=0?(byte)((pending<<4)|digit):(byte)((old&0xf0)|digit);
+        pending=-1;
         try {core.Write(cursor,[value]);}
-        catch(Exception ex){Note?.Invoke(ex.Message);return;}
+        catch(Exception ex){nibble=0;Note?.Invoke(ex.Message);return;}
         Note?.Invoke(L.T($"{cursor:X5}: {old:X2} → {value:X2}",$"{cursor:X5}: {old:X2} → {value:X2}"));
-        if(nibble==0)nibble=1;
-        else {nibble=0;if(cursor<0xfffff)cursor++;}
-        EnsureVisible();Reload();Moved?.Invoke();
+        nibble=0;if(cursor<0xfffff)cursor++;
+        EnsureVisible();Reload();Invalidate();Moved?.Invoke();
     }
     /// <summary>クリックした位置のバイト（と桁）にカーソルを置く。</summary>
     protected override void OnMouseDown(MouseEventArgs e) {
@@ -178,13 +202,19 @@ internal sealed class HexView : Control
         if(column>=HexStart&&column<HexStart+Columns*3){int c=column-HexStart;if(c%3<2){index=c/3;part=c%3;}}
         else if(column>=AsciiStart&&column<AsciiStart+Columns)index=column-AsciiStart;
         int offset=row*Columns+index;
-        if(index>=0&&offset<data.Length){cursor=address+offset;nibble=part;Invalidate();Moved?.Invoke();}
+        if(index>=0&&offset<data.Length){cursor=address+offset;nibble=part;pending=-1;Invalidate();Moved?.Invoke();}
         base.OnMouseDown(e);
     }
+    // Three rows a notch (120); a touchpad's finer steps add up to it, and turning back drops the remainder.
+    // 1ノッチ（120）で3行。タッチパッドの細かい量は持ち越し、向きが変われば捨てる。
+    int wheel;
     protected override void OnMouseWheel(MouseEventArgs e) {
-        Goto(address-e.Delta/120*Columns*3);
+        if(wheel!=0 && Math.Sign(wheel)!=Math.Sign(e.Delta))wheel=0;
+        wheel+=e.Delta;int rows=wheel/40;wheel-=rows*40;
+        if(rows!=0)Goto(address-rows*Columns);
         base.OnMouseWheel(e);
     }
+    internal void TestWheel(int delta)=>OnMouseWheel(new MouseEventArgs(MouseButtons.None,0,0,0,delta));
     protected override void OnGotFocus(EventArgs e){Invalidate();base.OnGotFocus(e);}
     protected override void OnLostFocus(EventArgs e){Invalidate();base.OnLostFocus(e);}
     /// <summary>アドレス・HEX・文字を、領域の色で描く。</summary>
@@ -214,7 +244,9 @@ internal sealed class HexView : Control
                         int ux=hx+nibble*charWidth;g.DrawLine(pen,ux,y+lineHeight-1,ux+charWidth,y+lineHeight-1);
                     }
                 }
-                TextRenderer.DrawText(g,data[i].ToString("X2"),Font,new Point(hx,y),color,flags);
+                // The high digit typed and not yet written shows in its place.
+                string hex=a==cursor && pending>=0?$"{pending:X}{data[i]&15:X}":data[i].ToString("X2");
+                TextRenderer.DrawText(g,hex,Font,new Point(hx,y),color,flags);
                 byte v=data[i];string ch=v>=0x20&&v<0x7f?((char)v).ToString():".";
                 TextRenderer.DrawText(g,ch,Font,new Point(ax,y),color,flags);
             }

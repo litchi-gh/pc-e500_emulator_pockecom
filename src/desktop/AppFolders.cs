@@ -25,8 +25,16 @@ internal static class AppFolders
     // folder that holds rom/ - or the app/ folder that does.
     /// <summary>プログラムのフォルダ（manual がある）。インストール版は exe のフォルダ、それ以外は rom フォルダを持つフォルダか app フォルダ。</summary>
     internal static string Program() {
-        if(Installed)return AppContext.BaseDirectory;
-        for(var d=new DirectoryInfo(AppContext.BaseDirectory);d is not null;d=d.Parent) {
+        string here=AppContext.BaseDirectory;
+        // A release (the zip, or the app folder) has its rom or manual folder
+        // beside the executable. Only a development build looks further up: a
+        // zip copy walking up picked any rom folder above it for its data.
+        // 配布物（zip、app フォルダ）は exe の横に rom か manual がある。上へ探しに行くのは開発中のビルドだけ
+        // （zip 版が上へ探すと、関係のない上のフォルダの rom をデータの場所にしてしまった）。
+        if(Installed || Directory.Exists(Path.Combine(here,"rom")) || Directory.Exists(Path.Combine(here,"manual")))return here;
+        char s=Path.DirectorySeparatorChar;
+        if(!here.Contains($"{s}src{s}desktop{s}bin{s}",StringComparison.OrdinalIgnoreCase))return here;
+        for(var d=new DirectoryInfo(here);d is not null;d=d.Parent) {
             if(Directory.Exists(Path.Combine(d.FullName,"rom")))return d.FullName;
             if(Directory.Exists(Path.Combine(d.FullName,"app","rom")))return Path.Combine(d.FullName,"app");
         }

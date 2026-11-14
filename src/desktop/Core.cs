@@ -42,6 +42,7 @@ internal static class Native
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern ulong e500_cycles(IntPtr m);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_state_size();
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_state_card(byte[] data,int size);
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_state_same(byte[] a,byte[] b,int size);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_save(IntPtr m, [Out] byte[] data, int size);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_load(IntPtr m, byte[] data, int size);
 }
@@ -88,6 +89,8 @@ internal sealed class Core : IDisposable
     /// <summary>内蔵 RAM と RAM カードの容量（KB）。</summary>
     internal int InternalKB=>Native.e500_capacity(Handle,0);
     internal int CardKB=>Native.e500_capacity(Handle,1);
+    /// <summary>ROM の大きさが違うときのメッセージ。</summary>
+    static string WrongRomSize=>L.T("PC-E500・PC-E550・PC-1480U・PC-1490U・PC-1490UIIの256KB ROM、またはPC-E650/PC-U6000の384KB ROMを選択してください。SAVEMヘッダー付きの吸い出しファイルはそのまま開けます。","Choose a 256KB ROM of a PC-E500, PC-E550, PC-1480U, PC-1490U or PC-1490UII, or a 384KB PC-E650/PC-U6000 ROM. A dump with its SAVEM header opens as it is.");
     /// <summary>ROM を読み込み、ネイティブの本体を作る。</summary>
     /// <param name="path">ROM ファイル（256KB・384KB、または SAVEM ヘッダー付きの吸い出し）</param>
     /// <param name="ram">内蔵 RAM の容量（KB）。機種に合わなければ標準の容量にする</param>
@@ -96,6 +99,9 @@ internal sealed class Core : IDisposable
     internal Core(string path,int ram=32,string? cardPath=null)
     {
         // ROM を読み、SAVEM ヘッダー付きなら本体 ROM（C0000-FFFFF）だけを取り出す。
+        // A file larger than any ROM is refused before it is read: picked by mistake it may be gigabytes.
+        // どの ROM より大きいファイルは読む前に断る（間違えて選んだ大きなファイルを読み込まないため）。
+        if(new FileInfo(path).Length>384*1024+BinaryTransfer.HeaderLength)throw new InvalidDataException(WrongRomSize);
         var rom=File.ReadAllBytes(path);
         // A dump straight from the machine (SAVEM "d:S3A.ROM",&HC0000,&HFFFFF)
         // carries the 16-byte SAVEM header; take the main ROM out of it as it is.
@@ -105,8 +111,7 @@ internal sealed class Core : IDisposable
             else throw new InvalidDataException(L.T($"SAVEMダンプの範囲 {dumpStart:X5}-{dumpStart+dumpLength-1:X5} は内蔵ROM（C0000-FFFFF）ではありません。SAVEM \"d:S3A.ROM\",&HC0000,&HFFFFF で吸い出してください。",$"The SAVEM dump covers {dumpStart:X5}-{dumpStart+dumpLength-1:X5}, not the internal ROM (C0000-FFFFF). Dump it with SAVEM \"d:S3A.ROM\",&HC0000,&HFFFFF."));
         }
         // 大きさと、ファイル名から分かる機種の食い違いを確かめる。
-        if(rom.Length!=256*1024 && rom.Length!=384*1024)
-            throw new InvalidDataException(L.T("PC-E500・PC-E550・PC-1480U・PC-1490U・PC-1490UIIの256KB ROM、またはPC-E650/PC-U6000の384KB ROMを選択してください。SAVEMヘッダー付きの吸い出しファイルはそのまま開けます。","Choose a 256KB ROM of a PC-E500, PC-E550, PC-1480U, PC-1490U or PC-1490UII, or a 384KB PC-E650/PC-U6000 ROM. A dump with its SAVEM header opens as it is."));
+        if(rom.Length!=256*1024 && rom.Length!=384*1024)throw new InvalidDataException(WrongRomSize);
         string fileName=Path.GetFileNameWithoutExtension(path);
         if(rom.Length==256*1024 && (fileName.Contains("E650",StringComparison.OrdinalIgnoreCase) || fileName.Contains("U6000",StringComparison.OrdinalIgnoreCase)))
             throw new InvalidDataException(L.T("PC-E650/PC-U6000には追加128KBを先頭へ結合した384KB ROMが必要です。tools/merge_savem_rom.pyでfullイメージを作成してください。","PC-E650/PC-U6000 needs a 384KB ROM with the 128KB extension in front. Build the full image with tools/merge_savem_rom.py."));
@@ -115,9 +120,12 @@ internal sealed class Core : IDisposable
         if(!string.IsNullOrWhiteSpace(cardPath)) {
             CardPath=Path.GetFullPath(cardPath);
             if(!File.Exists(CardPath))throw new FileNotFoundException(L.T("RAMカードのイメージファイルが見つかりません。\n","The RAM card image file was not found.\n")+CardPath);
+            // Its size is checked before it is read, as the ROM's is.
+            long bytes=new FileInfo(CardPath).Length;
+            if(bytes%1024!=0 || bytes>256*1024 || !HardwareSettings.Sizes.Contains((int)(bytes/1024)))
+                throw new InvalidDataException(L.T($"RAMカードのイメージは8/16/32/64/128/256KBのいずれかにしてください。\n{CardPath} ({bytes}バイト)",$"A RAM card image must be 8, 16, 32, 64, 128 or 256KB.\n{CardPath} ({bytes} bytes)"));
             card=File.ReadAllBytes(CardPath);
-            if(card.Length%1024!=0 || !HardwareSettings.Sizes.Contains(card.Length/1024))
-                throw new InvalidDataException(L.T($"RAMカードのイメージは8/16/32/64/128/256KBのいずれかにしてください。\n{CardPath} ({card.Length}バイト)",$"A RAM card image must be 8, 16, 32, 64, 128 or 256KB.\n{CardPath} ({card.Length} bytes)"));
+            if(card.Length!=bytes)throw new InvalidDataException(L.T("RAMカードのイメージが読み込みの途中で変わりました。\n","The RAM card image changed while it was being read.\n")+CardPath);
         }
         RomKB=rom.Length/1024;
         // The service diagnostic prints these two bytes as the major/minor ROM
@@ -172,7 +180,7 @@ internal sealed class Core : IDisposable
     internal void Write(int address,byte[] data) {
         if(data.Length==0)return;
         if(Native.e500_write(Handle,address,data,data.Length)==0)
-            throw new InvalidOperationException(L.T($"{address:X5}-{(long)address+data.Length-1:X5} はRAM以外の領域を含むため書き込めません。内蔵RAM・RAMカードの範囲を指定してください。",$"{address:X5}-{(long)address+data.Length-1:X5} includes non-RAM space and cannot be written. Stay within internal RAM or the RAM card."));
+            throw new InvalidOperationException(L.T($"{address:X5}-{(long)address+data.Length-1:X5} はRAM以外の領域を含むか、RAMの大きさを超えて折り返すため書き込めません。内蔵RAM・RAMカードの範囲に収まるように指定してください。",$"{address:X5}-{(long)address+data.Length-1:X5} includes non-RAM space, or is longer than the RAM and would wrap round it, and cannot be written. Stay within internal RAM or the RAM card."));
     }
     /// <summary>CPU の内部メモリ（256バイト）を読む。</summary>
     internal byte[] InternalMemory() {var data=new byte[256];Native.e500_imem(Handle,data);return data;}
@@ -191,19 +199,28 @@ internal sealed class Core : IDisposable
     // Raised with each native layout, so that a build that cannot read a newer
     // file says so: 3 came with E500ST04. Older ones load still.
     /// <summary>保存するファイル形式の版（ネイティブの形式が変わるたびに上げる。3 は E500ST04）。</summary>
-    const int CurrentVersion=3;
+    const int CurrentVersion=4;
     /// <summary>状態を保存する（一時ファイルに書いてから置き換える）。</summary>
     /// <param name="path">保存先（*.e500state）</param>
     /// <exception cref="InvalidOperationException">今は保存できない状態（CannotSave を参照）</exception>
-    internal void Save(string path)
-    {
+    internal void Save(string path)=>WriteState(path,Hash,Snapshot());
+    // Taking the snapshot is a quarter of a millisecond; turning it into the file
+    // (hash, JSON, disk) is the rest, and can be done off the UI thread.
+    /// <summary>今の状態を取り出す（ファイルには書かない）。</summary>
+    /// <exception cref="InvalidOperationException">今は保存できない状態（CannotSave を参照）</exception>
+    internal byte[] Snapshot() {
         byte[] data=new byte[Native.e500_state_size()];
         if(Native.e500_save(Handle,data,data.Length)==0) throw new InvalidOperationException(CannotSave);
-        var json=JsonSerializer.Serialize(new SavedState(CurrentVersion,Hash,Convert.ToHexString(SHA256.HashData(data)),data));
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        string temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";
-        try {File.WriteAllText(temp,json);File.Move(temp,path,true);}
-        finally {if(File.Exists(temp))File.Delete(temp);}
+        return data;
+    }
+    /// <summary>取り出した状態を状態ファイルに書く（一時ファイルに書いてから置き換える。どのスレッドからでもよい）。</summary>
+    /// <param name="path">保存先（*.e500state）</param>
+    /// <param name="romHash">ROM の SHA-256（Hash）</param>
+    /// <param name="data">Snapshot で取り出した状態</param>
+    /// <returns>書いたファイルの更新時刻（UTC）</returns>
+    internal static DateTime WriteState(string path,string romHash,byte[] data) {
+        var json=JsonSerializer.SerializeToUtf8Bytes(new SavedState(CurrentVersion,romHash,Convert.ToHexString(SHA256.HashData(data)),data));
+        return AtomicFile.Write(path,json);
     }
     /// <summary>状態を読み込む。RAM カードはファイルの中身のまま使い、スナップショットからは戻さない。</summary>
     /// <param name="path">状態保存ファイル</param>
@@ -243,10 +260,9 @@ internal sealed class Core : IDisposable
     }
     // Writes the card's contents back into its image file.
     /// <summary>RAM カードの中身をイメージファイルへ書き戻す。</summary>
-    internal void SaveCard() {
-        if(CardPath is null || CardKB==0)return;
-        AtomicFile.Write(CardPath,CardImage());
-    }
+    internal void SaveCard() {if(CardItem() is PersistentWriter.Item card)AtomicFile.Write(card.Path,card.Data);}
+    /// <summary>RAM カードのファイルとその中身（カードがなければ null）。</summary>
+    internal PersistentWriter.Item? CardItem()=>CardPath is null || CardKB==0?null:new(CardPath,CardImage());
     /// <summary>CE-140F にフォルダを接続する。</summary>
     /// <param name="path">フォルダ（null なら取り外す）</param>
     /// <param name="readOnly">書き込み禁止にするか</param>
@@ -293,10 +309,15 @@ internal sealed class Core : IDisposable
         if(load) {
             if(!File.Exists(path))return;var data=File.ReadAllBytes(path);
             if(data.Length!=InternalKB*1024 || Native.e500_memory(Handle,0,data,data.Length,1)==0)throw new InvalidDataException(L.T("RAM保存ファイルのサイズが不正です: ","The RAM file has an invalid size: ")+path);
-        }else {
-            var data=new byte[InternalKB*1024];Native.e500_memory(Handle,0,data,data.Length,0);
-            AtomicFile.Write(path,data);
-        }
+        }else {var item=InternalItem(directory);AtomicFile.Write(item.Path,item.Data);}
+    }
+    /// <summary>今の容量の内蔵 RAM のファイルとその中身。</summary>
+    /// <param name="directory">保存先のフォルダ</param>
+    internal PersistentWriter.Item InternalItem(string directory)=>new(InternalFile(directory),InternalImage());
+    /// <summary>内蔵 RAM の今の中身。</summary>
+    internal byte[] InternalImage() {
+        var data=new byte[InternalKB*1024];Native.e500_memory(Handle,0,data,data.Length,0);
+        return data;
     }
     // A fresh card is all 0xFF, which is what the ROM sees in a card that was
     // never initialised, so the first PF1 formats it.
@@ -312,14 +333,75 @@ internal sealed class Core : IDisposable
     public void Dispose() {if(Handle!=IntPtr.Zero) {Native.e500_destroy(Handle);Handle=IntPtr.Zero;}}
 }
 
+// The autosave every five seconds wrote a megabyte on the UI thread - 7 ms, and
+// 17 ms in a OneDrive folder - so the machine and its sound stalled for a frame
+// each time; and a file held by a sync client threw out of the tick, which
+// paused the machine with a message box. The machine's contents are now taken
+// on the UI thread, a copy that costs well under a millisecond, and written on
+// another; a failure is kept for the status line and the next round tries again.
+// Writes never overlap: a save that has to land now (closing, switching the ROM)
+// waits for the one in the background first. A RAM or card file whose bytes
+// are what was last written there is left alone, so an idle machine does not
+// rewrite its card for the sync client every five seconds.
+// 自動保存：中身の取り出しは UI スレッドで、ファイルへの書き込みは別のスレッドで行う。書き込みは重ならない。
+// 失敗はステータスバーに出し、次の回にもう一度試す。前に書いた中身と同じ RAM・カードのファイルは書き直さない。
+/// <summary>内蔵 RAM・RAM カード・状態のファイルを書く（裏のスレッドでも、その場でも）。</summary>
+internal sealed class PersistentWriter {
+    /// <summary>書くもの：ファイル、中身、状態ファイルなら ROM の SHA-256（RAM・カードなら null）。</summary>
+    internal readonly record struct Item(string Path,byte[] Data,string? RomHash=null);
+    Task pending=Task.CompletedTask;
+    // What was last written to each RAM or card file, and the file's time after it.
+    readonly Dictionary<string,(byte[] Data,DateTime Time)> written=new(StringComparer.OrdinalIgnoreCase);
+    volatile Exception? failure;
+    /// <summary>裏で書いている途中か。</summary>
+    internal bool Busy=>!pending.IsCompleted;
+    /// <summary>裏で書き始める（前の書き込みが終わっていなければ何もしない）。</summary>
+    /// <returns>書き始めたか</returns>
+    internal bool Start(IReadOnlyList<Item> items) {
+        if(Busy)return false;
+        pending=Task.Run(()=>{
+            try {Write(items);failure=null;}
+            catch(Exception ex) {failure=ex;}
+        });
+        return true;
+    }
+    /// <summary>裏の書き込みが終わるのを待ってから、その場で書く（失敗は例外）。</summary>
+    internal void WriteNow(IReadOnlyList<Item> items) {Wait();Write(items);failure=null;}
+    /// <summary>裏の書き込みが終わるのを待つ。</summary>
+    internal void Wait()=>pending.Wait();
+    /// <summary>最後の書き込みが失敗していれば、その理由（次に成功するまで残る。成功していれば null）。</summary>
+    internal Exception? Failure=>failure;
+    void Write(IReadOnlyList<Item> items) {
+        foreach(var item in items) {
+            // Skipped only while the file is as this left it: anything else writing
+            // there (a card made again in the settings) changes its time. A state
+            // counts as the same when only the time it has run differs: a machine
+            // left off rewrote 0.75 MB every five seconds for the sync client.
+            // 前に書いたままのファイルなら書き直さない。状態は、経過時間だけが違えば同じとみなす
+            // （電源を切って置いておくと、5秒ごとに 0.75MB を書き直していた）。
+            lock(written) {
+                if(written.TryGetValue(item.Path,out var last) && File.Exists(item.Path) && File.GetLastWriteTimeUtc(item.Path)==last.Time &&
+                   (item.RomHash is null?last.Data.AsSpan().SequenceEqual(item.Data):last.Data.Length==item.Data.Length && Native.e500_state_same(last.Data,item.Data,item.Data.Length)!=0))continue;
+            }
+            var time=item.RomHash is null?AtomicFile.Write(item.Path,item.Data):Core.WriteState(item.Path,item.RomHash,item.Data);
+            lock(written)written[item.Path]=(item.Data,time);
+        }
+    }
+}
+
 /// <summary>ファイルを一時ファイル経由で置き換える（書き込みの途中で失敗しても元のファイルは壊れない）。</summary>
 internal static class AtomicFile {
+    // The time is the temporary file's, taken before it is moved into place (a
+    // move keeps it): read afterwards, a write by someone else in between would
+    // pass for this one.
     /// <summary>bytes を path に書く。フォルダがなければ作る。</summary>
     /// <param name="path">書き込み先</param>
     /// <param name="bytes">中身</param>
-    internal static void Write(string path,byte[] bytes) {
+    /// <returns>書いたファイルの更新時刻（UTC）</returns>
+    internal static DateTime Write(string path,byte[] bytes) {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         string temp=path+"."+Guid.NewGuid().ToString("N")+".tmp";
-        try {File.WriteAllBytes(temp,bytes);File.Move(temp,path,true);}finally{if(File.Exists(temp))File.Delete(temp);}
+        try {File.WriteAllBytes(temp,bytes);var time=File.GetLastWriteTimeUtc(temp);File.Move(temp,path,true);return time;}
+        finally{if(File.Exists(temp))File.Delete(temp);}
     }
 }

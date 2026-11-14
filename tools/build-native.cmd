@@ -5,6 +5,8 @@ for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio
 if not defined VSINSTALL exit /b 1
 call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul
 if errorlevel 1 exit /b 1
+rem The output folder is not in the repository: a fresh clone has none, and the linker does not make it.
+if not exist "%~dp0..\bin" mkdir "%~dp0..\bin"
 pushd "%~dp0..\src\native"
 cl /nologo /utf-8 /std:c++17 /O2 /MT /EHsc /LD sc62015.cpp machine.cpp ce140f.cpp ce126p.cpp /Fe:..\..\bin\e500core.dll /link /INCREMENTAL:NO
 set "RESULT=%errorlevel%"

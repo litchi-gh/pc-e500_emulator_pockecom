@@ -27,6 +27,7 @@ class Emulator:
   if len(rom_data)==256*1024+16 and rom_data[:5]==bytes.fromhex('ff 00 06 01 10') and rom_data[8:11]==bytes.fromhex('00 00 0c'):rom_data=rom_data[16:]
   self.m=l.e500_create_config(rom_data,len(rom_data),ram,card)
   if not self.m:raise ValueError(f'Unsupported ROM image: {rom_path} ({len(rom_data)} bytes)')
+  (ROOT/'tests'/'output').mkdir(exist_ok=True)
   if disk: l.e500_disk_mount(self.m,str(Path(disk).resolve()),0)
  def run(self,cycles=1024000):
   """cycles サイクル実行する（CPU が止まったら例外）。capture がリストなら音声のサンプルを足していく。"""
@@ -45,6 +46,9 @@ class Emulator:
     r,b=KEYS['SHIFT'];self.lib.e500_key(self.m,r,b,1);self.run(20000);self.key(SHIFT[ch]);self.lib.e500_key(self.m,r,b,0);self.run(20000)
    else:self.key('SPACE' if ch==' ' else ch.upper())
   if enter:self.key('ENTER');self.run(2048000)
+ def forget_program(self):
+  """RUN モードから PRO モードで NEW し、RUN モードに戻って画面を消す（RUN モードの NEW は ROM が断る）。"""
+  self.key('BASIC');self.run();self.type('NEW');self.key('BASIC');self.run();self.type('CLS')
  def boot(self):
   """起動して PF1 で初期化し、BASIC の RUN モードにする。"""
   self.run();self.key('F1');self.run();self.key('BASIC');self.run()

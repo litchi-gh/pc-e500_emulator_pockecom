@@ -81,6 +81,8 @@ internal sealed class PocketSurface : Control
     readonly Color gold=Color.FromArgb(238,204,121),green=Color.FromArgb(155,223,185);
     internal PocketSurface() {
         Dock=DockStyle.Fill;DoubleBuffered=true;BackColor=Color.FromArgb(31,35,37);TabStop=true;
+        // A frame repaints only the LCD, so a new size must ask for all of it.
+        ResizeRedraw=true;
         BuildKeys();
         MouseDown+=(_,e)=>{
             if(e.Button!=MouseButtons.Left)return;
@@ -115,8 +117,11 @@ internal sealed class PocketSurface : Control
     /// <param name="p">コントロールの座標</param>
     internal int EdgeAt(Point p) {
         if(!Resizable)return 0;
-        var r=PictureArea();if(!r.Contains(p))return 0;
-        int g=Math.Max(4,8*DeviceDpi/96),c=g*2;
+        var r=PictureArea();if(!r.Contains(p) || KeyAt(p) is not null)return 0;
+        // A key is a key, never an edge; and the grip grows with the DPI only as far
+        // as the picture's own scale allows, or at a small zoom it reached the keys.
+        // キーの上は端にしない。つかめる幅は DPI で広がるが、絵の拡大率を超えない（小さく表示するとキーまで届いた）。
+        int g=Math.Max(3,Math.Min(8*DeviceDpi/96,(int)(6*scale))),c=g*2;
         bool l=p.X<r.Left+g,rt=p.X>=r.Right-g,t=p.Y<r.Top+g,b=p.Y>=r.Bottom-g;
         bool lc=p.X<r.Left+c,rc=p.X>=r.Right-c,tc=p.Y<r.Top+c,bc=p.Y>=r.Bottom-c;
         if((t&&lc)||(l&&tc))return 13;
@@ -149,9 +154,20 @@ internal sealed class PocketSurface : Control
         return null;
     }
     /// <summary>キーを押した見た目にする・戻す。</summary>
-    internal void SetPressed(string id,bool down) {if(down)pressed.Add(id);else pressed.Remove(id);Invalidate();}
+    internal void SetPressed(string id,bool down) {
+        if(!(down?pressed.Add(id):pressed.Remove(id)))return;
+        InvalidateKey(id);
+    }
     /// <summary>すべてのキーを戻した見た目にする。</summary>
-    internal void ReleaseKeys() {pressed.Clear();Invalidate();}
+    internal void ReleaseKeys() {
+        var was=pressed.ToArray();pressed.Clear();
+        foreach(var id in was)InvalidateKey(id);
+    }
+    /// <summary>キーの範囲だけを描き直させる（画面だけの表示ではキーを描かないので何もしない）。</summary>
+    void InvalidateKey(string id) {
+        if(screenOnly)return;
+        foreach(var k in Keys)if(k.Id==id){Arrange();Invalidate(DeviceArea(KeyArea(k)));return;}
+    }
     /// <summary>テスト用：キーをクリックしたことにする。</summary>
     internal void TriggerForTest(string id) {if(!Keys.Any(k=>k.Id==id))throw new ArgumentException("Unknown surface key");KeyClicked?.Invoke(id);}
     /// <summary>キーを1つ一覧に加える（引数は Key と同じ。右下の印字と2文字目は Marks から決まる）。</summary>
@@ -259,14 +275,24 @@ internal sealed class PocketSurface : Control
     /// <param name="color">色</param>
     /// <param name="bold">太字にするか</param>
     /// <param name="width">範囲の幅（0 なら x から左寄せ）</param>
+    // Fonts, measured widths and formats kept: a whole case made several hundred
+    // fonts and measured every label each time, in virtual units that never change.
+    // フォント・測った幅・書式は使い回す（ケースを描くたびに数百のフォントを作り、毎回測っていた）。
+    static readonly Dictionary<(string Family,float Size,bool Bold),Font> fonts=[];
+    static readonly Dictionary<(string Text,string Family,float Size,bool Bold),float> widths=[];
+    static readonly StringFormat Centred=new(StringFormat.GenericTypographic){Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,FormatFlags=StringFormatFlags.NoWrap};
+    static Font FontOf(string family,float size,bool bold) {
+        if(!fonts.TryGetValue((family,size,bold),out var font))fonts[(family,size,bold)]=font=new Font(family,size,bold?FontStyle.Bold:FontStyle.Regular,GraphicsUnit.Pixel);
+        return font;
+    }
     static void TextAt(Graphics g,string text,float x,float y,float size,Color color,bool bold=false,float width=0) {
         string family=text.Any(c=>c>255)?"Yu Gothic UI":"Arial";
-        using var measure=new Font(family,size,bold?FontStyle.Bold:FontStyle.Regular,GraphicsUnit.Pixel);
-        float measured=g.MeasureString(text,measure,1000,StringFormat.GenericTypographic).Width;
+        if(!widths.TryGetValue((text,family,size,bold),out float measured))
+            widths[(text,family,size,bold)]=measured=g.MeasureString(text,FontOf(family,size,bold),1000,StringFormat.GenericTypographic).Width;
         float actual=width>0&&measured>width-3?size*(width-3)/measured:size;
-        using var f=new Font(family,Math.Max(4,actual),bold?FontStyle.Bold:FontStyle.Regular,GraphicsUnit.Pixel);
-        using var b=new SolidBrush(color);using var format=new StringFormat(StringFormat.GenericTypographic){Alignment=width>0?StringAlignment.Center:StringAlignment.Near,LineAlignment=StringAlignment.Center,FormatFlags=StringFormatFlags.NoWrap};
-        if(width>0)g.DrawString(text,f,b,new RectangleF(x,y,width,size*1.5f),format);else g.DrawString(text,f,b,new PointF(x,y));
+        var f=FontOf(family,Math.Max(4,actual),bold);
+        using var b=new SolidBrush(color);
+        if(width>0)g.DrawString(text,f,b,new RectangleF(x,y,width,size*1.5f),Centred);else g.DrawString(text,f,b,new PointF(x,y));
     }
     // Lettering measured off the real case and glass: the ink spans left..right and the
     // capitals top..bottom. The printing is wider than any installed face, so the text
@@ -338,10 +364,46 @@ internal sealed class PocketSurface : Control
     // and WM_PAINT outranks the WM_TIMER that runs the machine, so a repaint landing
     // across a tick made that tick late and the audio it produced arrive in a burst.
     // Cache the chrome and blit it; only the LCD is actually drawn per frame.
+    // A key going down or a legend changing patches just its own area of the
+    // cache, and only the areas that changed go back to the screen: at a large
+    // window size blitting the whole case took 20 ms a frame, and rebuilding it
+    // for a keystroke 50 ms, longer than the tick that runs the machine.
+    // ケースの絵はキャッシュし、キーや表示シンボルが変わったらその範囲だけ描き直す。画面へも変わった範囲だけを写す。
     Bitmap? chrome;
-    string chromeFor="";
-    /// <summary>ケースの絵を作り直した回数（テスト用）。</summary>
+    (int Width,int Height,string Model,bool ScreenOnly) chromeFor;
+    /// <summary>キャッシュの絵の表示シンボルの色（コントラストが変わったら、LCD の範囲だけ描き直す）。</summary>
+    (Color Lit,Color Off) drawnColors;
+    /// <summary>描き直す範囲（毎コマ作らずに使い回す）。</summary>
+    readonly List<RectangleF> areas=[];
+    /// <summary>キャッシュの絵に描いてある、押したキーと表示シンボルの状態。</summary>
+    readonly HashSet<string> drawnPressed=[];
+    (int,int,int) drawnSymbols;
+    /// <summary>画面に出した LCD のドットと表示シンボル（変わったときだけ描き直すため）。</summary>
+    readonly byte[] shownPixels=new byte[240*32];
+    (int,int,int) shownSymbols;
+    bool shownAny;
+    /// <summary>ケースの絵を全部作り直した回数（テスト用）。</summary>
     internal int ChromeBuilds {get;private set;}
+    /// <summary>LCD の範囲を描き直させた回数（テスト用）。</summary>
+    internal int LcdRepaints {get;private set;}
+    /// <summary>テスト用：次の描画でケースの絵を全部作り直させる。</summary>
+    internal void TestRebuild()=>chromeFor=default;
+    /// <summary>ケースの絵の一部（キー・表示シンボル）だけを描き直した回数（テスト用）。</summary>
+    internal int ChromePatches {get;private set;}
+    /// <summary>キーの絵が届く範囲（仮想の座標）：上の印字、押したときのずれと影、右下の句読点まで。</summary>
+    static RectangleF KeyArea(Key k)=>new(k.Bounds.X-12,k.Bounds.Y-17,k.Bounds.Width+24,k.Bounds.Height+23);
+    /// <summary>仮想の座標の範囲を、それを覆うコントロールの座標の範囲にする（にじみの分を足す）。</summary>
+    Rectangle DeviceArea(RectangleF r)=>Rectangle.Inflate(Rectangle.FromLTRB((int)MathF.Floor(ox+r.Left*scale),(int)MathF.Floor(oy+r.Top*scale),(int)MathF.Ceiling(ox+r.Right*scale),(int)MathF.Ceiling(oy+r.Bottom*scale)),2,2);
+    /// <summary>
+    /// LCD を読み直したあとに呼ぶ：ドットか表示シンボルが変わっていれば、LCD の範囲だけを描き直させる。
+    /// </summary>
+    internal void UpdateLcd() {
+        if(Core is null){Invalidate();return;}
+        var symbols=Symbols;
+        if(shownAny && symbols==shownSymbols && Core.Pixels.AsSpan().SequenceEqual(shownPixels))return;
+        Core.Pixels.CopyTo(shownPixels,0);shownSymbols=symbols;shownAny=true;
+        Arrange();Invalidate(DeviceArea(LcdRegion()));LcdRepaints++;
+    }
     /// <summary>今の大きさに合わせて、拡大率と左上のずれを決める（描画の前と、大きさが変わったとき）。</summary>
     internal void Arrange() {
         if(screenOnly) {
@@ -359,31 +421,67 @@ internal sealed class PocketSurface : Control
         base.OnPaint(e);var g=e.Graphics;
         Arrange();
         var colors=LcdColors();
-        string want=$"{Width}x{Height}|{model}|{screenOnly}|{colors.Lit.ToArgb()}|{colors.Off.ToArgb()}|{string.Join(",",pressed.Order())}|{Symbols}";
+        var symbols=Symbols;
+        // The colours are not part of the layout: a contrast step changed them, and
+        // rebuilt the whole case for each step of the slider. They only colour the
+        // legends, so a new contrast patches the LCD's area as a legend does.
+        // 色はレイアウトに含めない（コントラストを動かすたびにケース全体を作り直していた）。色は表示シンボルにしか使わないので、LCD の範囲だけ直す。
+        var want=(Width,Height,model,screenOnly);
         if(chrome is null || chromeFor!=want) {
-            // Only a resize needs a new bitmap. A key going down or an annunciator
-            // changing redraws into the one already here, so ordinary typing does not
-            // hand the collector a 2 MB surface per keystroke.
+            // Only a resize needs a new bitmap. A new look redraws into the one
+            // already here, so the collector is not handed a 2 MB surface each time.
             if(chrome is null || chrome.Width!=Math.Max(1,Width) || chrome.Height!=Math.Max(1,Height)) {
                 chrome?.Dispose();
                 chrome=new Bitmap(Math.Max(1,Width),Math.Max(1,Height),PixelFormat.Format32bppPArgb);
             }
-            using(var c=Graphics.FromImage(chrome)) {
-                c.SmoothingMode=SmoothingMode.AntiAlias;c.Clear(BackColor);
-                c.TranslateTransform(ox,oy);c.ScaleTransform(scale,scale);
-                if(screenOnly)DrawGlass(c,LcdRegion());else if(IsWide)DrawWideBody(c);else DrawE500Body(c);
-                // Nothing here overlaps the LCD window, so drawing it last is the same
-                // picture and keeps the whole of the chrome in one cached layer.
-                if(!screenOnly)DrawTransportFrame(c);
-                DrawSymbols(c,colors.Lit,colors.Off);
-                if(!screenOnly)foreach(var k in Keys)DrawKey(c,k);
-            }
+            using(var c=Graphics.FromImage(chrome))DrawChrome(c,null,colors.Lit,colors.Off);
             chromeFor=want;ChromeBuilds++;
+            drawnPressed.Clear();drawnPressed.UnionWith(pressed);drawnSymbols=symbols;drawnColors=(colors.Lit,colors.Off);
+        } else {
+            // A patch is drawn with everything that reaches into it, clipped to it,
+            // so it comes out exactly as a full redraw would.
+            // 変わった範囲だけを、そこに届くものをすべて描いて直す（全部描き直したのと同じ絵になる）。
+            areas.Clear();
+            if(symbols!=drawnSymbols || (colors.Lit,colors.Off)!=drawnColors)areas.Add(LcdRegion());
+            if(!screenOnly)foreach(var k in Keys)if(pressed.Contains(k.Id)!=drawnPressed.Contains(k.Id))areas.Add(KeyArea(k));
+            if(areas.Count>0) {
+                using(var c=Graphics.FromImage(chrome))foreach(var area in areas)DrawChrome(c,area,colors.Lit,colors.Off);
+                ChromePatches++;
+                drawnPressed.Clear();drawnPressed.UnionWith(pressed);drawnSymbols=symbols;drawnColors=(colors.Lit,colors.Off);
+            }
         }
-        g.DrawImageUnscaled(chrome,0,0);
+        // Only the part to repaint is copied: an LCD frame touches a fraction of the case.
+        var clip=Rectangle.Intersect(e.ClipRectangle,new Rectangle(0,0,chrome.Width,chrome.Height));
+        if(clip.Width<=0 || clip.Height<=0)return;
+        var mode=g.CompositingMode;g.CompositingMode=CompositingMode.SourceCopy;
+        g.DrawImage(chrome,clip,clip,GraphicsUnit.Pixel);
+        g.CompositingMode=mode;
+        if(!clip.IntersectsWith(DeviceArea(DotRegion())))return;
         g.SmoothingMode=SmoothingMode.AntiAlias;
         g.TranslateTransform(ox,oy);g.ScaleTransform(scale,scale);
         DrawLcd(g,colors.Lit,colors.Unlit);
+    }
+    /// <summary>ケースの絵（ケース・枠・表示シンボル・キー）を描く。area を渡せば、その範囲だけを描き直す。</summary>
+    /// <param name="c">描画先（キャッシュの絵）</param>
+    /// <param name="area">描き直す範囲（仮想の座標）。null なら全部</param>
+    /// <param name="lit">点灯した表示シンボルの色</param>
+    /// <param name="off">消えた表示シンボルの色</param>
+    void DrawChrome(Graphics c,RectangleF? area,Color lit,Color off) {
+        c.ResetTransform();c.ResetClip();
+        // Compared in screen pixels: the patch is the area grown by the bleed, so a
+        // neighbour that only comes within that margin is in it too.
+        Rectangle? patch=area is RectangleF part?DeviceArea(part):null;
+        bool Reaches(RectangleF r)=>patch is null || DeviceArea(r).IntersectsWith(patch.Value);
+        if(patch is Rectangle clip)c.SetClip(clip);
+        c.SmoothingMode=SmoothingMode.AntiAlias;c.Clear(BackColor);
+        c.TranslateTransform(ox,oy);c.ScaleTransform(scale,scale);
+        if(screenOnly)DrawGlass(c,LcdRegion());else if(IsWide)DrawWideBody(c);else DrawE500Body(c);
+        // Nothing here overlaps the LCD window, so drawing it last is the same
+        // picture and keeps the whole of the chrome in one cached layer.
+        if(!screenOnly)DrawTransportFrame(c);
+        if(Reaches(LcdRegion()))DrawSymbols(c,lit,off);
+        if(!screenOnly)foreach(var k in Keys)if(Reaches(KeyArea(k)))DrawKey(c,k);
+        c.ResetClip();
     }
     /// <summary>PC-E500 のケース（本体・ロゴと型番・LCD の枠）を描く。</summary>
     void DrawE500Body(Graphics g) {
@@ -518,7 +616,10 @@ internal sealed class PocketSurface : Control
         var dots=DotRegion();float pixelX=dots.X,pixelY=dots.Y,pixelW=dots.Width,pixelH=dots.Height;
         if(Core is null){TextAt(g,L.T("ROMを開いてください","Open a ROM"),pixelX+6,pixelY+10,12,lit);return;}
         g.SmoothingMode=SmoothingMode.None;
-        if(showDotLines)DrawRealLcd(g,dots,lit,unlit);
+        // The real look needs a screen pixel or more a dot: smaller, a pixel would
+        // span three dots and the share of the third was lost (thin strokes dropped).
+        // リアル表示は1ドットに1ピクセル以上要る（それより小さいと、3つ目のドットの分が抜けて細い線が消えた）。
+        if(showDotLines && pixelW*scale>=240 && pixelH*scale>=32)DrawRealLcd(g,dots,lit,unlit);
         else {
             int on=lit.ToArgb(),off=unlit.A==0?0:unlit.ToArgb();
             for(int i=0;i<lcdArgb.Length;i++)lcdArgb[i]=Core.Pixels[i]!=0?on:off;
@@ -569,7 +670,14 @@ internal sealed class PocketSurface : Control
         var r=Rectangle.Round(RectangleF.FromLTRB(corners[0].X,corners[0].Y,corners[1].X,corners[1].Y));
         if(r.Width<1 || r.Height<1)return;
         var want=(r.Width,r.Height,lit.ToArgb(),unlit.ToArgb());
-        if(real is null || realFor!=want || !Core!.Pixels.AsSpan().SequenceEqual(realPixels)) {
+        // Only the screen rows over dot rows that changed are worked out again: a
+        // line of text changes eight of the 32, and the whole glass at 4K was most
+        // of a frame.
+        // 変わったドットの行にかかる画面の行だけを計算し直す（4K では、全体の計算に1コマの大半がかかっていた）。
+        bool whole=real is null || realFor!=want;
+        Span<bool> changed=stackalloc bool[32];bool any=whole;
+        if(!whole)for(int k=0;k<32;k++)if(!Core!.Pixels.AsSpan(k*240,240).SequenceEqual(realPixels.AsSpan(k*240,240))){changed[k]=true;any=true;}
+        if(any) {
             if(real is null || real.Width!=r.Width || real.Height!=r.Height) {
                 real?.Dispose();real=new Bitmap(r.Width,r.Height,PixelFormat.Format32bppPArgb);realArgb=new int[r.Width*r.Height];
                 realColumns=Spans(r.Width,240,DotFillX);realRows=Spans(r.Height,32,DotFillY);
@@ -579,6 +687,7 @@ internal sealed class PocketSurface : Control
             float ua=unlit.A/255f;
             float[] on=[255,lit.R,lit.G,lit.B],off=[unlit.A,unlit.R*ua,unlit.G*ua,unlit.B*ua];
             for(int y=0;y<r.Height;y++) {
+                if(!whole) {var (k0,w0,k1,w1)=realRows[y];if(!((w0>0 && changed[k0]) || (w1>0 && changed[k1])))continue;}
                 var (r0,v0,r1,v1)=realRows[y];int row0=r0*240,row1=r1*240,line=y*r.Width;
                 for(int x=0;x<r.Width;x++) {
                     var (c0,u0,c1,u1)=realColumns[x];
@@ -594,7 +703,7 @@ internal sealed class PocketSurface : Control
             var bits=real.LockBits(new Rectangle(0,0,r.Width,r.Height),ImageLockMode.WriteOnly,PixelFormat.Format32bppPArgb);
             try {Marshal.Copy(realArgb,0,bits.Scan0,realArgb.Length);} finally {real.UnlockBits(bits);}
         }
-        var saved=g.Transform;g.ResetTransform();g.DrawImageUnscaled(real,r.X,r.Y);g.Transform=saved;saved.Dispose();
+        var saved=g.Transform;g.ResetTransform();g.DrawImageUnscaled(real!,r.X,r.Y);g.Transform=saved;saved.Dispose();
     }
     /// <summary>0〜255 に丸めた色の成分。</summary>
     static int Channel(float v)=>Math.Min(255,(int)(v+0.5f));
@@ -615,16 +724,18 @@ internal sealed class PocketSurface : Control
     /// <param name="g">描画先</param>
     /// <param name="k">キー</param>
     void DrawKey(Graphics g,Key k) {
-        var r=k.Bounds;bool down=pressed.Contains(k.Id);if(down)r.Y+=1.2f;
+        // The key goes down when pressed; what is printed on the case around it does not.
+        // 押したときに下がるのはキーだけ。ケースの印字（キーの上の文字、RESET、右下の句読点）は動かない。
+        var at=k.Bounds;var r=at;bool down=pressed.Contains(k.Id);if(down)r.Y+=1.2f;
         if(k.Style==7) {
-            TextAt(g,"RESET",r.X-8,r.Y-13,6.5f,Color.WhiteSmoke,false,r.Width+16);
+            TextAt(g,"RESET",at.X-8,at.Y-13,6.5f,Color.WhiteSmoke,false,at.Width+16);
             float cx=r.X+r.Width/2,cy=r.Y+r.Height/2;
             using var resetRim=new Pen(Color.FromArgb(193,187,164),1.2f);using var hole=new SolidBrush(Color.FromArgb(24,27,24));
             g.FillEllipse(hole,cx-2.7f,cy-2.7f,5.4f,5.4f);g.DrawEllipse(resetRim,cx-3.2f,cy-3.2f,6.4f,6.4f);
             return;
         }
-        if(k.Shift.Length>0)TextAt(g,k.Shift,r.X-6,r.Y-13,8,k.Id is "ON/BRK" or "CAPS"?Color.WhiteSmoke:gold,false,r.Width+12);
-        if(k.Extra.Length>0)TextAt(g,k.Extra,r.X-9,r.Y-14,8,k.Style==6?Color.FromArgb(169,188,226):green,false,r.Width+18);
+        if(k.Shift.Length>0)TextAt(g,k.Shift,at.X-6,at.Y-13,8,k.Id is "ON/BRK" or "CAPS"?Color.WhiteSmoke:gold,false,at.Width+12);
+        if(k.Extra.Length>0)TextAt(g,k.Extra,at.X-9,at.Y-14,8,k.Style==6?Color.FromArgb(169,188,226):green,false,at.Width+18);
         using var shadow=Round(new(r.X-1,r.Y+1,r.Width+2,r.Height+2),2);using var dark=new SolidBrush(Color.FromArgb(57,60,51));g.FillPath(dark,shadow);
         Color upper=IsWide?k.Style switch{2=>Color.FromArgb(133,112,78),3=>Color.FromArgb(73,137,96),5=>Color.FromArgb(155,83,75),1 or 4=>Color.FromArgb(111,101,89),_=>Color.FromArgb(91,80,68)}:k.Style switch{2=>Color.FromArgb(247,220,144),3=>Color.FromArgb(115,188,155),5=>Color.FromArgb(236,135,107),1 or 4=>Color.FromArgb(126,129,115),_=>Color.FromArgb(78,80,67)};
         Color lower=IsWide?k.Style switch{2=>Color.FromArgb(78,65,48),3=>Color.FromArgb(34,87,57),5=>Color.FromArgb(102,43,40),1 or 4=>Color.FromArgb(65,58,51),_=>Color.FromArgb(43,37,32)}:k.Style switch{2=>Color.FromArgb(214,180,102),3=>Color.FromArgb(50,117,87),5=>Color.FromArgb(188,62,39),1 or 4=>Color.FromArgb(91,96,83),_=>Color.FromArgb(24,30,25)};
@@ -644,7 +755,7 @@ internal sealed class PocketSurface : Control
             TextAt(g,k.Label,r.X+r.Width*0.08f,r.Y+(r.Height-fontSize*1.5f)/2,fontSize,lettering,true,r.Width*0.6f);
             TextAt(g,k.Minor,r.X+r.Width*0.6f,r.Y+(r.Height-fontSize*0.9f)/2+2,fontSize*0.6f,lettering,true,r.Width*0.3f);
         } else TextAt(g,k.Label,r.X,r.Y+(r.Height-fontSize*1.5f)/2,fontSize,lettering,k.Style is not 4,r.Width);
-        if(k.Lower.Length>0)DrawKanaMark(g,k.Lower,r);
+        if(k.Lower.Length>0)DrawKanaMark(g,k.Lower,at);
     }
     // The kana-mode punctuation is printed off the key's lower right corner: the
     // brackets bare, the others in a small box.
@@ -668,6 +779,12 @@ internal sealed class PocketSurface : Control
     }
     /// <summary>テスト用：g に描かせる。</summary>
     internal void TestPaint(Graphics g)=>OnPaint(new PaintEventArgs(g,new Rectangle(0,0,Width,Height)));
+    /// <summary>テスト用：clip の範囲だけを描き直すときと同じように、g に描かせる。</summary>
+    internal void TestPaint(Graphics g,Rectangle clip) {g.SetClip(clip);OnPaint(new PaintEventArgs(g,clip));g.ResetClip();}
+    /// <summary>テスト用：キーを押したときに描き直す範囲（コントロールの座標）。</summary>
+    internal Rectangle TestKeyArea(string id) {Arrange();return DeviceArea(KeyArea(Keys.First(k=>k.Id==id)));}
+    /// <summary>テスト用：LCD を描き直す範囲（コントロールの座標）。</summary>
+    internal Rectangle TestLcdArea() {Arrange();return DeviceArea(LcdRegion());}
     // The LCD with its symbol row, in control pixels, for the manual's close-ups.
     /// <summary>LCD と表示シンボルの範囲（コントロールの座標、マニュアルの画像を切り出すため）。</summary>
     internal Rectangle LcdArea() {

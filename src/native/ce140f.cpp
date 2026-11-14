@@ -43,7 +43,12 @@ static bool wildcard(const std::string& pattern,const std::string& name) {
     for(size_t i=0;i<p.size();i++)if(p[i]!='?' && p[i]!=s[i])return false;
     return true;
 }
-void Ce140f::note(const std::string& s) {log+=s+"\n";if(log.size()>16384)log.erase(0,log.size()-12000);}
+// Trimmed at a line's end, so the window never starts with half a line (or half a character).
+// 古い分を捨てるときは行の切れ目で（ウィンドウの先頭が行や文字の途中にならないように）。
+void Ce140f::note(const std::string& s) {
+    log+=s+"\n";
+    if(log.size()>16384) {auto cut=log.find('\n',log.size()-12000);log.erase(0,cut==std::string::npos?log.size()-12000:cut+1);}
+}
 int Ce140f::trace(char *out,int length) {if(!out||length<1)return 0;int n=std::min(length-1,int(log.size()));memcpy(out,log.data(),n);out[n]=0;return n;}
 // The lines' last levels stay, as on the printer: they are the bus's.
 void Ce140f::resetBus() {phase=code.resume=Idle;ack=resumeAck=false;lines=0;rx.clear();tx.clear();continuation=0;nibble=0;code.start();}
@@ -51,7 +56,16 @@ void Ce140f::resetBus() {phase=code.resume=Idle;ack=resumeAck=false;lines=0;rx.c
 // open, or a transfer, could never be closed, and would hold off every snapshot.
 // 本体の RESET で BASIC のファイル番号はなくなるので、開いたファイルと転送も閉じる
 // （残すと閉じる手段がなく、状態保存がずっと断られる）。フォルダの接続はそのまま。
-void Ce140f::reset() {resetBus();transfer={};files={};error=false;}
+// What PRINT# wrote is kept in memory and written once (CLOSE, a reset, a new
+// folder, the end): written on every line, a long file cost the square of its
+// size in disk writes, seconds of a stalled machine in a synced folder.
+// PRINT# の中身はメモリに持ち、CLOSE・リセット・フォルダの切り替え・終了のときに1回だけ書く。
+void Ce140f::flush(File& f) {if(f.mode>=2 && f.dirty){write(f.name,f.bytes);f.dirty=false;}}
+void Ce140f::flushAll() {
+    for(auto &f:files)try {flush(f);} catch(const std::exception &e) {note(std::string("ERROR: ")+e.what());}
+}
+Ce140f::~Ce140f() {if(mounted)flushAll();}
+void Ce140f::reset() {if(mounted)flushAll();resetBus();transfer={};files={};error=false;}
 // Our own code, once accepted, starts a transfer that no snapshot can carry.
 bool Ce140f::canSnapshot() const {
     bool bus=phase==Idle || (code.resume==Idle && (phase==Device || (phase==Selected && code.value!=0x41)));
@@ -116,19 +130,27 @@ bool Ce140f::mount(const wchar_t *path,bool protect) {
 }
 // 8.3 形式・使える文字・予約名・リンクを検査し、フォルダの外を指せないようにする。
 fs::path Ce140f::safePath(const std::string& n) const {
+    // A name with no extension (SAVE "X:PROG") is a name like any other: refused,
+    // it was made all the same with its dot dropped by Windows, and then neither
+    // FILES nor INIT could see it.
+    // 拡張子のない名前も受け付ける（以前は Windows が点を落として作り、FILES にも INIT にも出なかった）。
     auto dot=n.find('.');
-    if(n.empty()||n.size()>12||dot==0||dot>8||dot==std::string::npos||n.size()-dot-1>3||n.find('.',dot+1)!=std::string::npos)
+    if(n.empty()||dot==0||(dot==std::string::npos?n.size()>8:dot>8||n.size()-dot-1>3||n.size()-dot-1==0||n.find('.',dot+1)!=std::string::npos))
         throw std::runtime_error("Invalid 8.3 filename");
     for(unsigned char c:n)if(!((c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.'))throw std::runtime_error("Unsafe filename");
     std::string stem=n.substr(0,dot);
-    if(stem=="CON"||stem=="PRN"||stem=="AUX"||stem=="NUL"||(stem.size()==4&&(stem.substr(0,3)=="COM"||stem.substr(0,3)=="LPT")))throw std::runtime_error("Reserved filename");
+    // Only the device names: COMP or LPTR is an ordinary name.
+    if(stem=="CON"||stem=="PRN"||stem=="AUX"||stem=="NUL"||(stem.size()==4&&(stem.substr(0,3)=="COM"||stem.substr(0,3)=="LPT")&&stem[3]>='1'&&stem[3]<='9'))throw std::runtime_error("Reserved filename");
     auto p=root/fs::path(n);
     if(reparse(p)||reparse(root)||fs::canonical(root)!=root)throw std::runtime_error("Reparse points are not disk files");
     return p;
 }
 std::string Ce140f::fileName(const Bytes& b,size_t at) const {
     if(at+12>b.size())throw std::runtime_error("Truncated filename");
-    std::string s;for(size_t i=at;i<at+12;i++)if(b[i] && b[i]!=' ')s+=char(toupper(b[i]));return s;
+    std::string s;for(size_t i=at;i<at+12;i++)if(b[i] && b[i]!=' ')s+=char(toupper(b[i]));
+    // "PROG    .   " is PROG, with no extension.
+    if(!s.empty() && s.back()=='.')s.pop_back();
+    return s;
 }
 Bytes Ce140f::read(const std::string& name) const {
     auto p=safePath(name);if(!fs::is_regular_file(p)||fs::file_size(p)>MaxFile)throw std::runtime_error("File missing or too large");
@@ -160,23 +182,31 @@ Bytes Ce140f::command(const Bytes& packet) {
         case 0x03: {  // OPEN：ファイルを開く（1 読み出し、2 書き込み、3 追記）
             need(17);int n=int(b[16])-2,mode=b[15];if(n< -1||n>=6||mode<1||mode>3)throw std::runtime_error("Invalid OPEN");
             auto name=fileName(b,3);safePath(name);File f;f.name=name;f.mode=mode;
-            if(mode==1||mode==3)f.bytes=read(name);
-            if(mode!=1){requireWrite(name);if(mode==2)write(name,{});f.position=f.bytes.size();}
+            for(auto &other:files)if(other.mode && other.name==name)flush(other);
+            // APPEND to a file not there yet starts it, as on a disk.
+            if(mode==1 || (mode==3 && fs::exists(safePath(name))))f.bytes=read(name);
+            if(mode!=1){requireWrite(name);if(mode==2 || !fs::exists(safePath(name)))write(name,{});f.position=f.bytes.size();}
             if(n==-1)transfer=std::move(f);else files[n]=std::move(f);return {0};
         }
         case 0x04: need(2);  // CLOSE：ファイルを閉じる（FFh ならすべて）
-            if(b[1]==255){files={};transfer={};}else if(b[1]==1)transfer={};else {int n=b[1]-2;if(n<0||n>=6)throw std::runtime_error("Invalid CLOSE");files[n]={};}return {0};
+            if(b[1]==255){for(auto &f:files)flush(f);files={};transfer={};}else if(b[1]==1)transfer={};else {int n=b[1]-2;if(n<0||n>=6)throw std::runtime_error("Invalid CLOSE");flush(files[n]);files[n]={};}return {0};
         case 0x05: {  // FILES：パターンに合うファイルの一覧を作り、件数を返す
             listing.clear();listIndex=-1;std::string pattern=b.size()>=15?fileName(b,3):"*.*";if(pattern.empty()||pattern==".")pattern="*.*";
-            for(auto &entry:fs::directory_iterator(root))if(entry.is_regular_file()&&!reparse(entry.path())) {
-                auto name=entry.path().filename().string();std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return char(toupper(c));});
-                try {safePath(name);if(wildcard(pattern,name) && listing.size()<255)listing.push_back(name);}catch(...){}
+            flushAll();
+            // An entry that cannot be read or named (a name outside the code page)
+            // is left out, not the whole listing.
+            for(auto &entry:fs::directory_iterator(root)) {
+                try {
+                    if(!entry.is_regular_file()||reparse(entry.path()))continue;
+                    auto name=entry.path().filename().string();std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return char(toupper(c));});
+                    safePath(name);if(wildcard(pattern,name) && listing.size()<255)listing.push_back(name);
+                } catch(...) {}
             }
             std::sort(listing.begin(),listing.end());return checked({0,uint8_t(listing.size())});
         }
         case 0x06:case 0x07: {  // FILES の次・前の1件を返す
             listIndex+=cmd==6?1:-1;if(listIndex<0||listIndex>=int(listing.size()))return {0xff};
-            auto name=listing[listIndex];auto dot=name.find('.');std::string s="X:"+name.substr(0,dot);s.resize(10,' ');s+="."+name.substr(dot+1);s.resize(15,' ');
+            auto name=listing[listIndex];auto dot=name.find('.');std::string s="X:"+name.substr(0,dot);s.resize(10,' ');s+="."+(dot==std::string::npos?"":name.substr(dot+1));s.resize(15,' ');
             Bytes out{0};out.insert(out.end(),s.begin(),s.end());return checked(out);
         }
         // 書き込みできるかの確認
@@ -184,16 +214,21 @@ Bytes Ce140f::command(const Bytes& packet) {
         case 0x09: {  // INIT（フォーマット）：フォルダ内の 8.3 形式のファイルを消す
             if(readOnly)throw std::runtime_error("Write protected");
             // Folder-backed virtual disk: format only disk-visible 8.3 files, never recurse.
-            std::vector<std::string> names;for(auto &e:fs::directory_iterator(root))if(e.is_regular_file()&&!reparse(e.path())) {
-                try {auto n=e.path().filename().string();safePath(n);names.push_back(n);}catch(...){}
+            // Names compared as FILES shows them, in capitals: prog.bas copied from a PC is PROG.BAS on the disk.
+            std::vector<std::string> names;for(auto &e:fs::directory_iterator(root)) {
+                try {
+                    if(!e.is_regular_file()||reparse(e.path()))continue;
+                    auto n=e.path().filename().string();std::transform(n.begin(),n.end(),n.begin(),[](unsigned char c){return char(toupper(c));});
+                    safePath(n);names.push_back(n);
+                } catch(...) {}
             }
             for(auto &n:names)requireWrite(n);
-            for(auto &n:names)fs::remove(safePath(n));files={};transfer={};return {0};
+            for(auto &n:names)fs::remove(safePath(n));for(auto &f:files)f.dirty=false;files={};transfer={};return {0};
         }
         // KILL：ファイルを消す
-        case 0x0a: {auto n=fileName(b,3);requireWrite(n);if(!fs::remove(safePath(n)))throw std::runtime_error("File not found");return {0};}
+        case 0x0a: {flushAll();auto n=fileName(b,3);requireWrite(n);if(!fs::remove(safePath(n)))throw std::runtime_error("File not found");return {0};}
         case 0x0b:case 0x0d: {  // 0Bh NAME（名前の変更）、0Dh COPY
-            auto src=fileName(b,3);auto dest=fileName(b,17);requireWrite(dest);
+            flushAll();auto src=fileName(b,3);auto dest=fileName(b,17);requireWrite(dest);
             if(cmd==0x0b){requireWrite(src);if(fs::exists(safePath(dest)))throw std::runtime_error("Destination exists");fs::rename(safePath(src),safePath(dest));}
             else write(dest,read(src));return {0};
         }
@@ -202,12 +237,16 @@ Bytes Ce140f::command(const Bytes& packet) {
             if(!SetFileAttributesW(p.c_str(),(b[16]&1)?a|FILE_ATTRIBUTE_READONLY:a&~FILE_ATTRIBUTE_READONLY))throw std::runtime_error("Attribute write failed");return {0};
         }
         // 0Eh LOAD の開始（サイズを返す）、17h 1バイトずつ、0Fh 残りをまとめて（256バイトごとにチェックサム）
-        case 0x0e: {transfer={};transfer.name=fileName(b,3);transfer.bytes=read(transfer.name);transfer.mode=1;auto out=number(uint32_t(transfer.bytes.size()),3);out.insert(out.begin()+1,0x20);out.back()+=0x20;return out;}
+        case 0x0e: {flushAll();transfer={};transfer.name=fileName(b,3);transfer.bytes=read(transfer.name);transfer.mode=1;auto out=number(uint32_t(transfer.bytes.size()),3);out.insert(out.begin()+1,0x20);out.back()+=0x20;return out;}
         case 0x17: {if(transfer.position>=transfer.bytes.size())return {0xff};return checked({0,transfer.bytes[transfer.position++]});}
         case 0x0f: {
             Bytes out{0};uint8_t sum=0;size_t count=0;
             while(transfer.position<transfer.bytes.size()) {auto v=transfer.bytes[transfer.position++];out.push_back(v);sum+=v;if(++count%256==0){out.push_back(sum);sum=0;}}
-            out.push_back(sum);out.push_back(0);transfer.mode=0;return out;
+            // A body that ends on a whole block has had its checksum already; sent
+            // again, the ROM took it for the status and left a byte unread.
+            // ちょうど 256 バイトの倍数で終わるときは、チェックサムはもう送ってある（重ねると ROM が1バイト読み残す）。
+            if(count==0 || count%256!=0)out.push_back(sum);
+            out.push_back(0);transfer.mode=0;return out;
         }
         // A text file may end with a 1Ah (EOF), put there by a PC or another
         // drive; the file ends there, and whatever follows is not read. Sent as a
@@ -239,7 +278,8 @@ Bytes Ce140f::command(const Bytes& packet) {
         // sends the end twice and the ROM fails, as this one did before.
         case 0xfe: {  // テキストの SAVE のデータの続き。1Ah で終わり（1Ah はファイルに書かない。ハードの CE-140F エミュレータと同じ）
             if(b[0]==0x1a){write(transfer.name,transfer.bytes);note("Saved ASCII "+transfer.name);transfer.mode=0;}
-            else {transfer.bytes.insert(transfer.bytes.end(),b.begin(),b.end());if(transfer.bytes.size()>MaxFile)throw std::runtime_error("File too large");write(transfer.name,transfer.bytes);}
+            // Written once, at the end, not again with every line.
+            else {transfer.bytes.insert(transfer.bytes.end(),b.begin(),b.end());if(transfer.bytes.size()>MaxFile)throw std::runtime_error("File too large");}
             return {0};
         }
         // PRINT#：続くパケットを開いたファイルへ書く
@@ -247,11 +287,16 @@ Bytes Ce140f::command(const Bytes& packet) {
         case 0xfd: {
             auto &f=files[printFile];if(f.mode<2)throw std::runtime_error("File not writable");
             if(!b.empty()&&b.back()==0)b.pop_back();f.bytes.insert(f.bytes.end(),b.begin(),b.end());
-            write(f.name,f.bytes);f.position=f.bytes.size();return {0};
+            if(f.bytes.size()>MaxFile)throw std::runtime_error("File too large");
+            f.dirty=true;f.position=f.bytes.size();return {0};
         }
         case 0x13:case 0x14:case 0x20: {  // INPUT#・LINE INPUT#（1行）、20h は残りすべて
             auto &f=openFile();if(f.mode!=1)throw std::runtime_error("File not readable");Bytes out{0};
-            while(f.position<f.bytes.size()){auto v=f.bytes[f.position++];out.push_back(v);if(cmd!=0x20&&v==10)break;}
+            // A line ends at LF, or at a CR with no LF after it (a file with CR line ends).
+            while(f.position<f.bytes.size()){
+                auto v=f.bytes[f.position++];out.push_back(v);
+                if(cmd!=0x20 && (v==10 || (v==13 && (f.position>=f.bytes.size() || f.bytes[f.position]!=10))))break;
+            }
             out.push_back(0);out=checked(out);out.push_back(0);return out;
         }
         // 1Ah EOF、1Bh LOF（ファイルの大きさ）、1Ch LOC（位置）、1Dh DSKF（空き容量）
@@ -326,7 +371,7 @@ void Ce140f::tick(uint64_t now,bool x,bool busy,uint8_t data) {
     case SelectedAck:if(now>=deadline){ack=false;phase=Receive;rx.clear();nibble=0;lastByte=now;}break;
     case Receive:
         // ニブル受信：BUSY の立ち上がりで ACK を上げて4ビット取り、2つで1バイト。
-        // 50ms（51200 サイクル）途切れたらパケットの終わりとして処理し、応答の送信へ。
+        // 51200 サイクル（約 67 ms）途切れたらパケットの終わりとして処理し、応答の送信へ。
         if(rise){ack=true;if(nibble==0){low=data;nibble=1;}else{rx.push_back(low|(data<<4));nibble=0;lastByte=now;}}
         if(fall)ack=false;
         if(!busy&&!nibble&&!rx.empty()&&now-lastByte>=51200){tx=command(rx);rx.clear();txNibble=0;ack=false;phase=TransmitGap;deadline=now+1024;}
@@ -350,9 +395,10 @@ void Ce140f::tick(uint64_t now,bool x,bool busy,uint8_t data) {
     // 最初のビットを待つコードは、XOUT が High に保たれているだけなので、黙って待機に戻る。
     // XOUT held high from idle with no bit is no stalled transfer: it is let go
     // with no error (see BusCode::unanswered).
-    if(phase!=Idle && now-lastActivity>1024000*5) {
+    if(phase!=Idle && now-lastActivity>CpuHz*5) {
         if(phase==Device && code.unanswered()){phase=Idle;ack=false;}
-        else {note("Bus timeout");resetBus();error=true;}
+        // The transfer goes too: left behind, it held off every snapshot until something else ended it.
+        else {note("Bus timeout");resetBus();transfer={};error=true;}
     }
     oldBusy=busy;oldXout=x;
 }

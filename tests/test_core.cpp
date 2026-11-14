@@ -15,6 +15,7 @@ extern "C" int e500_can_save(Machine*);
 extern "C" int e500_save(Machine*,BYTE*,int);
 extern "C" int e500_load(Machine*,const BYTE*,int);
 extern "C" int e500_state_card(const BYTE*,int);
+extern "C" int e500_state_same(const BYTE*,const BYTE*,int);
 extern "C" int e500_memory(Machine*,int,BYTE*,int,int);
 extern "C" int e500_audio(Machine*,int16_t*,int);
 extern "C" void e500_reset(Machine*,int);
@@ -23,6 +24,8 @@ extern "C" Machine* e500_create_config(const BYTE*,int,int,int);
 extern "C" void e500_destroy(Machine*);
 extern "C" int e500_write(Machine*,int,const BYTE*,int);
 extern "C" int e500_dump(Machine*,int,BYTE*,int);
+extern "C" int e500_peek(Machine*,int);
+extern "C" int e500_run(Machine*,int);
 
 // 確認の数と、確認の本体（条件が偽なら message の例外で止める）。
 int checks=0;
@@ -50,8 +53,8 @@ int main() {
         Lcd l;l.command(0x3f);l.command(0xb8);l.command(0x7f);l.command(0x1a5);
         check(l.on && l.ram[63]==0xa5 && l.column==0,"LCD column wrap");
         l.command(0x40);check(l.command(0x300)==0xa5,"LCD pipelined read");
-        // The sub timer is 64 Hz: 16000 cycles, not the 2 ms PockEmul uses.
-        c.imem[IMEM_ISR]=0;for(int i=0;i<62;i++)c.AddState(255);
+        // The sub timer is 64 Hz: 12000 cycles at 768 kHz, not the 2 ms PockEmul uses.
+        c.imem[IMEM_ISR]=0;for(int i=0;i<47;i++)c.AddState(255);
         check(!(c.imem[IMEM_ISR]&1),"fast timer waits a full 1/64 s");
         c.AddState(255);check(c.imem[IMEM_ISR]&1,"fast timer");
         for(int i=0;i<2100;i++)c.AddState(255);check(c.imem[IMEM_ISR]&2,"slow timer");
@@ -63,12 +66,17 @@ int main() {
         // and -1 for anything else.
         // 状態のデータからカードの容量を読む（今の形式と形式2。知らない形式は -1）。
         check(e500_state_card(state.data(),int(state.size()))==m->cardKB,"card capacity read from a snapshot");
+        // v5 appends the ROM (size and checksum, 8 bytes) and the prefix flag with 7 reserved bytes.
+        // 形式5は末尾に ROM（容量とチェックサム、8バイト）と、プリフィクスの途中か（1バイト）、予約7バイトを足す。
+        constexpr size_t V5Extra=16;
         {
-            std::vector<BYTE> v2(state.size()-sizeof(Ce126p::State)-sizeof(Ce140f::CodeState));
+            std::vector<BYTE> v2(state.size()-V5Extra-sizeof(Ce126p::State)-sizeof(Ce140f::CodeState));
             std::copy_n(state.begin(),v2.size(),v2.begin());memcpy(v2.data(),"E500ST02",8);v2[12]=16;
             check(e500_state_card(v2.data(),int(v2.size()))==16,"card capacity read from a v2 snapshot");
             memcpy(v2.data(),"E500ST99",8);check(e500_state_card(v2.data(),int(v2.size()))==-1,"unknown snapshot layout refused");
-            auto future=state;memcpy(future.data(),"E500ST05",8);check(e500_state_card(future.data(),int(future.size()))==-1,"unknown magic refused");
+            auto future=state;memcpy(future.data(),"E500ST06",8);check(e500_state_card(future.data(),int(future.size()))==-1,"unknown magic refused");
+            std::vector<BYTE> v4(state.begin(),state.end()-V5Extra);memcpy(v4.data(),"E500ST04",8);
+            check(e500_state_card(v4.data(),int(v4.size()))==m->cardKB,"card capacity read from a v4 snapshot");
         }
         m->Set_8(0xb8042,0);c.reg.r.a=99;m->lcd[0].on=0;
         check(e500_load(m.get(),state.data(),int(state.size()))==1,"load snapshot");
@@ -76,7 +84,7 @@ int main() {
         {
             // The printer and the disk see the same lines, and reserved bytes are zero.
             // プリンタとディスクの線の状態が食い違う状態や、予約のバイトが 0 でない状態は断る。
-            size_t diskAt=state.size()-sizeof(Ce140f::CodeState),printerAt=diskAt-sizeof(Ce126p::State);
+            size_t diskAt=state.size()-V5Extra-sizeof(Ce140f::CodeState),printerAt=diskAt-sizeof(Ce126p::State);
             auto odd=state;odd[printerAt+offsetof(Ce126p::State,oldXout)]^=1;
             check(!e500_load(m.get(),odd.data(),int(odd.size())),"reject printer and disk disagreeing on XOUT");
             odd=state;odd[diskAt+offsetof(Ce140f::CodeState,oldBusy)]^=1;
@@ -88,6 +96,29 @@ int main() {
             odd=state;odd[printerAt+offsetof(Ce126p::State,oldXout)]^=1;odd[diskAt+offsetof(Ce140f::CodeState,oldXout)]^=1;
             check(e500_load(m.get(),odd.data(),int(odd.size()))==1,"load printer and disk agreeing on XOUT");
             check(e500_load(m.get(),state.data(),int(state.size()))==1,"load snapshot again");
+            // A v5 snapshot names its ROM: another ROM's or another size's is refused natively.
+            // 形式5は ROM を記録する：別の ROM や別の容量の状態は、ネイティブ側で断る。
+            size_t romAt=state.size()-V5Extra;
+            odd=state;odd[romAt+4]^=1;check(!e500_load(m.get(),odd.data(),int(odd.size())),"reject a snapshot of another ROM");
+            odd=state;odd[romAt]=128;check(!e500_load(m.get(),odd.data(),int(odd.size())),"reject a snapshot of another ROM size");
+            odd=state;odd[romAt+9]=1;check(!e500_load(m.get(),odd.data(),int(odd.size())),"reject a v5 snapshot with reserved bytes set");
+            // Two states apart only in the time run are the same; one in the RAM is not.
+            // 経過時間だけが違う状態は同じ、RAM が違えば違う（同じなら自動保存は書き直さない）。
+            std::vector<BYTE> later(state.size());auto cycles=c.cycles;c.cycles+=12345;c.ticks2=(c.ticks2+7)%(CpuHz/64);
+            check(e500_save(m.get(),later.data(),int(later.size()))==1 && e500_state_same(state.data(),later.data(),int(state.size())),"states apart only in time are the same");
+            m->Set_8(0xb8042,0x99);check(e500_save(m.get(),later.data(),int(later.size()))==1 && !e500_state_same(state.data(),later.data(),int(state.size())),"states apart in RAM differ");
+            m->Set_8(0xb8042,0x37);c.cycles=cycles;check(e500_load(m.get(),state.data(),int(state.size()))==1,"load snapshot after the comparison");
+            // The released v4 layout still loads.
+            std::vector<BYTE> v4(state.begin(),state.end()-V5Extra);memcpy(v4.data(),"E500ST04",8);
+            check(e500_load(m.get(),v4.data(),int(v4.size()))==1,"load a v4 snapshot");
+            // Between steps the addressing is normal, unless a prefix's instruction is still to run.
+            // 命令の合間はアドレッシングが通常（プリフィクスの途中を除く）。
+            BYTE p1=c.pre_1;c.pre_1=0;std::vector<BYTE> pre(state.size());
+            check(e500_save(m.get(),pre.data(),int(pre.size()))==1 && !e500_load(m.get(),pre.data(),int(pre.size())),"reject a stray prefix state");
+            c.prefixed=true;
+            check(e500_save(m.get(),pre.data(),int(pre.size()))==1 && e500_load(m.get(),pre.data(),int(pre.size()))==1 && c.prefixed && c.pre_1==0,"keep a pending prefix");
+            c.prefixed=false;c.pre_1=p1;
+            check(e500_load(m.get(),state.data(),int(state.size()))==1,"load snapshot once more");
         }
         state[0]^=0xff;check(!e500_load(m.get(),state.data(),int(state.size())),"reject invalid snapshot");
         check(m->Get_8(0xb8042)==0x37,"failed load preserves machine");
@@ -134,6 +165,23 @@ int main() {
             check(!e500_write(configured.get(),0xbffff,patch,2) && configured->Get_8(0xc0000)==0x5a && configured->Get_8(0xbffff)==2,"debugger write that reaches ROM is refused whole");
             check(!e500_write(configured.get(),0x10000,patch,1) && !e500_write(configured.get(),0xfffff,patch,2),"debugger write refuses unmapped space and the end of memory");
             check(e500_dump(configured.get(),0xbfffe,back,2) && back[0]==1 && back[1]==2,"debugger dump reads the written bytes");
+            // A write longer than the RAM it lands in would wrap round the mirror
+            // over its own start: refused whole.
+            // RAM より長い書き込みは、ミラーで折り返して自分の先頭を上書きするので、全体を断る。
+            std::vector<BYTE> big(130*1024,0x77);
+            check(!e500_write(configured.get(),0x40000,big.data(),int(big.size())) && configured->Get_8(0x40000)!=0x77,"debugger write longer than the card is refused");
+            // A peek changes nothing: a write port of the LCD is not written, the
+            // data port does not move its column, and the watch is not counted.
+            // バスの読み出しは何も変えない（LCD に書かない、桁を進めない、ウォッチに数えない）。
+            auto lcdBefore=configured->lcd[0];configured->watchAddr=0xbfffe;configured->watchHits=0;
+            e500_peek(configured.get(),0x2002);e500_peek(configured.get(),0x200b);e500_peek(configured.get(),0xbfffe);
+            check(configured->lcd[0].ram==lcdBefore.ram && configured->lcd[0].column==lcdBefore.column && configured->watchHits==0,"a peek changes nothing");
+            // A run of prefix bytes is no deeper a call for every byte: a page of
+            // them (a runaway into '0'-'7') runs as long as asked and comes back.
+            // プリフィクスが続いても呼び出しは深くならない（ページいっぱいでも、指定の時間だけ動いて戻る）。
+            for(UINT32 a=0x80000;a<0xc0000;a++)configured->mem[a]=0x30;
+            configured->cpu.reg.x.p=0xb8000;configured->cpu.halt=configured->cpu.off=false;configured->cpu.imem[IMEM_IMR]=0;
+            check(e500_run(configured.get(),200000)==0 && configured->cpu.prefixed && (configured->cpu.reg.x.p&0xf0000)==0xb0000,"a page of prefix bytes runs without a call per byte");
         }
         for(int kb:{8,16,32,64,128,256}) {
             m->internalKB=m->cardKB=kb;m->mem.fill(0xff);
@@ -155,13 +203,13 @@ int main() {
         for(int i=0;i<100;i++)c.AddState(128);
         int16_t pcm[1000];int count=e500_audio(m.get(),pcm,1000),edges=0;
         for(int i=1;i<count;i++)edges+=pcm[i]!=pcm[i-1];
-        check(count==600 && edges>=48 && edges<=51,"2kHz XOUT PCM generation");
+        check(count==800 && edges>=65 && edges<=68,"2kHz XOUT PCM generation");
         // Uneven instruction lengths must not drag the 4 kHz BEEP edges off the
         // sample grid: at 48 kHz every half period is exactly six samples wide.
-        // The sample grid starts at whatever offset the previous tone left behind,
-        // and this one lands 4 kHz edges right on it.
-        c.imem[IMEM_SCR]=0x30;m->audio.clear();m->samplePhase=96024;m->lastSoundMode=-1;
-        for(int i=0;i<3000;i++)c.AddState(7);
+        // At 768 kHz a sample is 16 cycles and a half period 96, so from phase 0
+        // every 4 kHz edge lands right on the sample grid.
+        c.imem[IMEM_SCR]=0x30;m->audio.clear();m->samplePhase=0;m->lastSoundMode=-1;
+        for(int i=0;i<2250;i++)c.AddState(7);
         count=e500_audio(m.get(),pcm,1000);
         int run=1,uneven=0;
         for(int i=1;i<count;i++){if(pcm[i]==pcm[i-1])run++;else{if(run!=6)uneven++;run=1;}}
@@ -220,6 +268,46 @@ int main() {
                 e500_reset(r.get(),0);
                 check(e500_can_save(r.get()) && (r->disk.status()&1),"RESET closes the CE140F's files and transfer, mounted still");
                 r->disk.mount(nullptr,false);
+            }
+            {
+                // The drive's fixes of the 2026-11 review.
+                // 2026-11 のレビューで直した CE-140F の動き。
+                check(disk.mount(path.c_str(),false),"CE140F mounted for the review checks");
+                auto opened=[&](std::string stem,std::string ext,BYTE mode,BYTE number){auto b=filename(0x03,stem,ext);b.push_back(mode);b.push_back(number);return disk.command(packet(b));};
+                // APPEND to a missing file starts it; PRINT# is kept until CLOSE, which writes it once.
+                check(opened("LOG","TXT",3,2)==std::vector<BYTE>{0} && fs::exists(path/"LOG.TXT"),"APPEND to a missing file creates it");
+                check(disk.command(packet({0x15,2}))==std::vector<BYTE>{0} && disk.command(packet({'H','I',13,10,0}))==std::vector<BYTE>{0},"PRINT# a line");
+                check(fs::file_size(path/"LOG.TXT")==0,"PRINT# is kept until CLOSE");
+                check(disk.command(packet({0x04,2}))==std::vector<BYTE>{0} && fs::file_size(path/"LOG.TXT")==4,"CLOSE writes what PRINT# kept");
+                // A line ends at a CR with no LF after it.
+                std::ofstream(path/"CR.TXT",std::ios::binary)<<"A\rB\r";
+                check(opened("CR","TXT",1,3)==std::vector<BYTE>{0},"OPEN a file with CR line ends");
+                auto line=disk.command(packet({0x14,3}));
+                check(line.size()==6 && line[1]=='A' && line[2]==13,"INPUT# ends a line at a lone CR");
+                disk.command(packet({0x04,3}));
+                // A text SAVE is written once, at its end.
+                check(disk.command(packet(filename(0x10,"ASCII","TXT")))==std::vector<BYTE>{0} && disk.command(packet({0x16,1}))==std::vector<BYTE>{0},"text SAVE begins");
+                check(disk.command(packet({'1','0',' ','E','N','D',13,10}))==std::vector<BYTE>{0} && !fs::exists(path/"ASCII.TXT"),"text SAVE keeps its lines until the end");
+                check(disk.command(packet({0x16,1}))==std::vector<BYTE>{0} && disk.command(packet({0x1a}))==std::vector<BYTE>{0} && fs::file_size(path/"ASCII.TXT")==8,"text SAVE writes the file at its end");
+                // A LOAD body of exactly 256 bytes has its checksum once.
+                {std::ofstream f(path/"B256.BIN",std::ios::binary);for(int i=0;i<256;i++)f.put(char(i));}
+                check(disk.command(packet(filename(0x0e,"B256","BIN"))).size()>1,"LOAD of 256 bytes begins");
+                check(disk.command(packet({0x0f,1})).size()==1+256+1+1,"a 256-byte body sends its checksum once");
+                // No extension, and names that only look like devices.
+                check(disk.command(packet(filename(0x10,"PROG","")))==std::vector<BYTE>{0} && disk.command(packet({0x11,0,1,0,0}))==std::vector<BYTE>{0} &&
+                      disk.command(packet({0x41}))==std::vector<BYTE>{0} && fs::exists(path/"PROG"),"SAVE with no extension");
+                check(disk.command(packet(filename(0x10,"COMP")))==std::vector<BYTE>{0} && disk.command(packet({0x11,0,1,0,0}))==std::vector<BYTE>{0} &&
+                      disk.command(packet({0x42}))==std::vector<BYTE>{0},"COMP is not a device name");
+                check(disk.command(packet(filename(0x10,"COM1")))==std::vector<BYTE>{255},"COM1 is a device name");
+                // FILES lists PROG and COMP.BAS though a name outside the code page sits beside them.
+                std::ofstream(path/fs::path(L"\u2603.TXT"))<<"x";
+                std::ofstream(path/"lower.bas")<<"x";
+                auto listed=disk.command(packet(filename(0x05,"????????","???")));
+                // LOG.TXT CR.TXT ASCII.TXT B256.BIN PROG COMP.BAS LOWER.BAS TEST.BAS
+                check(listed.size()==3 && listed[1]==8,"FILES lists the disk past a name it cannot show");
+                // INIT clears what FILES shows, lower-case names included.
+                check(disk.command(packet({0x09}))==std::vector<BYTE>{0} && !fs::exists(path/"lower.bas") && !fs::exists(path/"PROG"),"INIT clears lower-case and extensionless names");
+                fs::remove(path/fs::path(L"\u2603.TXT"));
             }
             // Only the specifically created file and empty test directory are removed.
             fs::remove(path/"TEST.BAS");fs::remove(path);

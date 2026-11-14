@@ -1,4 +1,4 @@
-# Builds the release: dist\PC-E500-Emulator-<version>-win-x64.zip and
+﻿# Builds the release: dist\PC-E500-Emulator-<version>-win-x64.zip and
 # dist\PC-E500-Emulator-<version>-win-x64-setup.exe, both from the same files.
 # The version is PcE500.csproj's <Version>; app\README.txt must name it too.
 # Needs Inno Setup 6 (ISCC.exe), found where winget or its installer puts it,
@@ -16,7 +16,16 @@ try {
     if (-not $version) { throw 'No <Version> in PcE500.csproj.' }
     # The readme in the release says which version it is; a stale one is a mistake.
     $readme = Get-Content -LiteralPath 'app/README.txt' -TotalCount 1 -Encoding UTF8
-    if ($readme -notmatch [regex]::Escape(" $version")) { throw "app/README.txt says '$readme', not version $version." }
+    # The whole version, at the end of the line: ' 0.0.4' alone also matched 0.0.40 or 0.0.4-beta.
+    if ($readme -notmatch (' ' + [regex]::Escape($version) + '\s*$')) { throw "app/README.txt says '$readme', not version $version." }
+    # The manual's pictures are made by the build; without a ROM it cannot, and a
+    # release would carry the pictures of an older build.
+    foreach ($images in 'app/manual/images', 'app/manual/images-en') {
+        $done = Join-Path $images 'manual-shots.txt'
+        if (-not (Test-Path -LiteralPath $done) -or (Get-Content -LiteralPath $done -TotalCount 1) -ne 'OK' -or (Get-Item -LiteralPath $done).LastWriteTime -lt (Get-Item -LiteralPath 'app/PC-E500.exe').LastWriteTime) {
+            throw "The manual's pictures in $images were not made by this build (is a PC-E500 ROM in app/rom?)."
+        }
+    }
 
     # The release's files, gathered once: the program, its licences and the
     # manual, with empty rom, ram and drive-x folders. Never the user's data.
@@ -58,5 +67,21 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
 
     Remove-Item -LiteralPath $stage -Recurse -Force
-    Get-ChildItem -LiteralPath $dist -Filter "$name*" | ForEach-Object { Write-Host ("Ready: dist\{0} ({1:N1} MB)" -f $_.Name, ($_.Length / 1MB)) }
+
+    # Neither file is signed, so the release notes carry their SHA-256 for users
+    # to check a download against. Written in the form sha256sum -c reads, and
+    # printed ready to paste into the notes.
+    # 署名がないので、リリースの本文に載せる SHA-256 を書き出す（sha256sum -c で読める形）。
+    $packages = Get-ChildItem -LiteralPath $dist -File | Where-Object { $_.Name -eq "$name.zip" -or $_.Name -eq "$name-setup.exe" } | Sort-Object Name
+    $sums = Join-Path $dist "$name-SHA256.txt"
+    $lines = $packages | ForEach-Object { '{0} *{1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name }
+    [System.IO.File]::WriteAllText($sums, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    $packages | ForEach-Object { Write-Host ("Ready: dist\{0} ({1:N1} MB)" -f $_.Name, ($_.Length / 1MB)) }
+    Write-Host "Ready: dist\$name-SHA256.txt"
+    Write-Host ''
+    Write-Host 'For the release notes:'
+    Write-Host '## SHA-256'
+    Write-Host '```'
+    $lines | ForEach-Object { Write-Host $_ }
+    Write-Host '```'
 } finally { Pop-Location }

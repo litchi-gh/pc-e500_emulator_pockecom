@@ -51,6 +51,8 @@ public:
  BYTE pre_1=1,pre_2=1;
  /// halt：HALT 命令で割り込み待ち。off：電源 OFF。fault：未定義の命令を実行して停止。
  bool halt=false,off=false,fault=false;
+ /// プリフィクスを実行し、次の命令がまだ（次の step で、割り込みを受け付けずに実行する、machine.cpp）。
+ bool prefixed=false;
  /// サブルーチン呼び出しの深さ（デバッグ用）。
  int CallSubLevel=0;
  /// 起動からのサイクル数と、メイン・サブタイマーの経過サイクル数。
@@ -91,6 +93,12 @@ out=header[:header.index('#pragma once')]+macros
 for k,(ret,args,body) in selected.items():
  # 内部メモリの添字があふれないよう、8 ビットで折り返す。
  body=body.replace('imem[adr+1]','imem[(adr+1)&255]').replace('imem[adr+2]','imem[(adr+2)&255]')
+ # A prefix ran the instruction after it by calling Step_sc62015_, so a run of
+ # prefix bytes (a runaway into '0'-'7', 30h-37h) nested a call per byte and
+ # overflowed the stack. It now only marks the prefix; the next step runs the
+ # instruction (machine.cpp), with no interrupt in between, as the CPU does.
+ # プリフィクスは次の命令を再帰で実行していた（続くとスタックがあふれる）。印を付けるだけにし、次の step で実行する。
+ if k.startswith('Op_') and 'Step_sc62015_();' in body:body=body.replace('Step_sc62015_();','prefixed=true;')
  out+=f'\n{ret} Csc62015::{k}({args}) {{{body}}}\n'
 (root/'src/native/sc62015.cpp').write_text(out,encoding='utf-8',newline='\n')
 print('Extracted',len(selected),'CPU functions')

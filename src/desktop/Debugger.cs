@@ -14,11 +14,19 @@ internal static class LiveText
     /// <summary>中身を入れ替える（同じなら何もしない）。</summary>
     /// <param name="box">テキストボックス</param>
     /// <param name="value">新しい中身</param>
-    internal static void Update(TextBox box,string value) {
-        if(box.Text==value)return;
+    // A selection being made (to copy registers) is not swept away by the refresh,
+    // and with follow a view at the end follows what is added there (the CE-140F
+    // trace, which also loses lines from its start, so the top line counts for
+    // nothing there). An empty box is not at the end: the first text shows its top.
+    // 選んでいる範囲（レジスタをコピーするため）があれば入れ替えない。follow なら、最後の行を見ているとき増えた分に追従する（空の欄は先頭から）。
+    internal static void Update(TextBox box,string value,bool follow=false) {
+        if(box.Text==value || box.SelectionLength>0)return;
         var top=SendMessage(box.Handle,EM_GETFIRSTVISIBLELINE,IntPtr.Zero,IntPtr.Zero);
+        int visible=Math.Max(1,box.ClientSize.Height/Math.Max(1,box.Font.Height));
+        bool atEnd=follow && box.TextLength>0 && (int)top+visible>=box.GetLineFromCharIndex(box.TextLength-1);
         SendMessage(box.Handle,WM_SETREDRAW,IntPtr.Zero,IntPtr.Zero);
         box.Text=value;
+        if(atEnd)top=Math.Max(0,box.GetLineFromCharIndex(Math.Max(0,box.TextLength-1))-visible+1);
         SendMessage(box.Handle,EM_LINESCROLL,IntPtr.Zero,top);
         SendMessage(box.Handle,WM_SETREDRAW,1,IntPtr.Zero);
         box.Invalidate();
@@ -39,13 +47,13 @@ internal sealed class DebugDialog : Form
         ("KOL",0xf0),("KOH",0xf1),("KI",0xf2),("EOL",0xf3),
         ("EOH",0xf4),("EIL",0xf5),("EIH",0xf6),("UCR",0xf7),
         ("USR",0xf8),("RXD",0xf9),("TXD",0xfa),("IMR",0xfb),
-        ("ISR",0xfc),("SCR",0xfd),("ACM",0xfe),("SSR",0xff)];
+        ("ISR",0xfc),("SCR",0xfd),("LCC",0xfe),("SSR",0xff)];
     const int Columns=HexView.Columns;
     readonly Func<Core?> read;
-    readonly TextBox cpu=new(){Multiline=true,ReadOnly=true,WordWrap=false,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Font=new Font("Consolas",10),BackColor=Color.White};
+    readonly TextBox cpu=new(){Multiline=true,ReadOnly=true,WordWrap=false,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,Font=Fonts.Mono,BackColor=Color.White};
     /// <summary>メモリの HEX 表示。</summary>
     internal readonly HexView Memory;
-    readonly TextBox addressBox=new(){Width=88,Font=new Font("Consolas",10),Text="B0000"};
+    readonly TextBox addressBox=new(){Width=88,Font=Fonts.Mono,Text="B0000"};
     readonly CheckBox live=new(){Text=L.T("自動更新","Auto refresh"),Checked=true,AutoSize=true,Margin=new Padding(4,9,0,0)};
     readonly Label region=new(){Dock=DockStyle.Bottom,Height=24,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,0,0,0)};
     readonly Label note=new(){Dock=DockStyle.Bottom,Height=24,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(8,0,0,0),ForeColor=Color.FromArgb(0,80,160)};
@@ -57,7 +65,7 @@ internal sealed class DebugDialog : Form
         this.read=read;
         Memory=new HexView(read){Dock=DockStyle.Fill};
         Text=L.T("デバッグ / CPUレジスタ・メモリ","Debug / CPU registers and memory");
-        StartPosition=FormStartPosition.CenterScreen;Font=new Font("Yu Gothic UI",10);
+        StartPosition=FormStartPosition.CenterScreen;Font=Fonts.Ui;
         // Both panes are fixed-width hex, so measure the font rather than guess:
         // the internal RAM rows are 51 columns and the memory rows 72.
         var probe=TextRenderer.MeasureText(new string('0',40),cpu.Font);
@@ -179,4 +187,7 @@ internal sealed class DebugDialog : Form
     }
     // Test hooks: the caret and a typed hex digit, as the mouse and keyboard deliver them.
     internal void TestType(Keys key)=>Memory.TestKey(key);
+    /// <summary>レジスタ欄の先頭に見えている行（テスト用）。</summary>
+    internal int TestCpuTopLine=>(int)SendMessage(cpu.Handle,0xce,IntPtr.Zero,IntPtr.Zero);
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window,int message,IntPtr w,IntPtr l);
 }

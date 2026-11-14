@@ -61,8 +61,14 @@ class RomTests(unittest.TestCase):
                 e.type('SAVE "X:ROMTEST.BAS"',enter=False);e.key('ENTER');e.run(20480000);shot('5-save')
                 saved=pathlib.Path(disk)/'ROMTEST.BAS'
                 self.assertTrue(saved.exists() and saved.stat().st_size>0,f'{rom.name}: SAVE "X:" wrote nothing; trace: {e.trace()[-300:]}')
-                e.type('NEW');e.type('LOAD "X:ROMTEST.BAS"',enter=False);e.key('ENTER');e.run(20480000)
-                e.type('RUN');shot('6-load')
+                # NEW in RUN mode is refused by the ROM, which left the program and made
+                # this pass with LOAD broken: the program is cleared in PRO mode, and
+                # shown to be gone, before it is loaded back.
+                # RUN モードの NEW は ROM が断るので、PRO モードで消し、消えたことを確かめてから読み込む。
+                e.forget_program();e.type('RUN')
+                self.assertFalse(has_three(e),f'{rom.name}: NEW left the program in memory')
+                e.type('CLS');e.type('LOAD "X:ROMTEST.BAS"',enter=False);e.key('ENTER');e.run(20480000)
+                e.type('CLS');e.type('RUN');shot('6-load')
                 self.assertTrue(has_three(e),f'{rom.name}: the program LOADed back does not print 123')
                 # LPRINT on the CE-126P.
                 e.printed();e.type('LPRINT "ROM OK"');e.run(10240000);shot('7-lprint')

@@ -41,9 +41,9 @@ internal sealed class DisplayDialog : Form
     internal DisplayDialog(bool realLcd,int lcdContrast,WindowView view)
     {
         Text=L.T("画面設定","Display");FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;
-        StartPosition=FormStartPosition.CenterScreen;Font=new Font("Yu Gothic UI",10);AutoSize=true;AutoSizeMode=AutoSizeMode.GrowAndShrink;
+        StartPosition=FormStartPosition.CenterScreen;Font=Fonts.Ui;AutoSize=true;AutoSizeMode=AutoSizeMode.GrowAndShrink;
         var panel=new FlowLayoutPanel{FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoSize=true,Padding=new Padding(16)};Controls.Add(panel);
-        Label Heading(string text)=>new(){Text=text,AutoSize=true,Font=new Font(Font,FontStyle.Bold),Margin=new Padding(0,8,0,4)};
+        Label Heading(string text)=>new(){Text=text,AutoSize=true,Font=Fonts.UiBold,Margin=new Padding(0,8,0,4)};
         panel.Controls.Add(Heading(L.T("液晶の表示","LCD")));panel.Controls.Add(packed);panel.Controls.Add(real);
         panel.Controls.Add(Heading(L.T("液晶のコントラスト","LCD contrast")));
         var row=new FlowLayoutPanel{AutoSize=true,WrapContents=false,Margin=new Padding(0)};

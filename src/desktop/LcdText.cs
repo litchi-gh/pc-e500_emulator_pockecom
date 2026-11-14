@@ -100,7 +100,7 @@ internal sealed class LcdTextDecoder
 /// <summary>LCD 文字のコピー・貼り付けのウィンドウ。</summary>
 internal sealed class ScreenTextDialog : Form
 {
-    readonly TextBox text=new(){Multiline=true,ReadOnly=true,AcceptsTab=true,ScrollBars=ScrollBars.Both,WordWrap=false,Dock=DockStyle.Fill,Font=new Font("Consolas",14)};
+    readonly TextBox text=new(){Multiline=true,ReadOnly=true,AcceptsTab=true,ScrollBars=ScrollBars.Both,WordWrap=false,Dock=DockStyle.Fill,Font=Fonts.MonoLarge};
     readonly Label result=new(){Dock=DockStyle.Bottom,Height=30,TextAlign=ContentAlignment.MiddleLeft};
     readonly Func<string> read;
     /// <summary>ウィンドウを作る。</summary>
@@ -109,7 +109,7 @@ internal sealed class ScreenTextDialog : Form
     internal ScreenTextDialog(Func<string> read,Func<string,string> paste)
     {
         this.read=read;Text=L.T("LCD文字のコピー・貼り付け","LCD text copy and paste");ClientSize=new(760,330);MinimumSize=new Size(580,280);StartPosition=FormStartPosition.CenterParent;
-        Font=new Font("Yu Gothic UI",10);
+        Font=Fonts.Ui;
         var note=new Label{Dock=DockStyle.Top,Height=62,Text=L.T("LCDを40桁×4行の文字として読み取ります。範囲を選択してコピーできます。\n貼り付けはASCII文字と改行をPC-E500のキー入力として送ります。","Reads the LCD as 40 columns by 4 rows of text. Select a range to copy it.\nPaste sends ASCII characters and line breaks as PC-E500 key input."),Padding=new Padding(8,5,0,0)};
         var buttons=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=45,FlowDirection=FlowDirection.RightToLeft,Padding=new Padding(4)};
         var close=new Button{Text=L.T("閉じる","Close"),AutoSize=true,DialogResult=DialogResult.Cancel};

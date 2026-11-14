@@ -96,6 +96,8 @@ public:
  BYTE pre_1=1,pre_2=1;
  /// halt：HALT 命令で割り込み待ち。off：電源 OFF。fault：未定義の命令を実行して停止。
  bool halt=false,off=false,fault=false;
+ /// プリフィクスを実行し、次の命令がまだ（次の step で、割り込みを受け付けずに実行する、machine.cpp）。
+ bool prefixed=false;
  /// サブルーチン呼び出しの深さ（デバッグ用）。
  int CallSubLevel=0;
  /// 起動からのサイクル数と、メイン・サブタイマーの経過サイクル数。

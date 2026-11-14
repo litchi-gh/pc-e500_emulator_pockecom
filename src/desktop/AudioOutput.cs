@@ -53,6 +53,10 @@ internal sealed class AudioOutput : IDisposable
     bool primed;
     volatile bool running=true,resetWanted;
     volatile int outstanding;
+    // A chunk taken from the queue but not yet handed to the device. Counted, or
+    // a burst landing in that moment filled the queue to the cap again, one chunk over.
+    // 取り出してまだデバイスに渡していないチャンクの数（数えないと、その間に上限を1チャンク超える）。
+    int inFlight;
     // Kept for the smoke test: it is the only way to see the starvation collapse,
     // which is silent from the outside apart from the audio being wrong.
     /// <summary>デバイスに渡したサンプル数と、デバイスが空になって再開した回数（テスト用）。</summary>
@@ -66,7 +70,7 @@ internal sealed class AudioOutput : IDisposable
     internal string? Error {get;private set;}
     // What the device is holding, and everything buffered ahead of it.
     internal int PendingCount=>outstanding;
-    internal int BufferedSamples {get{lock(gate)return queued.Count+outstanding*Chunk;}}
+    internal int BufferedSamples {get{lock(gate)return queued.Count+(outstanding+inFlight)*Chunk;}}
 
     /// <summary>デバイスを開き、書き込み用のスレッドを始める。</summary>
     internal AudioOutput() {
@@ -93,7 +97,7 @@ internal sealed class AudioOutput : IDisposable
         lock(gate) {
             if(Muted){queued.Clear();return;}
             for(int i=0;i<count;i++)queued.Enqueue(samples[i]);
-            while(queued.Count+outstanding*Chunk>MaxBuffered)queued.Dequeue();
+            while(queued.Count>0 && queued.Count+(outstanding+inFlight)*Chunk>MaxBuffered)queued.Dequeue();
         }
         work.Set();
     }
@@ -134,6 +138,7 @@ internal sealed class AudioOutput : IDisposable
             if(queued.Count<Chunk)return null;
             var samples=new short[Chunk];
             for(int i=0;i<Chunk;i++)samples[i]=queued.Dequeue();
+            inFlight++;
             return samples;
         }
     }
@@ -146,8 +151,12 @@ internal sealed class AudioOutput : IDisposable
         Marshal.Copy(pcm,0,data,pcm.Length);Marshal.StructureToPtr(new Header{data=data,length=(uint)pcm.Length*2},header,false);
         uint size=(uint)Marshal.SizeOf<Header>(),result=waveOutPrepareHeader(device,header,size);
         if(result==0){result=waveOutWrite(device,header,size);if(result!=0)waveOutUnprepareHeader(device,header,size);}
-        if(result!=0){Marshal.FreeHGlobal(data);Marshal.FreeHGlobal(header);Error=L.T($"音声再生に失敗 (MMRESULT {result})",$"Audio playback failed (MMRESULT {result})");return;}
-        pending.Add((header,data));outstanding=pending.Count;Delivered+=pcm.Length;
+        if(result!=0){Marshal.FreeHGlobal(data);Marshal.FreeHGlobal(header);Error=L.T($"音声再生に失敗 (MMRESULT {result})",$"Audio playback failed (MMRESULT {result})");lock(gate)inFlight--;return;}
+        // A write that goes through again clears an earlier failure (a device that came back).
+        Error=null;
+        pending.Add((header,data));
+        lock(gate){inFlight--;outstanding=pending.Count;}
+        Delivered+=pcm.Length;
     }
 
     /// <summary>再生が終わったバッファを解放する。</summary>
@@ -158,10 +167,20 @@ internal sealed class AudioOutput : IDisposable
     }
 
     /// <summary>スレッドを止め、デバイスを閉じる。</summary>
+    // The device and the buffers belong to the worker until it has ended. A write
+    // can block for over a second, and tearing them down beside a worker still
+    // inside it freed buffers the device was playing and disposed the event the
+    // worker waits on, which threw on that thread and took the process down as it
+    // closed. A worker that does not end in time is left the device: the process
+    // is exiting, and Windows closes it then.
+    // デバイスとバッファは、書き込み用のスレッドが終わるまでそのスレッドのもの。終わらなければ片付けずに任せる。
     public void Dispose() {
-        running=false;work.Set();worker.Join(1000);
+        running=false;work.Set();
         lock(gate)queued.Clear();
-        if(device!=IntPtr.Zero){waveOutReset(device);Reap();waveOutClose(device);device=IntPtr.Zero;}
-        work.Dispose();timeEndPeriod(1);
+        if(worker.Join(3000)) {
+            if(device!=IntPtr.Zero){waveOutReset(device);Reap();waveOutClose(device);device=IntPtr.Zero;}
+            work.Dispose();
+        }
+        timeEndPeriod(1);
     }
 }

@@ -10,7 +10,7 @@ Supported models: the PC-E500, PC-E550, PC-1480U, PC-1490U and PC-1490UII (256KB
 
 ## Running
 
-Releases on the [releases page](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) come as an installer (`PC-E500-Emulator-<version>-win-x64-setup.exe`) and a zip (`PC-E500-Emulator-<version>-win-x64.zip`).
+Releases on the [releases page](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) come as an installer (`PC-E500-Emulator-<version>-win-x64-setup.exe`) and a zip (`PC-E500-Emulator-<version>-win-x64.zip`). Neither is signed. From the release after 0.0.4 on, the release notes list each file’s SHA-256: compare it with what PowerShell’s `Get-FileHash <file>` prints to check a download.
 
 - **Installer**: install for you only (no administrator; the default) or for all users. The program goes to `%LocalAppData%\Programs\PockeComE500\` (or `C:\Program Files\PockeComE500\` for all users); ROMs, RAM, settings and state go per user to `%LocalAppData%\PockeComE500\` either way. Uninstalling leaves them.
 - **Zip**: run `PC-E500.exe` in the unpacked folder; the data stays beside it, as before.
@@ -316,6 +316,11 @@ LLIST
 
 - Untick "Connected" and LPRINT reports `Printer error`, as on a real machine with no printer. The setting is kept.
 - It shares the 11-pin bus with the CE-140F; both work together.
+- **Printing on a printer**: "Print to" in the CE-126P window sends the lines on to a printer as well; the choice is kept in the settings.
+  - **A USB thermal printer** (58 mm, 384 dots across, ESC/POS, such as the MPT-II): written to directly, with no driver or print queue, a line at a time as it comes. The ROM's glyphs are drawn at three times their size, 2 mm a character and 4 mm a line. After printing has paused for 3 seconds, the paper is fed 12 mm.
+  - **A Windows printer**: when printing has paused for 3 seconds, the lines since the last job print as one job at their real size (2 mm a character, 4 mm a line), page after page.
+  - "Print paper" sends the whole paper to the printer.
+  - A line that cannot reach the printer (unplugged, or in use elsewhere) stays on the paper in the window, the reason shows at the bottom of the window, and the machine goes on.
 - The paper keeps up to 2000 lines, dropping the oldest. The paper is not part of snapshots, but the printer's place on the bus is, so saving works at any time mid-line (a loaded snapshot prints that line again in full).
 - Print time is not reproduced; lines print at once.
 
@@ -329,7 +334,7 @@ LLIST
 - Snapshots cannot be saved or loaded during a CE-140F transfer or with a file OPEN; `CLOSE` first. RAM autosave continues. Virtual disk files are not part of snapshots.
 - "All Reset" saves the previous state to `state/before-reset-<date>.e500state` first. The RAM card is kept.
 - Files are hash-checked and replaced atomically from a temporary file. The ROM itself is not stored.
-- The state file is version 3 (holding `E500ST04`); versions 1 and 2 (`E500ST01`, `E500ST02`) up to 0.0.3 still load. A file from a newer emulator does not load in an older one, which says so from 0.0.4 on. Not compatible with other emulators.
+- The state file is version 4 (holding `E500ST05`, which records the ROM's size and checksum, so another ROM's state is refused); version 3 (`E500ST04`) from 0.0.4 and versions 1 and 2 (`E500ST01`, `E500ST02`) up to 0.0.3 still load. A file from a newer emulator does not load in an older one, which says so from 0.0.4 on. Not compatible with other emulators.
 
 ## Scope
 
@@ -354,7 +359,7 @@ cd Emulator
 ./package.ps1   # the release zip and installer, into dist\
 ```
 
-`package.ps1` builds, gathers the release's files into one folder and makes both the zip and the installer from it. The version is `<Version>` in `src/desktop/PcE500.csproj`, and the first line of `app/README.txt` must name it too. The installer needs [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`); it is defined in `installer/PockeComE500.iss`.
+`package.ps1` builds, gathers the release's files into one folder and makes both the zip and the installer from it. The version is `<Version>` in `src/desktop/PcE500.csproj`, and the first line of `app/README.txt` must name it too. The installer needs [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`); it is defined in `installer/PockeComE500.iss`. Last, it writes the SHA-256 of the zip and the installer to `dist/PC-E500-Emulator-<version>-win-x64-SHA256.txt` (in the form `sha256sum -c` reads) and prints them ready to paste: every release’s notes carry that "## SHA-256" section.
 
 - `src/native/`: CPU core, hardware and the C ABI DLL
 - `src/desktop/`: C# / Windows Forms UI, input and persistence (`Lang.cs` holds the language switch; every visible string is written as `L.T(japanese, english)` at its point of use)

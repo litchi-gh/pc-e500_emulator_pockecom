@@ -484,49 +484,49 @@ void Csc62015::Op_21(void) {
 	pre_1=1;
 	pre_2=3;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_22(void) {
 	pre_1=1;
 	pre_2=0;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_23(void) {
 	pre_1=1;
 	pre_2=2;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_24(void) {
 	pre_1=3;
 	pre_2=1;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_25(void) {
 	pre_1=3;
 	pre_2=3;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_26(void) {
 	pre_1=3;
 	pre_2=0;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_27(void) {
 	pre_1=3;
 	pre_2=2;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_28(void) {
@@ -582,56 +582,56 @@ void Csc62015::Op_30(void) {
 	pre_1=0;
 	pre_2=1;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_31(void) {
 	pre_1=0;
 	pre_2=3;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_32(void) {
 	pre_1=0;
 	pre_2=0;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_33(void) {
 	pre_1=0;
 	pre_2=2;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_34(void) {
 	pre_1=2;
 	pre_2=1;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_35(void) {
 	pre_1=2;
 	pre_2=3;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_36(void) {
 	pre_1=2;
 	pre_2=0;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_37(void) {
 	pre_1=2;
 	pre_2=2;
 	AddState(1);
-	Step_sc62015_();
+	prefixed=true;
 }
 
 void Csc62015::Op_38(void) {

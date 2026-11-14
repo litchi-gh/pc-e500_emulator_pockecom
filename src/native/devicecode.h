@@ -10,6 +10,12 @@
 #pragma once
 #include <cstdint>
 
+// The CPU runs one execution cycle per three periods of the 2.304 MHz clock:
+// 768,000 cycles a second, as on the real machine. Everything that turns
+// cycles into time (timers, tones, audio, timeouts) is derived from this.
+/// 1秒あたりの CPU の実行サイクル数（実機と同じ 2.304 MHz ÷ 3 = 768 kHz）。
+constexpr uint64_t CpuHz=768000;
+
 /// デバイスコード1つ分の受け取りの状態。どの段階に移るか・ACK をどうするかは各機器が決める。
 struct DeviceCode {
     /// 受け取ったビット数（0〜8）と、組み立て中のコード（LSB から）。

@@ -30,8 +30,6 @@ public:
     bool ack=false;
     /// 応答を返すときに4本のデータ線へ出す値（EIH の上位4ビットになる）。
     uint8_t lines=0;
-    /// CPU の E ポート出力（EOL・EOH）の写し。
-    uint8_t portL=0,portH=0;
     /// フォルダをドライブとして接続する。
     /// 接続し直し（フォルダや書き込み禁止の変更）の場合は、通り過ぎているデバイスコードの
     /// 受信状態を保つ。開いていたファイルと転送は閉じる。
@@ -78,6 +76,8 @@ public:
     void resetBus();
     /// 本体の RESET：resetBus に加えて、開いているファイルと転送を閉じ、エラーを消す。接続は残す。
     void reset();
+    /// 書きかけのファイル（PRINT# の書き込み先）を書き出す。
+    ~Ce140f();
     /// 受け取ったパケット（末尾はチェックサム）を1つ処理し、ROM へ返す応答を返す。
     /// @param packet コマンドのバイト列とチェックサム
     /// @return 応答のバイト列（エラーなら FFh）
@@ -106,7 +106,8 @@ private:
     /// トレースの記録（16KB を超えたら古い分を捨てる）。
     std::string log;
     /// 開いているファイル。mode：0 閉じている、1 読み出し、2 書き込み、3 追記。
-    struct File {std::string name;std::vector<uint8_t> bytes;size_t position=0;int mode=0;};
+    /// dirty：PRINT# で書いたがまだファイルに書き出していない（CLOSE などで書き出す）。
+    struct File {std::string name;std::vector<uint8_t> bytes;size_t position=0;int mode=0;bool dirty=false;};
     /// SAVE・LOAD で転送中のファイル。
     File transfer;
     /// OPEN で開いたファイル（ファイル番号 #2〜#7）。
@@ -128,4 +129,8 @@ private:
     void requireWrite(const std::string& name) const;
     /// トレースに1行書き足す。
     void note(const std::string& text);
+    /// 書きかけのファイルをファイルに書き出す（失敗は例外）。
+    void flush(File& file);
+    /// 開いているファイルの書きかけをすべて書き出す（失敗はトレースに残す）。
+    void flushAll();
 };
