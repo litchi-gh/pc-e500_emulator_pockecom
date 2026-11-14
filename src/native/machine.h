@@ -39,6 +39,8 @@ public:
     int internalKB=32,cardKB=0;
     /// ROM の容量（KB）。PC-E500 は 256、PC-E650・PC-U6000 は 384。
     int romKB=256;
+    /// ROM の中身のチェックサム（FNV-1a）。状態ファイルが同じ ROM のものかを確かめる。
+    uint32_t romSum=0;
     /// 11ピンにつながる周辺機器。
     Ce140f disk;
     Ce126p printer;
@@ -66,12 +68,12 @@ public:
         return a;
     }
     /// 音のモード（SCR のビット4〜6）から、今の XOUT の値を決める。
-    /// 1・5：常に High、2・3：一定の周期で切り替え、6・7：SSR のビット1（シリアル送信など）。
+    /// 1・5：常に High、2・3：2 kHz・4 kHz で切り替え、6・7：SSR のビット1（シリアル送信など）。
     bool toneLevel(int mode) const {
         switch(mode) {
         case 1:case 5:return true;
-        case 2:return ((tonePhase/256)&1)==0;
-        case 3:return ((tonePhase/128)&1)==0;
+        case 2:return ((tonePhase/(CpuHz/4000))&1)==0;
+        case 3:return ((tonePhase/(CpuHz/8000))&1)==0;
         case 6:case 7:return (cpu.imem[IMEM_SSR]&2)!=0;
         default:return false;
         }
@@ -91,7 +93,8 @@ public:
     /// XOUT が保存したときの値（level）から続くように、半周期ずらして始める。
     void restartTone(bool level) {
         int mode=soundMode();lastSoundMode=mode;tonePhase=0;
-        if(toneLevel(mode)!=level)tonePhase=mode==2?256:mode==3?128:0;
+        // Half a period of the mode-2 (2 kHz) or mode-3 (4 kHz) wave, at the clock the core runs at.
+        if(toneLevel(mode)!=level)tonePhase=mode==2?CpuHz/4000:mode==3?CpuHz/8000:0;
     }
     /// LCD の I/O（アドレスの下位4ビット）を2つのコントローラへ振り分ける。
     BYTE display(int cmd,BYTE d);
@@ -108,8 +111,8 @@ public:
     void Set_20(UINT32 a,UINT32 d) {Set_16(a,d);Set_8(a+2,(d>>16)&15);}
     /// CPU が選んでいるキーの行を読み、KI レジスタと割り込み要因を更新する。
     void scanKeys();
-    /// 1命令を実行し、割り込みがあれば受け付ける。
-    void step();
+    /// 1命令を実行し、割り込みがあれば受け付ける。HALT・電源 OFF の間は、次のタイマーまでまとめて時間を進める（budget サイクルまで）。
+    void step(uint64_t budget=3);
     /// LCD の 240×32 ドットを out に書く（1 なら点灯）。
     void pixels(BYTE *out);
     /// 命令を実行するたびに CPU から呼ばれる。音声のサンプルを作り、11ピンの周辺機器を動かす。

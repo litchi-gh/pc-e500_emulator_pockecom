@@ -11,8 +11,8 @@ static bool printerCode(uint8_t code) {return code==0x0f || code==0x20;}
 static constexpr size_t MaxPaper=64*1024;
 // A line is a few milliseconds of bits; a second without one means the ROM gave
 // up (BREAK or a timeout), and the half-sent line is dropped.
-// バスが動かないまま選択を終えるまでの時間（1秒 = 1,024,000 サイクル）。
-static constexpr uint64_t Timeout=1024000;
+// バスが動かないまま選択を終えるまでの時間（1秒）。
+static constexpr uint64_t Timeout=CpuHz;
 
 // The time goes too: a RESET starts the cycle count over, and an old one would
 // make a later snapshot look as if it came from the future. The lines' last

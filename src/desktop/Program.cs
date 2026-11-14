@@ -58,10 +58,14 @@ internal sealed class MainForm : Form
     bool lastOff;
     readonly Label status=new();
     // 8 ms so a keystroke and the click it makes are not held back by the frame
-    // they land in. The LCD and the status line still repaint on every other tick.
+    // they land in. The LCD and the status line are looked at on every other tick
+    // (about 62 times a second; timeBeginPeriod makes the timer really 8 ms), and
+    // only what changed is repainted.
     /// <summary>エミュレーションを進めるタイマー（8ms ごと）。</summary>
     readonly System.Windows.Forms.Timer timer=new(){Interval=8};
     int tick;
+    /// <summary>自動保存の番が来たのに、前の書き込みが終わっておらず始められなかったか（次の回にすぐ試す）。</summary>
+    bool saveOwed;
     readonly Stopwatch clock=Stopwatch.StartNew();
     /// <summary>キー入力の待ち行列：キーコード、押すか離すか、その状態を保つサイクル数。</summary>
     readonly Queue<(int Code,bool Down,int Cycles)> inputQueue=new();
@@ -78,6 +82,8 @@ internal sealed class MainForm : Form
     readonly Dictionary<string,Form> windows=new();
     // The CE-126P's paper outlives ROM switches and its window.
     readonly PrinterPaper paper=new();
+    /// <summary>CE-126P の印字を、選んだプリンタ（USB のサーマルプリンタか Windows のプリンタ）へ送る。</summary>
+    readonly PrintOutput printOut=new();
     readonly ToolButton pause=new(){Text=PauseCommand,AutoSize=true};
     readonly ToolButton speed=new(){Text=L.T("速度 1x","Speed 1x"),AutoSize=true,ForeColor=Color.Black,BackColor=Color.FromArgb(227,229,225)};
     int speedIndex=1;
@@ -114,8 +120,12 @@ internal sealed class MainForm : Form
         this.testing=testing;
         if(!testing && AppFolders.IsInstalled(programRoot))AppFolders.Prepare(root);
         if(!testing) {
-            settings=HardwareSettings.Load(Path.Combine(root,"state","settings.json"));
+            settings=HardwareSettings.LoadOrReset(Path.Combine(root,"state","settings.json"),out string? problem,out string? kept);
             L.Set(settings.Language);
+            if(problem is not null)MessageBox.Show(L.T("設定ファイルを読めなかったため、既定の設定で起動します。\n","The settings file could not be read, so the emulator starts with the default settings.\n")+problem+"\n\n"+
+                (kept is not null?L.T("元のファイルは別名で残しました: ","The file was kept under another name: ")+kept
+                    :L.T("元のファイルを別名にできませんでした。次に設定を保存すると上書きされます。","The file could not be renamed; it will be overwritten when the settings are next saved.")),
+                "PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Warning);
             audio=new AudioOutput();audio.Muted=settings.Muted;audio.Volume=settings.Volume/100f;
         }
         if(string.IsNullOrWhiteSpace(settings.DiskFolder))settings=settings with{DiskFolder=Path.Combine(root,"drive-x")};
@@ -125,7 +135,7 @@ internal sealed class MainForm : Form
         if(executableIcon is not null)Icon=executableIcon;
         Text=Title(settings.Appearance);ClientSize=new Size(1180,725);MinimumSize=NormalMinimum;
         AutoScaleMode=AutoScaleMode.Dpi;BackColor=Color.FromArgb(38,44,54);ForeColor=Color.FromArgb(230,231,229);
-        Font=new Font("Yu Gothic UI",10);KeyPreview=true;
+        Font=Fonts.Ui;KeyPreview=true;
         // 画面の構成：ツールバー、本体の絵、操作の案内、ステータスバーの4段。
         main.RowStyles.Add(new RowStyle(SizeType.AutoSize));main.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         main.RowStyles.Add(new RowStyle(SizeType.Absolute,28));main.RowStyles.Add(new RowStyle(SizeType.Absolute,28));Controls.Add(main);
@@ -148,28 +158,47 @@ internal sealed class MainForm : Form
         main.Controls.Add(surface,0,1);
         surface.BackgroundDoubleClicked+=()=>TryAction(CycleView);
         surface.BackgroundDragged+=DragWindow;
-        main.Controls.Add(new Label{Text=L.T("初回 PF1 → BASIC  /  F6: MENU  F7: BASIC  F8: 2ndF  Esc: ON/BRK  /  SHIFT・CTRLは次の1キーまで保持","First run: PF1 → BASIC  /  F6: MENU  F7: BASIC  F8: 2ndF  Esc: ON/BRK  /  SHIFT and CTRL stay held for the next key"),Dock=DockStyle.Fill,Font=new Font("Yu Gothic UI",9)},0,2);
-        status.Dock=DockStyle.Fill;status.Font=new Font("Yu Gothic UI",9);main.Controls.Add(status,0,3);
+        main.Controls.Add(new Label{Text=L.T("初回 PF1 → BASIC  /  F6: MENU  F7: BASIC  F8: 2ndF  Esc: ON/BRK  /  SHIFT・CTRLは次の1キーまで保持","First run: PF1 → BASIC  /  F6: MENU  F7: BASIC  F8: 2ndF  Esc: ON/BRK  /  SHIFT and CTRL stay held for the next key"),Dock=DockStyle.Fill,Font=Fonts.Small},0,2);
+        status.Dock=DockStyle.Fill;status.Font=Fonts.Small;main.Controls.Add(status,0,3);
         // 画面のキーのクリック：RESET 穴はリセット、SHIFT・CTRL は押したままにする、ほかはキー入力の待ち行列へ。
         surface.KeyClicked+=name=>{
             if(core is null||paused)return;
             if(name=="RESET") {TryAction(ResetPin);return;}
             int code=Keyboard.Codes[name];
-            if(name is "SHIFT" or "CTRL") {if(!held.Add(code))held.Remove(code);core.Key(code,held.Contains(code));surface.SetPressed(name,held.Contains(code));}
+            // A clicked SHIFT or CTRL joins the queue, so it reaches the key after the
+            // ones still waiting, not those too; it stays down for the next key.
+            // 画面の SHIFT・CTRL は待ち行列に入れる（待っている前のキーには効かせず、次のキーまで押したまま）。
+            if(name is "SHIFT" or "CTRL") {
+                bool down=held.Add(code);if(!down)held.Remove(code);
+                inputQueue.Enqueue((code,down,down?ShiftLeadCycles:ModifierCycles));NextKey();surface.SetPressed(name,down);
+            }
+            // The PC's Ctrl held while a key is clicked adds CTRL to it.
+            else if((ModifierKeys&Keys.Control)!=0)QueueWith(Keyboard.Codes["CTRL"],code);
             else QueueKey(code);
         };
-        Deactivate+=(_,_)=>ReleaseKeys();
+        // Focus leaving lets go of the PC's keys only; typing still queued (a paste) goes on.
+        Deactivate+=(_,_)=>ReleaseKeys(true);
         KeyDown+=OnKeyDown;KeyUp+=OnKeyUp;KeyPress+=OnKeyPress;
         timer.Tick+=(_,_)=>Tick();
         // 閉じる前に RAM・カード・状態と設定を保存する。失敗したら、それでも閉じるかを聞く。
         FormClosing+=(_,e)=>{
             if(core is null)return;
-            try {ReleaseKeys();SavePersistent();if(!testing)settings.Save(Path.Combine(root,"state","settings.json"));}
+            try {ReleaseKeys();SavePersistent();if(!testing)settings.Save(Path.Combine(root,"state","settings.json"));
+                // Lines still waiting for the printer go out while the window is here
+                // (a PDF printer asks where to save); closed first, they were lost.
+                // 印刷を待っている行は、ウィンドウがあるうちに出す（閉じてからでは失われた）。
+                printOut.Flush(15000);}
             catch(Exception ex) {
                 if(MessageBox.Show(L.T("状態を保存できませんでした。終了しますか？\n","Could not save the state. Quit anyway?\n")+ex.Message,"PC-E500",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.No)e.Cancel=true;
             }
         };
-        FormClosed+=(_,_)=>{foreach(var window in windows.Values.ToArray())window.Close();timer.Dispose();audio?.Dispose();core?.Dispose();};
+        FormClosed+=(_,_)=>{foreach(var window in windows.Values.ToArray())window.Close();timer.Dispose();audio?.Dispose();printOut.Dispose();core?.Dispose();};
+        // A USB printer found on another port keeps its new path in the settings.
+        printOut.Moved+=moved=>BeginInvoke(()=>{settings=settings with{PrintTo=moved};SaveSettings();});
+        // Every line the CE-126P prints goes on to the chosen printer as well.
+        paper.LineAdded+=line=>printOut.Line(line,core?.Font??[]);
+        // The saved printer as it is; one not found under its path is looked for by name when it is first written to.
+        if(!testing && settings.PrintTo is not null)printOut.Select(settings.PrintTo);
         // ROM の指定がなければ、rom フォルダから外観（E500 か E650）に合う大きさと名前のものを選ぶ。
         if(romPath is null) {
             string directory=Path.Combine(root,"rom");
@@ -202,14 +231,29 @@ internal sealed class MainForm : Form
     /// <summary>RAM カードのイメージを置くフォルダ。</summary>
     string CardFolder()=>Path.Combine(root,"ram");
     /// <summary>自動保存のファイル（ROM・内蔵 RAM・カードの容量ごと）。</summary>
-    string AutoSavePath()=>Path.Combine(root,"state",$"{core!.Hash}.i{core.InternalKB}-c{core.CardKB}.e500state");
+    string AutoSavePath(Core? of=null){of??=core!;return Path.Combine(root,"state",$"{of.Hash}.i{of.InternalKB}-c{of.CardKB}.e500state");}
     /// <summary>内蔵 RAM を保存するフォルダ（ROM ごと）。</summary>
-    string MemoryDirectory()=>Path.Combine(root,"state","memory",core!.RomHash);
-    /// <summary>内蔵 RAM とカードを保存し、保存できる状態なら状態も自動保存する。</summary>
+    string MemoryDirectory(Core? of=null)=>Path.Combine(root,"state","memory",(of??core!).RomHash);
+    /// <summary>内蔵 RAM・カード・状態のファイルを書く役（自動保存は裏のスレッドで書く）。</summary>
+    readonly PersistentWriter writer=new();
+    /// <summary>保存するもの：内蔵 RAM、カード、保存できる状態なら自動保存の状態。</summary>
+    List<PersistentWriter.Item> PersistentItems() {
+        var items=new List<PersistentWriter.Item>{core!.InternalItem(MemoryDirectory())};
+        if(core.CardItem() is PersistentWriter.Item card)items.Add(card);
+        if(core.CanSnapshot)items.Add(new(AutoSavePath(),core.Snapshot(),core.Hash));
+        return items;
+    }
+    /// <summary>内蔵 RAM とカードを保存し、保存できる状態なら状態も自動保存する（その場で書く。失敗は例外）。</summary>
     void SavePersistent() {
         if(core is null||testing)return;
-        core.MemoryFiles(MemoryDirectory(),false);core.SaveCard();
-        if(core.CanSnapshot)core.Save(AutoSavePath());
+        writer.WriteNow(PersistentItems());
+    }
+    // Nothing is taken while the last write is still going: the copy would only be thrown away.
+    /// <summary>自動保存：中身を取り出し、裏のスレッドで書く。</summary>
+    /// <returns>書き始めたか（前の書き込みが終わっていなければ false）</returns>
+    bool AutoSave() {
+        if(core is null||testing)return true;
+        return !writer.Busy && writer.Start(PersistentItems());
     }
     /// <summary>一時停止と再開を切り替える。</summary>
     void TogglePause() {
@@ -453,20 +497,19 @@ internal sealed class MainForm : Form
     }
     // The ROM scans the key matrix from its 64 Hz sub-timer, and only counts a key
     // whose press and release land in different scans with one scan between them.
-    // 24000 down plus 32000 up is the shortest pair that never drops a key; the
-    // 120000/100000 this replaces spent 215 ms per key, so anything faster than
+    // 18000 down plus 24000 up (one and a half scans, then two) is the shortest pair that never drops a key; the
+    // 120000/100000 at 1.024 MHz that this replaces spent 215 ms per key, so anything faster than
     // five keys a second piled up into a backlog that felt like input lag.
     // A shifted character only comes out shifted when SHIFT is already down for a
     // whole scan before the key joins it, and stays down for a whole scan after the
     // key leaves. The 8000 that both used to be is half a scan, so whichever
     // keystroke the scan phase fell on lost its SHIFT: pasting LOAD M "X:TETRIS.BIN"
     // dropped the closing quote to a bare W, and typing quotes gave one W in four.
-    const int KeyDownCycles=24000,KeyUpCycles=32000,ModeSettleCycles=200000,ModifierCycles=10000,
-        ShiftLeadCycles=24000,ShiftTailCycles=24000;
+    const int CpuHz=768000,KeyDownCycles=18000,KeyUpCycles=24000,ModeSettleCycles=200000,ModifierCycles=7500,
+        ShiftLeadCycles=18000,ShiftTailCycles=18000;
     /// <summary>キーを1回押して離す操作を待ち行列に入れ、すぐに始める。</summary>
     /// <param name="code">キーコード</param>
-    /// <param name="fast">貼り付けからの入力か（今は同じ速さ）</param>
-    void QueueKey(int code,bool fast=false) {
+    void QueueKey(int code) {
         if(core is null || paused)return;
         inputQueue.Enqueue((code,true,KeyDownCycles));inputQueue.Enqueue((code,false,KeyUpCycles));
         if(code==Keyboard.Codes["BASIC"] || code==Keyboard.Codes["MENU"] || code==Keyboard.Codes["F1"])
@@ -478,11 +521,16 @@ internal sealed class MainForm : Form
         NextKey();
     }
     /// <summary>SHIFT を押したまま code のキーを押す操作を待ち行列に入れる。</summary>
-    void QueueShifted(int code,bool fast=false) {
-        int shift=Keyboard.Codes["SHIFT"];
-        inputQueue.Enqueue((shift,true,ShiftLeadCycles));
-        QueueKey(code,fast);
-        inputQueue.Enqueue((shift,false,ShiftTailCycles));
+    void QueueShifted(int code)=>QueueWith(Keyboard.Codes["SHIFT"],code);
+    // The PC's Ctrl is no longer held down in the machine while it is held on the
+    // PC: with a key it goes into the queue around that key, the way SHIFT does.
+    // Held down, it reached the first key of a Ctrl+V paste, and stayed down
+    // after a Ctrl+letter that sent nothing.
+    /// <summary>modifier（SHIFT・CTRL）を押したまま code のキーを押す操作を待ち行列に入れる。</summary>
+    void QueueWith(int modifier,int code) {
+        inputQueue.Enqueue((modifier,true,ShiftLeadCycles));
+        QueueKey(code);
+        inputQueue.Enqueue((modifier,false,ShiftTailCycles));
     }
     /// <summary>前のキーの時間が過ぎていれば、待ち行列の次の操作を本体へ送る。</summary>
     /// <returns>送ったか</returns>
@@ -492,7 +540,7 @@ internal sealed class MainForm : Form
         surface.SetPressed(Keyboard.Matrix[key.Code/8][key.Code%8],key.Down);
         return true;
     }
-    // A keystroke costs the machine a 56000-cycle press/release pair, so it can take
+    // A keystroke costs the machine a 42000-cycle press/release pair, so it can take
     // about eighteen a second. Windows repeats a held key thirty-one times a second,
     // and queueing every one of those built a backlog that grew for as long as the
     // key was down: two seconds of a held key left 1.4 s of typing and clicking still
@@ -504,17 +552,14 @@ internal sealed class MainForm : Form
     /// <summary>キーを受け付けるか（Windows の自動リピートは、前のキーが終わるまで捨てる）。</summary>
     /// <param name="repeat">自動リピートか</param>
     bool AcceptKey(bool repeat)=>!repeat || inputQueue.Count==0;
-    /// <summary>PC のキーが押された：Enter・矢印・F キーなど文字にならないキーを本体のキーにする（文字は OnKeyPress）。</summary>
+    // The keys with no character (Enter, the arrows, F1...) arrive in
+    // ProcessCmdKey; here only the repeat of a character key is told apart, and
+    // Ctrl is taken without pressing anything (it goes with the next key).
+    /// <summary>PC のキーが押された：文字キーの自動リピートかを記録する（文字にならないキーは ProcessCmdKey、文字は OnKeyPress）。</summary>
     void OnKeyDown(object? sender,KeyEventArgs e) {
         if(e.Alt)return;
         charRepeats=!downKeys.Add(e.KeyCode);
-        if(Keyboard.Special.TryGetValue(e.KeyCode,out var name)) {
-            if(name=="CTRL") {int code=Keyboard.Codes[name];if(held.Add(code))core?.Key(code,true);}
-            else if(AcceptKey(charRepeats)) {
-                if(e.Shift)QueueShifted(Keyboard.Codes[name]);else QueueKey(Keyboard.Codes[name]);
-            }
-            e.Handled=true;e.SuppressKeyPress=true;
-        }
+        if(e.KeyCode==Keys.ControlKey){e.Handled=true;e.SuppressKeyPress=true;}
     }
     /// <summary>ショートカット（Ctrl+C・Ctrl+D・Ctrl+V）と、WinForms が先に取ってしまう矢印・Enter・Tab を処理する。</summary>
     protected override bool ProcessCmdKey(ref Message msg,Keys keyData) {
@@ -522,7 +567,7 @@ internal sealed class MainForm : Form
         if(keyData==(Keys.Control|Keys.D)){TryAction(ShowDebugger);return true;}
         if(keyData==(Keys.Control|Keys.V)){TryAction(()=>{
             if(!Clipboard.ContainsText(TextDataFormat.UnicodeText))throw new InvalidOperationException(L.T("クリップボードに文字列がありません。","The clipboard has no text."));
-            PasteText(Clipboard.GetText(TextDataFormat.UnicodeText));
+            Notify(PasteText(Clipboard.GetText(TextDataFormat.UnicodeText)));
         });return true;}
         // The arrows, Enter and Tab are dialog keys, so WinForms takes them here before
         // KeyDown ever runs. Only the press comes through: KeyUp still raises normally.
@@ -532,33 +577,37 @@ internal sealed class MainForm : Form
             // Enter and the function keys have no character, so the PC SHIFT is the
             // only way to reach their shifted meanings.
             if(AcceptKey(repeat)) {
-                if((keyData&Keys.Shift)!=0)QueueShifted(Keyboard.Codes[name]);else QueueKey(Keyboard.Codes[name]);
+                int code=Keyboard.Codes[name];
+                if((keyData&Keys.Control)!=0)QueueWith(Keyboard.Codes["CTRL"],code);
+                else if((keyData&Keys.Shift)!=0)QueueShifted(code);else QueueKey(code);
             }
             return true;
         }
         return base.ProcessCmdKey(ref msg,keyData);
     }
-    /// <summary>PC のキーが離された：押しっぱなしの CTRL を離す。</summary>
-    void OnKeyUp(object? sender,KeyEventArgs e) {
-        downKeys.Remove(e.KeyCode);
-        if(e.KeyCode==Keys.ControlKey) {int code=Keyboard.Codes["CTRL"];held.Remove(code);core?.Key(code,false);}
-    }
+    /// <summary>PC のキーが離された：自動リピートの判定から外す。</summary>
+    void OnKeyUp(object? sender,KeyEventArgs e)=>downKeys.Remove(e.KeyCode);
     /// <summary>PC で文字が入力された：対応する本体のキー（必要なら SHIFT 付き）を待ち行列に入れる。</summary>
     void OnKeyPress(object? sender,KeyPressEventArgs e) {
+        // Ctrl with a letter comes as a control character (Ctrl+A is 01h): the letter, with CTRL.
+        // Ctrl+英字は制御文字（Ctrl+A は 01h）で来るので、その英字を CTRL 付きで送る。
+        if(e.KeyChar is >= '\x01' and <= '\x1a' && (ModifierKeys&Keys.Control)!=0) {
+            if(AcceptKey(charRepeats) && Keyboard.Codes.TryGetValue(((char)('A'+e.KeyChar-1)).ToString(),out int letter))QueueWith(Keyboard.Codes["CTRL"],letter);
+            charRepeats=false;e.Handled=true;return;
+        }
         if(char.IsControl(e.KeyChar))return;
-        if(AcceptKey(charRepeats) && !QueueCharacter(e.KeyChar,false))
-            status.Text=L.T($"未対応のPC文字: {e.KeyChar}（画面のSHIFTとポケコンのキーで入力してください）",$"Unsupported PC character: {e.KeyChar} (use the on-screen SHIFT and pocket computer keys)");
+        if(AcceptKey(charRepeats) && !QueueCharacter(e.KeyChar))
+            Notify(L.T($"未対応のPC文字: {e.KeyChar}（画面のSHIFTとポケコンのキーで入力してください）",$"Unsupported PC character: {e.KeyChar} (use the on-screen SHIFT and pocket computer keys)"));
         // Consumed: a WM_CHAR that arrives without its WM_KEYDOWN is a fresh keystroke.
         charRepeats=false;e.Handled=true;
     }
     /// <summary>1文字を本体のキー操作に変えて待ち行列に入れる。</summary>
     /// <param name="character">文字</param>
-    /// <param name="fast">貼り付けからの入力か</param>
     /// <returns>対応するキーがあったか</returns>
-    bool QueueCharacter(char character,bool fast) {
+    bool QueueCharacter(char character) {
         string text=character==' '?"SPACE":char.ToUpperInvariant(character).ToString();
-        if(Keyboard.Codes.TryGetValue(text,out int code)){QueueKey(code,fast);return true;}
-        if(Keyboard.Shifted.TryGetValue(character,out string? baseKey)) {QueueShifted(Keyboard.Codes[baseKey],fast);return true;}
+        if(Keyboard.Codes.TryGetValue(text,out int code)){QueueKey(code);return true;}
+        if(Keyboard.Shifted.TryGetValue(character,out string? baseKey)) {QueueShifted(Keyboard.Codes[baseKey]);return true;}
         return false;
     }
     /// <summary>文字列をキー入力として送る（改行は ENTER、タブは空白4つ、対応しない文字は省く）。</summary>
@@ -570,34 +619,55 @@ internal sealed class MainForm : Form
         if(value.Length>4096)return L.T("貼り付けは一度に4096文字までです。","Paste up to 4096 characters at a time.");
         value=value.Replace("\r\n","\n").Replace('\r','\n');int queued=0,skipped=0;
         foreach(char character in value) {
-            if(character=='\n'){QueueKey(Keyboard.Codes["ENTER"],true);queued++;continue;}
-            if(character=='\t'){for(int i=0;i<4;i++)QueueCharacter(' ',true);queued+=4;continue;}
-            if(QueueCharacter(character,true))queued++;else skipped++;
+            if(character=='\n'){QueueKey(Keyboard.Codes["ENTER"]);queued++;continue;}
+            if(character=='\t'){for(int i=0;i<4;i++)QueueCharacter(' ');queued+=4;continue;}
+            if(QueueCharacter(character))queued++;else skipped++;
         }
         string message=L.T($"{queued}文字をキー入力へ送信しました。",$"Sent {queued} characters as key input.");
         if(skipped>0)message+=L.T($" 未対応の{skipped}文字は省略しました。",$" Skipped {skipped} unsupported characters.");
-        status.Text=message;return message;
+        return message;
     }
-    /// <summary>すべてのキーを離し、待ち行列を空にする。</summary>
-    void ReleaseKeys() {
-        core?.Release();held.Clear();inputQueue.Clear();inputWait=0;
+    // A paste can take minutes to type. Moving to another window or using the
+    // toolbar lets go of the PC's keys only; what stops the machine (a ROM
+    // switch, a pause, a reset) drops the rest too, and says so.
+    /// <summary>キーを離す。keepQueue なら PC のキーの記録だけを消し、待ち行列（貼り付けの残り）は続ける。
+    /// そうでなければ本体のキーもすべて離して待ち行列を空にし、残っていれば知らせる。</summary>
+    void ReleaseKeys(bool keepQueue=false) {
         downKeys.Clear();charRepeats=false;
+        if(keepQueue)return;
+        if(inputQueue.Count>0)Notify(L.T("入力の残り（貼り付けの途中など）を取り消しました。","The keys still to be typed (a paste) were dropped."));
+        core?.Release();held.Clear();inputQueue.Clear();inputWait=0;
         surface.ReleaseKeys();
     }
+    // A message shown in place of the status line for a few seconds; the line is
+    // rebuilt every frame, which wiped one set straight on it in about 16 ms.
+    /// <summary>ステータスバーに5秒間出すメッセージ。</summary>
+    string? notice;
+    double noticeUntil;
+    /// <summary>メッセージをステータスバーに5秒間出す。</summary>
+    void Notify(string message){notice=message;noticeUntil=clock.Elapsed.TotalSeconds+5;statusKey=default;UpdateStatus();}
+    /// <summary>速度の倍率（Speeds の文字から求める）。</summary>
+    static readonly double[] Rates=Speeds.Select(s=>double.Parse(s.TrimEnd('x'),System.Globalization.CultureInfo.InvariantCulture)).ToArray();
     /// <summary>
     /// タイマーごとの処理：経過時間と速度の倍率に応じて CPU を進め、音声を出し、
-    /// 5秒ごと（と電源 OFF になったとき）に自動保存し、1回おきに画面を更新する。
+    /// 5秒ごと（と電源 OFF になったとき）に自動保存し、1回おきに画面を更新する（変わった所だけ描き直す）。
     /// </summary>
     void Tick() {
         double now=clock.Elapsed.TotalSeconds,elapsed=Math.Clamp(now-previous,0,0.1);previous=now;
         if(core is null || paused)return;
         try {
-            double rate=new[]{0.5,1,2,4}[speedIndex];
-            int cycles=(int)(elapsed*1024000*rate);
+            double rate=Rates[speedIndex];
+            int cycles=(int)(elapsed*CpuHz*rate);
             RunCycles(cycles);
             int count=Native.e500_audio(core.Handle,soundBuffer,soundBuffer.Length);audio?.Submit(soundBuffer,count);
             bool off=(Native.e500_status(core.Handle)&1)!=0;
-            if(!testing && (now-lastSaved>=5 || (off&&!lastOff))) {SavePersistent();lastSaved=now;}
+            // A round that finds the last write still going is owed, and tried again on
+            // the next tick, so the save at power-off is not lost to a slow one.
+            // 前の書き込みが終わっておらず始められなかった回は、次のタイマーですぐ試す（電源 OFF の保存を失わないため）。
+            if(!testing && (saveOwed || now-lastSaved>=5 || (off&&!lastOff))) {
+                saveOwed=!AutoSave();
+                if(!saveOwed)lastSaved=now;
+            }
             bool powerChanged=off!=lastOff;lastOff=off;
             if((++tick&1)==0 || powerChanged)UpdateDisplay();
         } catch(Exception ex) {paused=true;pause.Text=L.T("再開","Resume");ReleaseKeys();MessageBox.Show(ex.Message,L.T("実行停止","Execution stopped"));}
@@ -615,10 +685,28 @@ internal sealed class MainForm : Form
     /// <summary>LCD を読み直して絵を更新し、ステータスバーに状態を表示する。</summary>
     void UpdateDisplay() {
         if(core is null)return;
-        core.Refresh();surface.Invalidate();
-        int s=Native.e500_status(core.Handle);
+        core.Refresh();surface.UpdateLcd();
+        UpdateStatus();
+    }
+    // What the status line shows, compared each frame; the text, ten strings
+    // and an interpolation, is built only when something in it has changed.
+    /// <summary>ステータスバーに出す内容（変わったときだけ文字を作り直すため）。</summary>
+    readonly record struct StatusKey(Core Core,int Status,bool Paused,int Disk,bool Printer,string? Audio,bool Muted,Exception? Saving,string? Notice,int InternalKB,string? Card);
+    StatusKey statusKey;
+    /// <summary>ステータスバーを、表示する内容が変わったときだけ書き直す（メッセージがあれば5秒間はそれを出す）。</summary>
+    void UpdateStatus() {
+        if(core is null)return;
+        if(notice is not null && clock.Elapsed.TotalSeconds>=noticeUntil)notice=null;
+        var key=new StatusKey(core,Native.e500_status(core.Handle),paused,Native.e500_disk_status(core.Handle),core.PrinterConnected,audio?.Error,settings.Muted,writer.Failure,notice,core.InternalKB,core.CardPath);
+        if(key==statusKey)return;
+        statusKey=key;
+        if(notice is not null){status.Text=notice;return;}
+        int s=key.Status;
         string card=core.HasCard?L.T($"RAMカード {core.CardKB}KB ({core.CardName})",$"RAM card {core.CardKB}KB ({core.CardName})"):L.T("RAMカード なし","RAM card: none");
-        status.Text=$"{((s&1)!=0?L.T("電源OFF / EscでON","Power OFF / Esc turns ON"):paused?L.T("一時停止","Pause"):L.T("実行中","Running"))}   ROM Ver.{core.RomVersion} / {core.RomKB}KB ({(core.IsE650Family?"E650/U6000":"E500")})   {L.T("内蔵","Internal")} {core.InternalKB}KB / {card}   CE-140F {DiskStatus()}   CE-126P {(core.PrinterConnected?L.T("接続","Connected"):L.T("未接続","Not connected"))}   {audio?.Error ?? (settings.Muted?L.T("消音","Muted"):L.T("音声ON","Sound ON"))}";
+        string text=$"{((s&1)!=0?L.T("電源OFF / EscでON","Power OFF / Esc turns ON"):paused?L.T("一時停止","Pause"):L.T("実行中","Running"))}   ROM Ver.{core.RomVersion} / {core.RomKB}KB ({(core.IsE650Family?"E650/U6000":"E500")})   {L.T("内蔵","Internal")} {core.InternalKB}KB / {card}   CE-140F {DiskStatus()}   CE-126P {(core.PrinterConnected?L.T("接続","Connected"):L.T("未接続","Not connected"))}   {audio?.Error ?? (settings.Muted?L.T("消音","Muted"):L.T("音声ON","Sound ON"))}";
+        // A failed autosave stays on show until a later one goes through.
+        if(writer.Failure is Exception failed)text+=L.T("   自動保存できません: ","   Autosave failed: ")+failed.Message;
+        status.Text=text;
     }
     /// <summary>ステータスバーに出す CE-140F の状態（未接続・エラー・通信中・読取専用・接続）。</summary>
     string DiskStatus() {
@@ -630,14 +718,25 @@ internal sealed class MainForm : Form
     /// <param name="restore">保存してある RAM と状態を復元するか</param>
     void SwitchRom(string path,bool restore) {
         var next=new Core(path,settings.InternalKB,settings.CardPath);
-        try {if(core is not null) {ReleaseKeys();SavePersistent();}}
+        // The saved RAM goes into the new machine before it takes over. A file that
+        // cannot be read (held by a sync client, the wrong size) then leaves the
+        // machine that was running - or none - instead of a blank one, which the
+        // next autosave would have written over the user's RAM file.
+        // 保存した RAM は、差し替える前に新しいコアへ読む。読めなければ、それまでのコア（なければなし）のまま
+        // （空のコアにすると、次の自動保存が利用者の RAM ファイルを上書きしてしまう）。
+        try {
+            if(core is not null) {ReleaseKeys();SavePersistent();}
+            if(restore && !testing)next.MemoryFiles(MemoryDirectory(next),true);
+        }
         catch {next.Dispose();throw;}
         core?.Dispose();core=next;surface.Core=core;audio?.Flush();
         core.PrinterConnected=settings.PrinterConnected;core.Paper=paper;
         if(settings.InternalKB!=core.InternalKB) {
             settings=settings with{InternalKB=core.InternalKB};
-            if(!testing)settings.Save(Path.Combine(root,"state","settings.json"));
+            SaveSettings();
         }
+        // An open settings window offers the RAM sizes of the machine now running.
+        if(windows.TryGetValue("hardware",out var open) && open is HardwareDialog hardware && !hardware.IsDisposed)hardware.SetRom(core.RomKB,settings.InternalKB);
         paused=false;pause.Text=PauseCommand;
         // The drive goes in before the snapshot, which may hold its place in a
         // device code; mounted afterwards it would start that code over. A drive
@@ -651,7 +750,6 @@ internal sealed class MainForm : Form
         Exception? mountError=testing?null:TryMountConfiguredDisk(settings);
         try {
             if(restore && !testing) {
-                core.MemoryFiles(MemoryDirectory(),true);
                 // 自動保存の状態は、RAM のファイル以上に新しいときだけ復元する。
                 string snapshot=AutoSavePath();
                 if(!File.Exists(snapshot)&&settings.InternalKB==32&&core.CardKB==0)snapshot=Path.Combine(root,"state",core.Hash+".e500state");
@@ -709,7 +807,7 @@ internal sealed class MainForm : Form
     void ConfigureHardware() {
         ShowWindow("hardware",()=>{
             Directory.CreateDirectory(CardFolder());
-            var dialog=new HardwareDialog(settings,core?.RomKB??256,CardFolder());
+            var dialog=new HardwareDialog(settings,core?.RomKB??256,CardFolder()){InUse=()=>core?.CardPath};
             dialog.Apply=edit=>{
                 try {ReleaseKeys();ApplyHardware(edit(settings));return true;}
                 catch(Exception ex) {MessageBox.Show(ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Error);return false;}
@@ -739,16 +837,24 @@ internal sealed class MainForm : Form
         if(memory&&core is not null)using(var validation=new Core(core.RomPath,next.InternalKB,next.CardPath))MountConfiguredDisk(validation,next);
         if(!memory)SavePersistent();
         if(core is not null&&!memory)MountConfiguredDisk(core,next);
-        bool language=next.Language!=settings.Language&&!string.IsNullOrEmpty(settings.Language);
-        // Tests never write the user's settings file, whichever way the apply goes.
-        settings=next;if(!testing)settings.Save(Path.Combine(root,"state","settings.json"));
+        bool language=next.Language!=settings.Language;
+        var before=settings;settings=next;
         // Every window builds its strings when it opens, so a new language takes
-        // effect by starting over; the close path saves the machine first.
-        if(language&&!testing){Application.Restart();return;}
+        // effect by starting over; the close path saves the machine first, and the
+        // new start opens with the new memory layout too.
+        // Tests never write the user's settings file, whichever way the apply goes.
+        if(language&&!testing){SaveSettings();Application.Restart();return;}
+        // The settings are kept only once a new layout is running: a switch that
+        // fails leaves the old machine, and the old settings with it.
+        // 設定は、新しい RAM の構成で動き出してから保存する（切り替えに失敗したら、設定も元のまま）。
+        if(memory&&core is not null) {
+            try {SwitchRom(core.RomPath,true);}
+            catch {settings=before;throw;}
+        }
+        SaveSettings();
         SetAppearance(settings.Appearance);
         surface.SetLcd(settings.LcdDotLines,settings.LcdContrast);
         if(audio is not null){audio.Muted=settings.Muted;audio.Volume=settings.Volume/100f;}
-        if(memory&&core is not null)SwitchRom(core.RomPath,true);
         previous=clock.Elapsed.TotalSeconds;UpdateDisplay();
     }
     /// <summary>ウィンドウのタイトル：外観の機種名と、このアプリの版。</summary>
@@ -763,7 +869,10 @@ internal sealed class MainForm : Form
         if(view!=WindowView.Normal){ClientSize=ViewSize(zoom);surface.Arrange();RememberView();}
     }
     /// <summary>CE-126P のウィンドウを開く。「接続」の切り替えは設定にも保存する。</summary>
-    void ShowPrinter()=>ShowWindow("printer",()=>new PrinterDialog(paper,()=>core?.Font??[],()=>settings.PrinterConnected,on=>{
+    void ShowPrinter()=>ShowWindow("printer",()=>new PrinterDialog(paper,()=>core?.Font??[],()=>settings.PrinterConnected,printOut,to=>{
+        // The printer chosen is kept with the settings, for the next start.
+        printOut.Select(to);settings=settings with{PrintTo=to};SaveSettings();
+    },on=>{
         // Kept with the settings, so the printer is plugged in or not as it was
         // left. The machine follows the checkbox first; a settings file that cannot
         // be written (locked by a sync, say) is reported, not thrown out of the click.
@@ -795,7 +904,16 @@ internal sealed class MainForm : Form
         if(core is null)return;ReleaseKeys();
         if(!core.CanLoad)throw new InvalidOperationException(Core.CannotLoad);
         using var d=new OpenFileDialog{Filter=L.T("PC-E500シリーズ state|*.e500state","PC-E500 series state|*.e500state")};
-        if(d.ShowDialog(this)==DialogResult.OK) {core.Load(d.FileName);settings=settings with{InternalKB=core.InternalKB};audio?.Flush();UpdateDisplay();}
+        if(d.ShowDialog(this)==DialogResult.OK) {
+            // What the machine holds now goes to its RAM file first: the state
+            // loaded may bring another RAM size, and these changes belong to this one.
+            // 読み込む前に今の RAM を保存する（読み込む状態は別の容量のことがあり、今の変更は今の容量のもの）。
+            SavePersistent();
+            core.Load(d.FileName);
+            // The snapshot brings its own internal RAM size; kept, so the next start opens with it.
+            if(settings.InternalKB!=core.InternalKB){settings=settings with{InternalKB=core.InternalKB};SaveSettings();}
+            audio?.Flush();UpdateDisplay();
+        }
     }
     /// <summary>RESET 穴：RAM を保存してから CPU を再起動する（RAM は消さない）。</summary>
     void ResetPin() {
@@ -826,7 +944,7 @@ internal sealed class MainForm : Form
         Native.e500_reset(core.Handle,0);
         core.Key(on,true);core.Run(2048000);core.Key(on,false);
         audio?.Flush();core.Run(1024000);UpdateDisplay();
-        status.Text=L.T("オールリセット: 画面のY／Nで、全データを消去するか選んでください。","All reset: answer Y/N on the screen to choose whether to erase all data.");
+        Notify(L.T("オールリセット: 画面のY／Nで、全データを消去するか選んでください。","All reset: answer Y/N on the screen to choose whether to erase all data."));
     }
     // The HTML manual beside the executable, in the UI language; the summary
     // box stands in when it is missing.
@@ -840,10 +958,17 @@ internal sealed class MainForm : Form
     void HelpSummary() => MessageBox.Show(L.En?HelpEnglish:"初回：PF1 → BASIC（PCのF7）\nRUN表示：1+2 → Enter、BEEP 1 → Enter\nプログラム：BASICでPROに切替 → 10 PRINT 123 → Enter\nBASICでRUNに戻す → RUN → Enter\n\n文字入出力：LCD文字の範囲コピー／クリップボードからキー入力\nCtrl+C：文字入出力を開く / Ctrl+V：直接貼り付け\nCtrl+D：デバッグ（CPUレジスタ、内部RAM、メモリの表示・書換え、BINの読み書き）\nCE-140F：SAVE \"X:TEST.BAS\" / LOAD \"X:TEST.BAS\"\n保存先・書込み禁止は「設定」で変更できます。\n内蔵RAMは容量ごとに内容を保存し、OFFやアプリ終了でも保持します。\nRAMカードは「設定」でイメージファイルを作成・装着・取り外しします。内容はそのファイルへ書き込みます。\nE650/U6000の384KB ROMでは内蔵RAMは実機標準の64KB、増設改造相当の128KB・256KBから選べます。\nRESET穴はCPUを再起動し、内蔵RAMとカードを保持します。\n「オールリセット」は実機のON＋RESETと同じで、ROMが「スベテノ データヲ ショウキョ シマスカ?」とY／Nで聞いてきます。\n\nSHIFT / CTRLをクリックすると次のキーまで保持します。\nF8は2ndF、EscはON/BRKです。\n詳細はEmulatorフォルダのMANUAL.mdを参照してください。", L.T($"使い方 / PC-E500シリーズ v{UpdateCheck.Current}",$"Help / PC-E500 series v{UpdateCheck.Current}"));
     const string HelpEnglish="First run: PF1 → BASIC (F7 on the PC)\nRUN mode: 1+2 → Enter, BEEP 1 → Enter\nProgram: BASIC switches to PRO → 10 PRINT 123 → Enter\nBASIC back to RUN → RUN → Enter\n\nText I/O: copy LCD text / type from the clipboard\nCtrl+C: open Text I/O / Ctrl+V: paste directly\nCtrl+D: Debug (registers, internal RAM, memory view and editing, BIN load/save)\nCE-140F: SAVE \"X:TEST.BAS\" / LOAD \"X:TEST.BAS\"\nFolder and write protection are in Settings.\nInternal RAM is kept per capacity and survives OFF and exit.\nRAM cards are image files created, attached and detached in Settings; contents are written to that file.\nE650/U6000 384KB ROMs offer 64KB (stock) or 128KB/256KB (expansion mod) internal RAM.\nThe RESET hole restarts the CPU and keeps internal RAM and the card.\nAll Reset is the real ON+RESET: the ROM asks whether to erase all data (Y/N).\n\nClicking SHIFT / CTRL holds it for the next key.\nF8 is 2ndF, Esc is ON/BRK.\nSee MANUAL_en.md in the Emulator folder for details.";
     /// <summary>キーを離してから action を実行し、例外はメッセージで示す。</summary>
-    void TryAction(Action action) {ReleaseKeys();try {action();}catch(Exception ex) {MessageBox.Show(ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Error);}}
+    // A test run shows no dialog: hidden and waited on by build.ps1 and
+    // test.ps1, one would hold the build up for ever. The error is thrown instead.
+    // テストではダイアログを出さず、例外にする（隠したウィンドウでダイアログを待ち続けないように）。
+    void TryAction(Action action) {
+        ReleaseKeys(true);
+        try {action();}
+        catch(Exception ex) {if(testing)throw;MessageBox.Show(ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
     // 以下は自動テスト（SmokeTest・ManualShots）用の入口。
     internal Core TestCore=>core??throw new InvalidOperationException("ROM not loaded");
-    internal string TestRoot=>root;
+    internal string TestRoot=>Path.TrimEndingDirectorySeparator(root);
     internal void TestRefresh()=>UpdateDisplay();
     internal void TestDotLines(bool show)=>SetLcd(show,surface.Contrast);
     internal WindowView TestView=>view;
@@ -883,6 +1008,7 @@ internal sealed class MainForm : Form
     internal void TestRunCycles(int cycles)=>RunCycles(cycles);
     internal PocketSurface TestSurface=>surface;
     internal PrinterPaper TestPaper=>paper;
+    internal PrintOutput TestPrintOut=>printOut;
     internal bool TestPrinterSetting=>settings.PrinterConnected;
     internal void TestRepeat(Keys key,char ch){OnKeyDown(this,new KeyEventArgs(key));OnKeyPress(this,new KeyPressEventArgs(ch));}
     internal void TestRepeatKey(Keys key){Message m=new();ProcessCmdKey(ref m,key);}

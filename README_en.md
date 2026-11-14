@@ -55,7 +55,7 @@ Double-click the case away from the keys to step through normal → case only �
 ### Peripherals: CE-140F and CE-126P
 
 - **CE-140F (floppy)**: a PC folder serves as drive X:. `SAVE "X:..."`, `LOAD`, `OPEN`, `FILES` and the rest run over the same 11-pin protocol as the real drive. To exchange programs with a real machine, use the normal form (no `,A`): a bug of the hardware CE-140F emulator ends a text LOAD on the real machine with an error ([details](MANUAL_en.md#exchanging-files-with-a-real-machine)).
-- **CE-126P (printer)**: `LPRINT` and `LLIST` print 24 columns; save the paper as text or PNG.
+- **CE-126P (printer)**: `LPRINT` and `LLIST` print 24 columns; save the paper as text or PNG, or print it on a 58 mm USB thermal printer or any Windows printer.
 
 | | |
 |---|---|
@@ -84,19 +84,18 @@ Watch the CPU registers, the internal RAM and memory, and edit them in place. Lo
 
 ## Getting started
 
-1. Get the installer (`-setup.exe`) or the zip from [Releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases). It is for Windows x64 and needs no separate .NET install.
+1. Get the installer (`-setup.exe`) or the zip from [Releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases). It is for Windows x64 and needs no separate .NET install. From the release after 0.0.4 on, the release notes list each file’s SHA-256: compare it with what PowerShell’s `Get-FileHash <file>` prints to check a download.
 2. Put the ROM dumped from your machine in the data folder's `rom`. "Open the data folder" in the right-click menu opens it.
 3. Start it, press **PF1** (F1 on the PC) to initialise memory, then **BASIC** (F7).
 
-## What is new in 0.0.4 (since 0.0.3)
+## What is new in 0.0.5 (since 0.0.4)
 
-- **CE-126P printer**: `LPRINT` and `LLIST`, with paper to view and save.
-- **Right-click menu**: the toolbar's commands from any view.
-- **Window views**: a double-click switches to case only or screen only; the view is kept.
-- **Real LCD and contrast**, in Display.
-- **New-version notice** and an **installer**.
-- **Models**: the PC-E550, PC-1480U, PC-1490U and PC-1490UII join the list.
-- The LCD legends and the lettering on the case follow the real machine.
+- **Printing on paper**: the CE-126P's output can go to a USB thermal printer (58 mm, ESC/POS) or a Windows printer.
+- **Lighter**: autosave writes off the screen's thread, waiting for a key or switched off costs less, and drawing is lighter.
+- **The PC's Ctrl key**: typing with Ctrl held gives the machine's CTRL keys.
+- **Checking a download**: the release notes list SHA-256 sums.
+- Many fixes, among them the CE-140F, RAM files and the binary editor.
+- A state file saved by this version does not load in 0.0.4 or earlier.
 
 The full list is in [CHANGELOG.md](CHANGELOG.md) (Japanese).
 

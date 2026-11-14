@@ -64,7 +64,11 @@ void Machine::scanKeys() {
 // sub-timer period and auto-repeat fires every four. Against a recording of a
 // real PC-E500 that is a 13.5 ms click repeating every 62.5 ms; at the 500 Hz
 // PockEmul uses they collapse to a 2 ms tick repeating every 16 ms.
-static constexpr uint64_t MainTimerCycles=512000,SubTimerCycles=16000;
+static constexpr uint64_t MainTimerCycles=CpuHz/2,SubTimerCycles=CpuHz/64;
+// Snapshots taken while the core ran at 1.024 MHz counted the timers up to these;
+// they still load, with the counts folded into the periods above.
+// 1.024 MHz で動いていたころの状態は、タイマーをこの値まで数えていた（読み込みでは今の周期に畳む）。
+static constexpr uint64_t OldMainTimerCycles=512000,OldSubTimerCycles=16000;
 // 命令にかかったサイクル数を加え、2つのタイマーの割り込み要因を立て、周辺機器を動かす。
 void Csc62015::AddState(BYTE n) {
     cycles+=n;ticks+=n;ticks2+=n;
@@ -83,15 +87,14 @@ void Machine::peripherals(BYTE n) {
     // side to side and detune the occasional beep into 5/7-sample half periods.
     for(BYTE i=0;i<n;i++) {
         tonePhase++;samplePhase+=48000;
-        if(samplePhase>=1024000) {
-            samplePhase-=1024000;
+        if(samplePhase>=CpuHz) {
+            samplePhase-=CpuHz;
             if(audio.size()<48000)audio.push_back(cpu.off?0:(toneLevel(mode)?6000:-6000));
         }
     }
     // 11ピンバス：XOUT（音の出力と兼用）、BUSY（EOL のビット6）、データ（EOH）を周辺機器へ渡し、
     // ACK（EIL のビット7）とディスクのデータ線（EIH の上位4ビット）を返す。
     auto bus=busLevels(mode);xout=bus.xout;bool busy=bus.busy;
-    disk.portL=cpu.imem[IMEM_EOL];disk.portH=cpu.imem[IMEM_EOH];
     disk.tick(cpu.cycles,xout,busy,cpu.imem[IMEM_EOH]&15);
     printer.tick(cpu.cycles,xout,busy,(cpu.imem[IMEM_EOH]&4)!=0);
     // ACK is wired-OR: any device holding it high pulls the line high.
@@ -103,12 +106,33 @@ void Csc62015::Chk_imemAdr_Read(BYTE d,BYTE len) {
     for(int i=0;i<len;i++) if(BYTE(d+i)==IMEM_KI) pPC->scanKeys();
 }
 // HALT・電源 OFF 中は時間だけを進める。そうでなければ PC の命令を1つ実行する。
+// A prefix only marks itself (tools/prepare_core.py); the instruction after it
+// runs on the next step, and after that the addressing goes back to normal.
+// プリフィクスは印を付けるだけ。次の step で次の命令を実行し、そのあとアドレッシングを通常に戻す。
 void Csc62015::step() {
     if(halt || off) {AddState(3);return;}
+    bool after=prefixed;prefixed=false;
     auto pc=reg.x.p;reg.r.pc++;OpExec(pPC->Get_PC(pc));
+    if(after && !prefixed){pre_1=1;pre_2=1;}
 }
-void Machine::step() {
-    scanKeys();cpu.step();scanKeys();
+// Halted or off, the machine only counts time; it did so 3 cycles a step, the
+// whole of a step's work for each - most of what idling at a prompt cost. Time
+// now goes on to the next timer expiry (which is what wakes it), at most 64
+// cycles at a time so the devices still follow XOUT a tone at a time.
+// HALT・電源 OFF の間は、次のタイマーの時刻まで（一度に 64 サイクルまで）まとめて進める。
+static constexpr uint64_t IdleChunk=64;
+void Machine::step(uint64_t budget) {
+    if((cpu.halt || cpu.off) && !cpu.prefixed) {
+        uint64_t n=std::min({budget,MainTimerCycles-cpu.ticks,SubTimerCycles-cpu.ticks2,IdleChunk});
+        cpu.AddState(BYTE(std::max<uint64_t>(n,1)));
+    } else cpu.step();
+    // Keys change only between runs (e500_key) and the strobe only by an
+    // instruction, so one scan after the step sees both; reading KI scans too.
+    // キーが変わるのは実行の合間、行の選択が変わるのは命令だけなので、走査は命令のあとの1回でよい。
+    scanKeys();
+    // An instruction and its prefix are one: no interrupt between them.
+    // プリフィクスと次の命令は1つの命令：その間には割り込まない。
+    if(cpu.prefixed)return;
     // 割り込み要因（ISR）があれば HALT を解き、IMR で許可されていれば割り込む：
     // PC・F・IMR をスタックに積み、IMR の全体許可を落として割り込みベクタへ飛ぶ。
     if(cpu.off) return;
@@ -118,6 +142,8 @@ void Machine::step() {
         cpu.reg.x.s=(cpu.reg.x.s-5)&0xfffff;
         Set_20(cpu.reg.x.s+2,cpu.reg.x.p);Set_8(cpu.reg.x.s+1,cpu.reg.x.f);Set_8(cpu.reg.x.s,mask);
         cpu.imem[IMEM_IMR]&=0x7f;cpu.reg.x.p=Get_20(VECT_IR);
+        // The RETI at its end counts the level down, as after IR.
+        cpu.CallSubLevel++;
     }
 }
 // LCD のドット：左右の端（0-63・176-239）はコントローラ2、中央はコントローラ1。
@@ -150,6 +176,9 @@ API Machine* e500_create(const BYTE *rom,int size) {
         m->romKB=384;
         m->internalKB=64;
     }
+    // FNV-1a of the image: a snapshot says which ROM it was taken with.
+    uint32_t sum=2166136261u;for(int i=0;i<size;i++)sum=(sum^rom[i])*16777619u;
+    m->romSum=sum;
     m->cpu.Reset();return m;
 }
 // RAM の容量として正しいか（optional なら 0 = なしも可）。
@@ -208,16 +237,18 @@ API void e500_destroy(Machine *m) {delete m;}
 API int e500_run(Machine *m,int cycles) {
     if(!m || cycles<0 || cycles>10240000)return -1;
     auto target=m->cpu.cycles+cycles;
-    while(m->cpu.cycles<target && !m->cpu.fault)m->step();
+    m->scanKeys();
+    while(m->cpu.cycles<target && !m->cpu.fault)m->step(target-m->cpu.cycles);
     return m->cpu.fault?1:0;
 }
 // キーを押す（down=1）・離す（down=0）。row は行（0〜11）、bit はビット（0〜7）。
 API void e500_key(Machine *m,int row,int bit,int down) {
     if(!m || row<0 || row>=12 || bit<0 || bit>=8)return;
     if(down)m->keys[row]|=1<<bit;else m->keys[row]&=~(1<<bit);
+    m->scanKeys();
 }
 // すべてのキーを離す。
-API void e500_release_keys(Machine *m) {if(m)m->keys.fill(0);}
+API void e500_release_keys(Machine *m) {if(m){m->keys.fill(0);m->scanKeys();}}
 // LCD の 240×32 ドットを取り出す。
 API void e500_pixels(Machine *m,BYTE *out) {if(m && out)m->pixels(out);}
 // CPU のレジスタの値（id は REGNAME）。
@@ -227,13 +258,27 @@ API int e500_status(Machine *m) {return m?(m->cpu.off?1:0)|(m->cpu.halt?2:0)|(m-
 // LCD の表示シンボル（BUSY・RUN・DEG など）の点灯ビット。コントローラ1 の第63桁に並んでいる。
 API int e500_symbols(Machine *m,int index) {
     if(!m || index<0 || index>7 || !m->lcd[0].on)return 0;
-    return m->lcd[0].ram[((index+m->lcd[1].start/8)&7)*64+63];
+    // The legends are in controller 1, so its own start line shifts their page.
+    return m->lcd[0].ram[((index+m->lcd[0].start/8)&7)*64+63];
 }
 // デバッガのウォッチ：アドレスを指定し、読まれた回数を数える。
 API void e500_watch(Machine *m,int address) {if(m){m->watchAddr=address;m->watchHits=0;}}
 API int e500_watch_hits(Machine *m) {return m?(int)m->watchHits:0;}
-// バス経由で1バイト読む（LCD の I/O も反応する）。
-API int e500_peek(Machine *m,int address) {return m?m->Get_8(address):0;}
+// A look at the bus that changes nothing: the LCD answers its status, a data
+// port shows the byte at the column without moving it, a write port reads 0,
+// and the debugger's watch does not count the look as a read.
+// バスの1バイトを、何も変えずに読む（LCD は状態を返し、データの読み出しは桁を進めず、書き込み用のポートは 0。ウォッチにも数えない）。
+API int e500_peek(Machine *m,int address) {
+    if(!m)return 0;
+    UINT32 a=m->mirror(UINT32(address)&0xfffff);
+    if(a<0x10000 && (a&0x6000)==0x2000) {
+        int port=a&15;auto &l=m->lcd[port==5||port==7?1:0];
+        if(port==5||port==9)return l.on?0:0x20;
+        if(port==7||port==11)return l.ram[l.page*64+((l.column+63)&63)];
+        return 0;
+    }
+    return m->mem[a];
+}
 // Debugger reads. Get_8 answers the LCD controller inside 2000-3FFF, which
 // advances its column counter, so a viewer has to read the bus behind it.
 // デバッガの読み出し：LCD の I/O に触れずに、メモリの中身をそのまま length バイト読む。
@@ -248,7 +293,10 @@ API int e500_dump(Machine *m,int address,BYTE *out,int length) {
 // デバッガの書き込み：範囲がすべて RAM のときだけ書く（一部でも RAM 以外なら何も書かずに 0）。
 API int e500_write(Machine *m,int address,const BYTE *data,int length) {
     if(!m || !data || address<0 || length<=0 || address>0xfffff || length>0x100000-address)return 0;
-    for(int i=0;i<length;i++)if(!m->isRam(m->mirror(address+i)))return 0;
+    // Each byte must land on its own: past the end of the RAM it would wrap round
+    // the mirror and overwrite the start of the same write.
+    // 1バイトずつ別の場所に入ること（RAM の大きさを超えると、ミラーで折り返して自分の先頭を上書きする）。
+    for(int i=0;i<length;i++)if(!m->isRam(m->mirror(address+i)) || m->mirror(address+i)!=m->mirror(address)+UINT32(i))return 0;
     for(int i=0;i<length;i++)m->mem[m->mirror(address+i)]=data[i];
     return 1;
 }
@@ -259,12 +307,6 @@ API int e500_imem(Machine *m,BYTE *out) {
 }
 // 起動からの CPU のサイクル数。
 API uint64_t e500_cycles(Machine *m) {return m?m->cpu.cycles:0;}
-// 32KB の内蔵 RAM（B8000-BFFFF）の読み出しと書き込み（書き込むと CPU をリセット）。古い形式との互換用。
-API void e500_ram(Machine *m,BYTE *out) {if(m && out)std::copy_n(m->mem.begin()+0xb8000,32768,out);}
-API int e500_load_ram(Machine *m,const BYTE *data,int size) {
-    if(!m || !data || size!=32768)return 0;
-    std::copy_n(data,size,m->mem.begin()+0xb8000);m->cpu.Reset();return 1;
-}
 
 // ---- 状態保存（スナップショット） ----
 // 固定長のバイナリ。形式は先頭8バイトの magic（E500ST01・02・04）で区別する。
@@ -296,8 +338,16 @@ struct Snapshot:SnapshotV2 {
     Ce126p::State printer;
     Ce140f::CodeState disk;
 };
+// v5 says which ROM it was taken with, so the native load itself refuses
+// another model's or another ROM's machine, and keeps a prefix whose
+// instruction has yet to run (a prefix no longer runs it within its own step).
+// 形式5：形式4 に、ROM（容量とチェックサム）と、プリフィクスの途中かを加えたもの。
+struct SnapshotV5:Snapshot {
+    uint32_t romKB,romSum;
+    BYTE prefixed,reserved[7];
+};
 // 今の形式のスナップショットの大きさ（バイト）。
-API int e500_state_size() {return sizeof(Snapshot);}
+API int e500_state_size() {return sizeof(SnapshotV5);}
 // The card capacity a snapshot was taken with, read here so that the desktop
 // knows nothing of the layouts: -1 for data in no layout this build reads.
 // 状態のデータに記録された RAM カードの容量（KB、なしは 0）。知らない形式なら -1。
@@ -305,10 +355,21 @@ API int e500_state_size() {return sizeof(Snapshot);}
 API int e500_state_card(const BYTE *data,int size) {
     if(!data)return -1;
     if(size==int(sizeof(LegacySnapshot)))return memcmp(data,"E500ST01",8)?-1:0;
-    const char *magic=size==int(sizeof(Snapshot))?"E500ST04":size==int(sizeof(SnapshotV2))?"E500ST02":nullptr;
+    const char *magic=size==int(sizeof(SnapshotV5))?"E500ST05":size==int(sizeof(Snapshot))?"E500ST04":size==int(sizeof(SnapshotV2))?"E500ST02":nullptr;
     if(!magic || memcmp(data,magic,8))return -1;
     uint32_t card;memcpy(&card,data+offsetof(SnapshotV2,cardKB),sizeof(card));
     return validCapacity(int(card),true)?int(card):-1;
+}
+// Whether two current snapshots hold the same machine, apart from the time it
+// has run (the cycle count and the timers' progress): a machine left off, or
+// halted with nothing changing, need not be written again.
+// 2つの状態が、動いた時間（サイクル数とタイマーの経過）のほかは同じか。同じなら書き直さなくてよい。
+API int e500_state_same(const BYTE *a,const BYTE *b,int size) {
+    if(!a || !b || size!=int(sizeof(SnapshotV5)))return 0;
+    auto x=std::make_unique<SnapshotV5>(),y=std::make_unique<SnapshotV5>();
+    memcpy(x.get(),a,sizeof(SnapshotV5));memcpy(y.get(),b,sizeof(SnapshotV5));
+    x->cycles=y->cycles=x->ticks=y->ticks=x->ticks2=y->ticks2=0;
+    return memcmp(x.get(),y.get(),sizeof(SnapshotV5))==0;
 }
 // The one place that says when a snapshot may be taken or restored; the
 // desktop asks these too instead of keeping its own copy of the rule. The
@@ -321,9 +382,9 @@ API int e500_can_save(Machine *m) {return m && !m->cpu.fault && m->disk.canSnaps
 API int e500_can_load(Machine *m) {return m && m->disk.canSnapshot();}
 // 状態を out に保存する。size は e500_state_size と同じであること。保存できない状態なら 0。
 API int e500_save(Machine *m,BYTE *out,int size) {
-    if(!out || size!=sizeof(Snapshot) || !e500_can_save(m))return 0;
-    auto holder=std::make_unique<Snapshot>();auto &s=*holder;
-    memcpy(s.magic,"E500ST04",8);s.internalKB=m->internalKB;s.cardKB=m->cardKB;s.reg=m->cpu.reg;
+    if(!out || size!=sizeof(SnapshotV5) || !e500_can_save(m))return 0;
+    auto holder=std::make_unique<SnapshotV5>();auto &s=*holder;
+    memcpy(s.magic,"E500ST05",8);s.romKB=uint32_t(m->romKB);s.romSum=m->romSum;s.prefixed=m->cpu.prefixed;memset(s.reserved,0,sizeof(s.reserved));s.internalKB=m->internalKB;s.cardKB=m->cardKB;s.reg=m->cpu.reg;
     memcpy(s.imem,m->cpu.imem,256);memcpy(s.memory,m->mem.data()+0x40000,0x80000);
     s.lcd[0]=m->lcd[0];s.lcd[1]=m->lcd[1];
     s.pre1=m->cpu.pre_1;s.pre2=m->cpu.pre_2;s.halt=m->cpu.halt;s.off=m->cpu.off;
@@ -334,23 +395,35 @@ API int e500_save(Machine *m,BYTE *out,int size) {
 // すべて検査してから書き換えるので、不正なデータなら何も変えずに 0 を返す。
 API int e500_load(Machine *m,const BYTE *data,int size) {
     if(!data || !e500_can_load(m))return 0;
-    auto holder=std::make_unique<Snapshot>();auto &s=*holder;
+    auto holder=std::make_unique<SnapshotV5>();auto &s=*holder;
+    // Older formats have no ROM to compare (the desktop's file checks it) and no prefix pending.
+    s.romKB=uint32_t(m->romKB);s.romSum=m->romSum;s.prefixed=0;memset(s.reserved,0,sizeof(s.reserved));
     // Older formats come from before what they lack, which was idle when they could be taken.
     s.printer=Ce126p().save();s.disk=Ce140f().saveCode();
     if(size==sizeof(LegacySnapshot)) {
         LegacySnapshot old;memcpy(&old,data,sizeof(old));if(memcmp(old.magic,"E500ST01",8))return 0;
-        memcpy(s.magic,"E500ST04",8);s.internalKB=32;s.cardKB=0;s.reg=old.reg;memcpy(s.imem,old.imem,256);
+        memcpy(s.magic,"E500ST05",8);s.internalKB=32;s.cardKB=0;s.reg=old.reg;memcpy(s.imem,old.imem,256);
         memset(s.memory,0xff,sizeof(s.memory));memcpy(s.memory+0x78000,old.ram,32768);
         s.lcd[0]=old.lcd[0];s.lcd[1]=old.lcd[1];s.pre1=old.pre1;s.pre2=old.pre2;s.halt=old.halt;s.off=old.off;
         s.cycles=old.cycles;s.ticks=old.ticks;s.ticks2=old.ticks2;
     } else if(size==sizeof(SnapshotV2)) {
         memcpy(static_cast<SnapshotV2*>(&s),data,sizeof(SnapshotV2));
         if(memcmp(s.magic,"E500ST02",8))return 0;
-        memcpy(s.magic,"E500ST04",8);
+        memcpy(s.magic,"E500ST05",8);
+    } else if(size==sizeof(Snapshot)) {
+        memcpy(static_cast<Snapshot*>(&s),data,sizeof(Snapshot));
+        if(memcmp(s.magic,"E500ST04",8))return 0;
+        memcpy(s.magic,"E500ST05",8);
     } else if(size==sizeof(s))memcpy(&s,data,sizeof(s));else return 0;
-    if(memcmp(s.magic,"E500ST04",8) || !validInternal(s.internalKB,m->romKB) || !validCapacity(s.cardKB,true) ||
-       s.pre1>3 || s.pre2>3 || s.halt>1 || s.off>1 || s.reg.x.p>0xfffff ||
-       s.ticks>=MainTimerCycles || s.ticks2>=SubTimerCycles || s.cycles>UINT64_MAX-10240000)return 0;
+    // Between steps the addressing is normal unless a prefix's instruction is
+    // still to run; any other value would send every later access astray.
+    // 状態は、プリフィクスの途中でなければアドレッシングは通常（1）。ほかの値ならあとの読み書きがずれる。
+    bool prefixOk=s.prefixed?(s.prefixed==1 && s.pre1<=3 && s.pre2<=3 && !s.halt):(s.pre1==1 && s.pre2==1);
+    if(memcmp(s.magic,"E500ST05",8) || s.romKB!=uint32_t(m->romKB) || s.romSum!=m->romSum || !prefixOk ||
+       std::any_of(std::begin(s.reserved),std::end(s.reserved),[](BYTE b){return b!=0;}) ||
+       !validInternal(s.internalKB,m->romKB) || !validCapacity(s.cardKB,true) ||
+       s.halt>1 || s.off>1 || s.reg.x.p>0xfffff ||
+       s.ticks>=OldMainTimerCycles || s.ticks2>=OldSubTimerCycles || s.cycles>UINT64_MAX-10240000)return 0;
     for(auto &l:s.lcd)if(l.page>7 || l.column>63 || l.start>63 || l.on>1)return 0;
     // Checked before anything changes, so a bad one leaves the machine as it was;
     // the restores below then cannot fail.
@@ -361,9 +434,9 @@ API int e500_load(Machine *m,const BYTE *data,int size) {
        s.printer.oldXout!=s.disk.oldXout || s.printer.oldBusy!=s.disk.oldBusy)return 0;
     m->internalKB=s.internalKB;m->cardKB=s.cardKB;m->cpu.reg=s.reg;
     memcpy(m->cpu.imem,s.imem,256);memcpy(m->mem.data()+0x40000,s.memory,0x80000);
-    m->lcd[0]=s.lcd[0];m->lcd[1]=s.lcd[1];m->cpu.pre_1=s.pre1;m->cpu.pre_2=s.pre2;
+    m->lcd[0]=s.lcd[0];m->lcd[1]=s.lcd[1];m->cpu.pre_1=s.pre1;m->cpu.pre_2=s.pre2;m->cpu.prefixed=s.prefixed!=0;
     m->cpu.halt=s.halt;m->cpu.off=s.off;m->cpu.fault=false;
-    m->cpu.cycles=s.cycles;m->cpu.ticks=s.ticks;m->cpu.ticks2=s.ticks2;m->keys.fill(0);
+    m->cpu.cycles=s.cycles;m->cpu.ticks=s.ticks%MainTimerCycles;m->cpu.ticks2=s.ticks2%SubTimerCycles;m->keys.fill(0);
     m->audio.clear();m->samplePhase=0;
     // An older snapshot has no levels for the lines: the tone starts from its
     // beginning and they are taken from the loaded ports, so XOUT high in it is
@@ -371,10 +444,10 @@ API int e500_load(Machine *m,const BYTE *data,int size) {
     // goes on from the saved level.
     // 古い形式には線の状態がないので、音は最初から始め、線の状態は読み込んだポートから決める。
     // 今の形式では、保存した XOUT の値から音を続ける（どちらも、偽の立ち上がりを作らないため）。
-    if(size!=int(sizeof(Snapshot))) {
+    if(size!=int(sizeof(Snapshot)) && size!=int(sizeof(SnapshotV5))) {
         m->lastSoundMode=m->soundMode();m->tonePhase=0;
         auto bus=m->busLevels(m->lastSoundMode);
         s.printer.oldXout=s.disk.oldXout=bus.xout;s.printer.oldBusy=s.disk.oldBusy=bus.busy;
     } else m->restartTone(s.printer.oldXout!=0);
-    m->disk.restoreCode(s.disk,s.cycles);m->printer.restore(s.printer,s.cycles);return 1;
+    m->disk.restoreCode(s.disk,s.cycles);m->printer.restore(s.printer,s.cycles);m->scanKeys();return 1;
 }

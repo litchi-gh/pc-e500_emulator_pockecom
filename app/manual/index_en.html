@@ -88,7 +88,7 @@
 
 <section id="start">
 <h2>1. Starting up and the window</h2>
-<p>The emulator comes as an installer (<code>…-setup.exe</code>) and as a zip. Both bundle the .NET runtime, so nothing else needs to be installed.</p>
+<p>The emulator comes as an installer (<code>…-setup.exe</code>) and as a zip. Both bundle the .NET runtime, so nothing else needs to be installed. From the release after 0.0.4 on, the release notes list each file’s SHA-256: compare it with what PowerShell’s <code>Get-FileHash file</code> prints to check a download.</p>
 <p><b>Requirements:</b> Windows 10 / 11, 64-bit (x64). About 2 cores at 2 GHz or more and 4 GB of memory or more are recommended (the app itself uses about 150 MB). About 120 MB of disk; a display of 1280×800 or more is recommended.</p>
 <table>
 <tr><th>Kind</th><th>Start</th><th>Where ROMs, RAM and settings live (the data folder)</th></tr>
@@ -279,6 +279,7 @@ FILES "X:"               ' list</pre>
 LLIST                    ' print the program listing
 PRINT=LPRINT             ' send PRINT to the printer (PRINT=PRINT undoes it)</pre>
 <p><b>CE-126P</b> on the toolbar shows the paper, drawn in the ROM's character font. <b>Copy text</b>, <b>Save text</b> and <b>Save image</b> (PNG) keep it; <b>Clear</b> empties the paper.</p>
+<p><b>Print to</b> sends the lines on to a printer as well (kept in the settings). A <b>USB thermal printer</b> (58 mm, 384 dots, ESC/POS, such as the MPT-II) prints each line as it comes, with no driver, and the paper is fed 12 mm once printing has paused for 3 seconds. A <b>Windows printer</b> gets the lines since its last job as one job, at their real size (2 mm a character, 4 mm a line), once printing has paused for 3 seconds. <b>Print paper</b> sends the whole paper. A printer that cannot be reached is reported at the bottom of the window; the machine goes on.</p>
 <figure><img src="images-en/printer.png" alt="CE-126P window"><figcaption>The CE-126P window, after LPRINT and LLIST</figcaption></figure>
 <ul>
 <li>Untick <b>Connected</b> and LPRINT reports <code>Printer error</code>, as on a real machine with no printer. The setting is kept.</li>

@@ -128,13 +128,13 @@ class HardwareTests(unittest.TestCase):
                 return on,off
             finally:e.close()
         on,off=clicks('5',1)
-        self.assertAlmostEqual((off[0]-on[0])/1024.0,13.5,delta=1.5)
+        self.assertAlmostEqual((off[0]-on[0])/768.0,13.5,delta=1.5)
         on,_=clicks('RIGHT',5)
         for i in range(1,4):
-            self.assertAlmostEqual((on[i+1]-on[i])/1024.0,62.5,delta=3.0)
+            self.assertAlmostEqual((on[i+1]-on[i])/768.0,62.5,delta=3.0)
 
     def test_shipped_key_timing_never_drops_a_key(self):
-        """The UI queues 24000 cycles down and 32000 up. Every press must register.
+        """The UI queues 18000 cycles down and 24000 up. Every press must register.
 
         The ROM only counts a key whose press and release fall in different 64Hz
         scans with one scan between, so a shorter budget silently loses presses.
@@ -158,8 +158,8 @@ class HardwareTests(unittest.TestCase):
                                 last=now
                     last=tone()
                     for _ in range(20):
-                        e.lib.e500_key(e.m,row,bit,1);advance(24000)
-                        e.lib.e500_key(e.m,row,bit,0);advance(32000)
+                        e.lib.e500_key(e.m,row,bit,1);advance(18000)
+                        e.lib.e500_key(e.m,row,bit,0);advance(24000)
                     advance(200000)
                     self.assertEqual(clicks,20)
                 finally:e.close()
@@ -342,8 +342,9 @@ class HardwareTests(unittest.TestCase):
                 self.assertEqual(e.trace(),before)
                 e.type('SAVE "X:SHARE.BAS"');e.run(4096000)
                 e.type('LPRINT "AFTER"');e.run(4096000)
-                e.type('NEW');e.type('LOAD "X:SHARE.BAS"');e.run(4096000)
-                e.type('RUN');e.screenshot('ce126p-with-ce140f.png');self.assertTrue(has_three(e))
+                e.forget_program();e.type('RUN');self.assertFalse(has_three(e))
+                e.type('CLS');e.type('LOAD "X:SHARE.BAS"');e.run(4096000)
+                e.type('CLS');e.type('RUN');e.screenshot('ce126p-with-ce140f.png');self.assertTrue(has_three(e))
                 self.assertEqual(e.printed(),b'BEFORE\nAFTER\n')
                 self.assertGreater(pathlib.Path(folder,'SHARE.BAS').stat().st_size,0)
                 self.assertNotIn('ERROR:',e.trace());self.assertNotIn('timeout',e.trace())

@@ -37,10 +37,14 @@ internal sealed class PrinterPaper
     {
         foreach(byte b in data) {
             if(b!=(byte)'\n'){pending.Add(b);continue;}
-            if(lines.Add([..pending]))Dropped++;
+            byte[] line=[..pending];
+            if(lines.Add(line))Dropped++;
             pending.Clear();Version++;
+            LineAdded?.Invoke(line);
         }
     }
+    /// <summary>1行が紙に加わったとき（プリンタへ送るため）。</summary>
+    internal event Action<byte[]>? LineAdded;
     /// <summary>紙を切る（すべての行を消す）。</summary>
     internal void Clear(){lines.Clear();pending.Clear();Version++;}
     // The newest lines up to a fixed count, the oldest overwritten: a full roll
@@ -227,12 +231,14 @@ internal sealed class PrinterDialog : Form
     /// <param name="paper">表示する紙</param>
     /// <param name="font">ROM の文字フォントを返す関数</param>
     /// <param name="connected">今の接続の状態を返す関数</param>
+    /// <param name="output">印字を送るプリンタ（null なら送り先の欄を出さない）</param>
+    /// <param name="choose">送り先を選んだときに呼ぶ処理（設定に残すため）</param>
     /// <param name="connect">「接続」のチェックが変わったときに呼ぶ処理</param>
-    internal PrinterDialog(PrinterPaper paper,Func<byte[]> font,Func<bool> connected,Action<bool> connect)
+    internal PrinterDialog(PrinterPaper paper,Func<byte[]> font,Func<bool> connected,PrintOutput? output,Action<PrintTarget?> choose,Action<bool> connect)
     {
         this.paper=paper;this.font=font;view=new PaperView(paper,font){Dock=DockStyle.Fill};
-        Text="CE-126P";ClientSize=new Size(560,640);MinimumSize=new Size(520,320);
-        StartPosition=FormStartPosition.CenterScreen;Font=new Font("Yu Gothic UI",10);
+        Text="CE-126P";ClientSize=new Size(620,660);MinimumSize=new Size(560,340);
+        StartPosition=FormStartPosition.CenterScreen;Font=Fonts.Ui;
         var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=46,WrapContents=false,Padding=new Padding(6,4,0,0)};
         var attach=new CheckBox{Text=L.T("接続","Connected"),Checked=connected(),AutoSize=true,Margin=new Padding(4,10,8,0)};
         var clear=new Button{Text=L.T("紙を切る","Clear"),AutoSize=true};
@@ -252,7 +258,48 @@ internal sealed class PrinterDialog : Form
             Save("PNG (*.png)|*.png","png",path=>{using var b=paper.Render(font());b.Save(path,ImageFormat.Png);});
         };
         bar.Controls.AddRange([attach,clear,copy,saveText,saveImage]);
-        Controls.Add(view);Controls.Add(result);Controls.Add(bar);Controls.Add(note);
+        // Where the lines go besides this window: none, a USB thermal printer, or a Windows printer.
+        // 印字の送り先：なし、USB のサーマルプリンタ、Windows のプリンタ。
+        var send=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=40,WrapContents=false,Padding=new Padding(6,4,0,0)};
+        if(output is not null) {
+            this.output=output;
+            var label=new Label{Text=L.T("印刷先","Print to"),AutoSize=true,Margin=new Padding(4,8,6,0)};
+            var refresh=new Button{Text=L.T("更新","Refresh"),AutoSize=true};
+            var printAll=new Button{Text=L.T("紙を印刷","Print paper"),AutoSize=true};
+            // The list is gathered off the UI thread: with network printers it can
+            // take seconds, and this thread runs the machine. A printer found again
+            // under a new path (another USB port) becomes the target too.
+            // 一覧は UI のスレッドの外で作る（ネットワークのプリンタがあると数秒かかり、その間エミュレータが止まった）。
+            // 別のパスで見つかったプリンタ（別の差し込み口）は、送り先も新しいパスにする。
+            void Fill() {
+                refresh.Enabled=false;
+                Task.Run(PrintTarget.Find).ContinueWith(task=>{
+                    if(IsDisposed || !IsHandleCreated)return;
+                    BeginInvoke(()=>{
+                        if(IsDisposed)return;
+                        var found=task.IsCompletedSuccessfully?task.Result:[];
+                        var chosen=PrintTarget.Resolve(output.Target,found);
+                        targets.Items.Clear();targets.Items.Add(NoTarget);
+                        foreach(var t in found)targets.Items.Add(t);
+                        if(chosen is not null && !found.Contains(chosen))targets.Items.Add(chosen);
+                        filling=true;targets.SelectedItem=chosen is null?NoTarget:chosen;filling=false;
+                        if(chosen is not null && chosen!=output.Target)choose(chosen);
+                        refresh.Enabled=true;Filled++;
+                    });
+                });
+            }
+            targets.SelectedIndexChanged+=(_,_)=>{if(!filling)choose(targets.SelectedItem as PrintTarget);};
+            refresh.Click+=(_,_)=>Fill();
+            printAll.Click+=(_,_)=>{
+                if(paper.Count==0){result.Text=L.T("印字がありません。","Nothing printed.");return;}
+                if(output.Target is null){result.Text=L.T("印刷先を選んでください。","Choose a printer first.");return;}
+                output.Sheet(paper.Lines.ToArray(),font());result.Text=L.T($"{paper.Count}行を送りました。",$"Sent {paper.Count} lines.");
+            };
+            send.Controls.AddRange([label,targets,refresh,printAll]);
+            targets.Items.Add(output.Target as object ?? NoTarget);targets.SelectedIndex=0;
+            Shown+=(_,_)=>Fill();
+        }
+        Controls.Add(view);Controls.Add(result);if(output is not null)Controls.Add(send);Controls.Add(bar);Controls.Add(note);
         timer.Tick+=(_,_)=>Follow();
         Shown+=(_,_)=>{Render();timer.Start();};
         FormClosed+=(_,_)=>timer.Stop();
@@ -280,7 +327,20 @@ internal sealed class PrinterDialog : Form
     internal string TestNote=>note.Text;
     internal void TestFollow()=>Follow();
     /// <summary>紙かフォント（ROM）が変わっていれば描き直す（タイマーで呼ぶ）。</summary>
-    void Follow(){if(shown!=paper.Version || !ReferenceEquals(shownFont,font()))Render();}
+    void Follow(){
+        if(shown!=paper.Version || !ReferenceEquals(shownFont,font()))Render();
+        // What the printer did, shown as it changes (a failure stays until the next print).
+        if(output is not null && output.Status!=shownStatus){shownStatus=output.Status;result.Text=shownStatus;}
+    }
+    readonly PrintOutput? output;
+    string? shownStatus;
+    readonly ComboBox targets=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=260,Margin=new Padding(0,4,6,0)};
+    bool filling;
+    /// <summary>送り先の一覧の「なし」。</summary>
+    static readonly string NoTarget=L.T("なし（このウィンドウだけ）","None (this window only)");
+    internal ComboBox TestTargets=>targets;
+    /// <summary>一覧を作り終えた回数（テスト用）。</summary>
+    internal int Filled {get;private set;}
     /// <summary>紙かフォントが変わったときに、案内・タイトル（行数）・ビューを更新する。</summary>
     internal void Render()
     {

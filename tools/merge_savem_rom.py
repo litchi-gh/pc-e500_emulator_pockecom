@@ -92,6 +92,8 @@ def main():
     ap.add_argument("--info", action="store_true", help="ヘッダ解析のみ")
     ap.add_argument("--strip", action="store_true",
                     help="結合せず、各入力ファイルから 16 バイトの SAVEM ヘッダを取り除いて上書きする")
+    ap.add_argument("--force", action="store_true",
+                    help="見慣れないヘッダや長さの食い違いがあっても続ける (通常はエラーで止める)")
     args = ap.parse_args()
 
     if not args.files and not args.main_rom:
@@ -103,6 +105,17 @@ def main():
         print()
     if args.info:
         return 0
+    # A file whose first 16 bytes are no SAVEM header is no dump: stripping it
+    # cut 16 bytes off a ROM (a second --strip did that to a stripped one), and
+    # merging it placed the data at an address read from the ROM's own bytes.
+    # SAVEM のヘッダでないファイルはダンプではない（2回目の --strip で ROM の先頭16バイトを失い、
+    # 結合では ROM の中身から読んだアドレスに置いてしまった）。--force がなければ止める。
+    odd = [f for f in files if f["warn"]]
+    if odd and not args.force:
+        for f in odd:
+            print(f"エラー: {f['path']}: " + " / ".join(f["warn"]), file=sys.stderr)
+        print("SAVEM のダンプではないか、壊れています。確かめたうえで続けるなら --force を付けてください。", file=sys.stderr)
+        return 1
 
     if args.strip:
         for f in files:

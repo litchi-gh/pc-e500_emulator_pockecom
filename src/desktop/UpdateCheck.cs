@@ -38,7 +38,11 @@ internal static class UpdateCheck
         if(!Version.TryParse(tag.TrimStart('v','V'),out var version))return null;
         // Only this repository's own pages are opened, whatever the answer says.
         string url=Text("html_url");
-        if(!url.StartsWith(Releases+"/",StringComparison.Ordinal))url=Releases;
+        // Compared once the address is normalised: a prefix test let
+        // ".../releases/../../../other/repo" through to another repository's page.
+        // 正規化したアドレスで比べる（前方一致だけでは "../" で別のリポジトリへ行けた）。
+        url=Uri.TryCreate(url,UriKind.Absolute,out var uri) && uri.Scheme==Uri.UriSchemeHttps && uri.Host=="github.com" &&
+            uri.AbsolutePath.StartsWith(new Uri(Releases).AbsolutePath+"/",StringComparison.Ordinal)?uri.AbsoluteUri:Releases;
         return new(Normalize(version),tag,Text("name"),url,Text("body").Replace("\r\n","\n").Replace("\n","\r\n"));
     }
     /// <summary>今の版より新しいか。</summary>
@@ -66,11 +70,11 @@ internal sealed class UpdateDialog : Form
     internal UpdateDialog(Release release,bool installed=false)
     {
         Text=L.T("新しい版のお知らせ","New version");FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;ShowInTaskbar=false;
-        StartPosition=FormStartPosition.CenterParent;Font=new Font("Yu Gothic UI",10);ClientSize=new Size(620,470);
+        StartPosition=FormStartPosition.CenterParent;Font=Fonts.Ui;ClientSize=new Size(620,470);
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=4,Padding=new Padding(14)};
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));Controls.Add(layout);
-        layout.Controls.Add(new Label{Text=L.T($"新しい版 {release.Tag} が公開されています（今の版は {UpdateCheck.Current}）。",$"Version {release.Tag} is out (this is {UpdateCheck.Current})."),AutoSize=true,Font=new Font(Font,FontStyle.Bold),Margin=new Padding(0,0,0,8)},0,0);
+        layout.Controls.Add(new Label{Text=L.T($"新しい版 {release.Tag} が公開されています（今の版は {UpdateCheck.Current}）。",$"Version {release.Tag} is out (this is {UpdateCheck.Current})."),AutoSize=true,Font=Fonts.UiBold,Margin=new Padding(0,0,0,8)},0,0);
         var notes=new TextBox{Text=release.Notes.Length>0?release.Notes:release.Name,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,BackColor=Color.White};
         layout.Controls.Add(notes,0,1);
         // The installed copy updates by running the new installer, the zip copy by unpacking over itself.

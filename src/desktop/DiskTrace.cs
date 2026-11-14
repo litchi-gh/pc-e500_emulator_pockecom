@@ -7,7 +7,7 @@ namespace PokeCom;
 /// <summary>CE-140F のトレース（コマンドとエラーの記録）を表示するウィンドウ。</summary>
 internal sealed class DiskTraceDialog : Form
 {
-    readonly TextBox text=new(){Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,Font=new Font("Consolas",10),BackColor=Color.White};
+    readonly TextBox text=new(){Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,Font=Fonts.Mono,BackColor=Color.White};
     readonly CheckBox live=new(){Text=L.T("自動更新","Auto refresh"),Checked=true,AutoSize=true,Margin=new Padding(12,10,0,0)};
     readonly System.Windows.Forms.Timer timer=new(){Interval=500};
     readonly Func<Core?> read;
@@ -20,7 +20,7 @@ internal sealed class DiskTraceDialog : Form
     {
         this.read=read;this.folder=folder;
         Text="CE-140F / X:";ClientSize=new Size(760,470);MinimumSize=new Size(420,260);
-        StartPosition=FormStartPosition.CenterScreen;Font=new Font("Yu Gothic UI",10);
+        StartPosition=FormStartPosition.CenterScreen;Font=Fonts.Ui;
         var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=46,WrapContents=false,Padding=new Padding(6,4,0,0)};
         var open=new Button{Text=L.T("保存フォルダを開く","Open folder"),AutoSize=true};
         var refresh=new Button{Text=L.T("更新","Refresh"),AutoSize=true,Margin=new Padding(6,0,0,0)};
@@ -36,6 +36,6 @@ internal sealed class DiskTraceDialog : Form
     /// <summary>トレースを読み直して表示する。</summary>
     internal void Render() {
         var core=read();
-        LiveText.Update(text,L.T("保存先: ","Folder: ")+folder()+"\r\n\r\n"+(core is null?L.T("ROMが読み込まれていません。","No ROM is loaded."):core.DiskTrace().Replace("\n","\r\n")));
+        LiveText.Update(text,L.T("保存先: ","Folder: ")+folder()+"\r\n\r\n"+(core is null?L.T("ROMが読み込まれていません。","No ROM is loaded."):core.DiskTrace().Replace("\n","\r\n")),follow:true);
     }
 }

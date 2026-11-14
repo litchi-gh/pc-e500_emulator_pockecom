@@ -33,8 +33,8 @@ internal sealed class ChecksumDialog : Form
 {
     static readonly string[] Titles=[L.T("範囲","Range"),L.T("バイト数","Bytes"),L.T("合計 (8bit)","Sum (8-bit)"),L.T("合計 (16bit)","Sum (16-bit)"),L.T("合計 (32bit)","Sum (32-bit)"),L.T("XOR (8bit)","XOR (8-bit)")];
     readonly Func<Core?> read;
-    readonly TextBox start=new(){Width=90,Font=new Font("Consolas",10)};
-    readonly TextBox end=new(){Width=90,Font=new Font("Consolas",10)};
+    readonly TextBox start=new(){Width=90,Font=Fonts.Mono};
+    readonly TextBox end=new(){Width=90,Font=Fonts.Mono};
     // Titles in the UI font and values in the hex font, so the columns line up
     // whatever the language.
     readonly TableLayoutPanel table=new(){Location=new Point(14,92),Size=new Size(532,150),ColumnCount=2,RowCount=6,BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle,Padding=new Padding(6,4,6,4)};
@@ -50,7 +50,7 @@ internal sealed class ChecksumDialog : Form
         this.read=read;
         Text=L.T("チェックサム","Checksum");
         FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;ShowInTaskbar=false;
-        StartPosition=FormStartPosition.CenterParent;Font=new Font("Yu Gothic UI",10);ClientSize=new Size(560,300);
+        StartPosition=FormStartPosition.CenterParent;Font=Fonts.Ui;ClientSize=new Size(560,300);
         var row=new FlowLayoutPanel{Location=new Point(14,14),Size=new Size(536,30),WrapContents=false};
         row.Controls.Add(new Label{Text=L.T("開始 (16進)","Start (hex)"),AutoSize=true,Margin=new Padding(0,6,4,0)});row.Controls.Add(start);
         row.Controls.Add(new Label{Text=L.T("終了 (16進・含む)","End (hex, inclusive)"),AutoSize=true,Margin=new Padding(12,6,4,0)});row.Controls.Add(end);
@@ -65,13 +65,18 @@ internal sealed class ChecksumDialog : Form
         for(int i=0;i<Titles.Length;i++) {
             table.RowStyles.Add(new RowStyle(SizeType.Percent,100f/Titles.Length));
             table.Controls.Add(new Label{Text=Titles[i],Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Margin=new Padding(0)},0,i);
-            values[i]=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=new Font("Consolas",10),Margin=new Padding(0)};
+            values[i]=new Label{Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,Font=Fonts.Mono,Margin=new Padding(0)};
             table.Controls.Add(values[i],1,i);
         }
         Controls.Add(buttons);Controls.Add(close);Controls.Add(table);Controls.Add(message);
         AcceptButton=compute;CancelButton=close;
         compute.Click+=(_,_)=>Compute();
-        copy.Click+=(_,_)=>{if(Last is not null)Clipboard.SetText(TestResult);};
+        // The clipboard can be held by another program: said in the window, not thrown.
+        copy.Click+=(_,_)=>{
+            if(Last is null)return;
+            try {Clipboard.SetText(TestResult);}
+            catch(Exception ex) {MessageBox.Show(this,L.T("コピーできません: ","Could not copy: ")+ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+        };
         message.Text=L.T("範囲を入力して「計算」を押してください（Enterでも計算します）。","Enter the range and press Compute (or Enter).");
     }
     // Fills the table with the sums, or clears it and says why nothing could be summed.
