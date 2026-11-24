@@ -8,6 +8,8 @@
 #include <deque>
 #include "ce140f.h"
 #include "ce126p.h"
+#include "serial.h"
+#include "cassette.h"
 
 /// LCD コントローラ1個分（PC-E500 は2個で 240×32 ドットを表示する）。
 struct Lcd {
@@ -44,6 +46,8 @@ public:
     /// 11ピンにつながる周辺機器。
     Ce140f disk;
     Ce126p printer;
+    SerialPort serial;
+    CassetteSignals tape;
     /// 音声（48kHz・モノラル）。デスクトップ側が e500_audio で取り出す。
     std::deque<int16_t> audio;
     /// 音声のサンプルの位置と、音のモードで XOUT を切り替える位相。
@@ -60,10 +64,20 @@ public:
     bool isRam(UINT32 a) const {
         return (a>=0x80000 && a<0xc0000) || (cardKB && a>=0x40000 && a<0x80000);
     }
+    /// AMC AM5..0 describes CE0 capacity in2KB units; bit6 is reserved.
+    UINT32 amcBase() const {return 0xc0000-((UINT32(cpu.imem[IMEM_AMC])&63)+1)*2048;}
     /// アドレスを実際の格納先に変換する。RAM の容量より広い領域は、容量ごとに同じ中身が繰り返し見える（ミラー）。
     UINT32 mirror(UINT32 a) {
         a&=0xfffff;
-        if(a>=0x80000 && a<0xc0000)return (a&(internalKB*1024-1))|(0xc0000-internalKB*1024);
+        if(a>=0x80000 && a<0xc0000) {
+            // Sharp ESR-L Instruction Manual pp.8-9: AME links the end of
+            // CE1 to the start of populated CE0. Decode the entire CE0 hole,
+            // then apply the card's ordinary physical mirroring. The CPU
+            // knows the CE0 size, not the inserted CE1 card's capacity.
+            if((cpu.imem[IMEM_AMC]&0x80) && a<amcBase())
+                a=0x40000+((a-amcBase())&0x3ffff);
+            else return (a&(internalKB*1024-1))|(0xc0000-internalKB*1024);
+        }
         if(cardKB && a>=0x40000 && a<0x80000)return (a&(cardKB*1024-1))|0x40000;
         return a;
     }

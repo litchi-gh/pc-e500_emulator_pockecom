@@ -30,6 +30,9 @@ public:
     bool connected=true;
     /// プリンタが出している ACK 信号（11ピンの ACK は各機器のワイヤード OR）。
     bool ack=false;
+    // External cassette remote output. CPU reset/snapshots do not rewind it;
+    // only a complete10h/00h device code or disconnection changes the motor.
+    bool remoteMotor=false;
     /// CPU の命令ごとに呼ばれ、バスの信号の変化を処理する。
     /// @param now  CPU のサイクル数（タイムアウトの判定に使う）
     /// @param xout XOUT 信号（High でデバイスコード、Low でデータ）

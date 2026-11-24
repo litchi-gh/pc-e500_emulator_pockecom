@@ -53,7 +53,7 @@ void Ce126p::byte(uint8_t b) {
 }
 
 void Ce126p::tick(uint64_t now,bool xout,bool busy,bool dout) {
-    if(!connected){ack=false;oldBusy=busy;oldXout=xout;return;}
+    if(!connected){ack=false;remoteMotor=false;oldBusy=busy;oldXout=xout;return;}
     // BUSY の立ち上がり・立ち下がりを検出し、バスが動いた時刻を記録する。
     bool rise=busy&&!oldBusy,fall=!busy&&oldBusy;
     if(rise||fall||xout!=oldXout)lastActivity=now;
@@ -87,6 +87,8 @@ void Ce126p::tick(uint64_t now,bool xout,bool busy,bool dout) {
                 // XOUT が下がったらコードの終わり。0Fh/20h なら選択され、新しい行を始める。
                 // ほかの機器のコードなら、行の途中でも選択を終える。
                 bool selected=printerCode(code.value);
+                if(code.value==0x10)remoteMotor=true;
+                else if(code.value==0x00)remoteMotor=false;
                 if(selected)line.clear();
                 phase=selected?Data:Idle;ack=false;bits=0;value=0;
             }

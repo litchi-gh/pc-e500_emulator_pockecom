@@ -60,7 +60,7 @@ internal static class UpdateCheck
 }
 
 /// <summary>新しい版のお知らせ（変更点、ダウンロードのページ、更新のしかた）。</summary>
-internal sealed class UpdateDialog : Form
+internal sealed class UpdateDialog : ThemedForm
 {
     /// <summary>「この版は通知しない」を押したか。</summary>
     internal bool Skip {get;private set;}
@@ -70,23 +70,23 @@ internal sealed class UpdateDialog : Form
     internal UpdateDialog(Release release,bool installed=false)
     {
         Text=L.T("新しい版のお知らせ","New version");FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;ShowInTaskbar=false;
-        StartPosition=FormStartPosition.CenterParent;Font=Fonts.Ui;ClientSize=new Size(620,470);
-        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=4,Padding=new Padding(14)};
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));Controls.Add(layout);
-        layout.Controls.Add(new Label{Text=L.T($"新しい版 {release.Tag} が公開されています（今の版は {UpdateCheck.Current}）。",$"Version {release.Tag} is out (this is {UpdateCheck.Current})."),AutoSize=true,Font=Fonts.UiBold,Margin=new Padding(0,0,0,8)},0,0);
-        var notes=new TextBox{Text=release.Notes.Length>0?release.Notes:release.Name,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,BackColor=Color.White};
-        layout.Controls.Add(notes,0,1);
+        StartPosition=FormStartPosition.CenterParent;Font=Fonts.Ui;ClientSize=new Size(620,480);
+        var body=new Panel{Dock=DockStyle.Fill,Padding=new Padding(16,16,16,8)};
+        var heading=new Label{Text=L.T($"新しい版 {release.Tag} が公開されています（今の版は {UpdateCheck.Current}）。",$"Version {release.Tag} is out (this is {UpdateCheck.Current})."),Dock=DockStyle.Top,Height=30,Font=Fonts.UiBold};
+        var card=new CardPanel{Title=L.T("変更点","Changes"),Dock=DockStyle.Fill};
+        var notes=new TextBox{Text=release.Notes.Length>0?release.Notes:release.Name,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Dock=DockStyle.Fill,BorderStyle=BorderStyle.None};
+        card.Controls.Add(notes);
         // The installed copy updates by running the new installer, the zip copy by unpacking over itself.
         string how=installed
-            ?L.T("更新のしかた：エミュレータを終了し、ダウンロードしたインストーラー（-setup.exe）を実行してください。ROM・RAM・設定はデータフォルダ（%LocalAppData%\\PockeComE500）にあり、そのまま残ります。","To update: quit the emulator and run the downloaded installer (-setup.exe). ROMs, RAM and settings are in the data folder (%LocalAppData%\\PockeComE500) and stay as they are.")
-            :L.T("更新のしかた：エミュレータを終了し、ダウンロードした zip の中身を、今の PC-E500.exe があるフォルダに上書きで展開してください。rom・ram・drive-x・state フォルダ（ROM・RAM・設定）は zip に入っていないので、そのまま残ります。","To update: quit the emulator and unpack the downloaded zip over the folder that holds PC-E500.exe now. The rom, ram, drive-x and state folders (ROMs, RAM and settings) are not in the zip and stay as they are.");
-        layout.Controls.Add(new Label{Text=how,AutoSize=true,MaximumSize=new Size(590,0),Margin=new Padding(0,10,0,6)},0,2);
-        var buttons=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft};
-        var close=new Button{Text=L.T("閉じる","Close"),AutoSize=true,DialogResult=DialogResult.Cancel};
-        var skip=new Button{Text=L.T("この版は通知しない","Skip this version"),AutoSize=true};
-        var open=new Button{Text=L.T("ダウンロードのページを開く","Open the download page"),AutoSize=true};
-        buttons.Controls.Add(close);buttons.Controls.Add(skip);buttons.Controls.Add(open);layout.Controls.Add(buttons,0,3);
+            ?L.T("更新：エミュレータを終了して、ダウンロードしたインストーラー（-setup.exe）を実行します。ROM・RAM・設定はそのまま残ります。","To update: quit the emulator and run the downloaded installer (-setup.exe). ROMs, RAM and settings stay.")
+            :L.T("更新：エミュレータを終了して、ダウンロードした zip を今の PC-E500.exe のフォルダに上書きで展開します。ROM・RAM・設定はそのまま残ります。","To update: quit the emulator and unpack the downloaded zip over the folder of PC-E500.exe. ROMs, RAM and settings stay.");
+        var howLabel=new NoteLabel(how,588){Dock=DockStyle.Bottom,Padding=new Padding(0,8,0,0)};
+        body.Controls.Add(card);body.Controls.Add(howLabel);body.Controls.Add(heading);
+        var footer=new FooterBar();
+        var close=footer.Add(L.T("閉じる","Close"),(_,_)=>Close(),DialogResult.Cancel);
+        var skip=footer.Add(L.T("この版は通知しない","Skip this version"));
+        var open=footer.Add(L.T("ダウンロードのページを開く","Open the download page"));
+        Controls.Add(body);Controls.Add(footer);
         open.Click+=(_,_)=>{try{UpdateCheck.Open(release.Url);Close();}catch(Exception ex){MessageBox.Show(ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Error);}};
         skip.Click+=(_,_)=>{Skip=true;Close();};
         AcceptButton=open;CancelButton=close;

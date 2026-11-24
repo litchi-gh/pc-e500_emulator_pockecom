@@ -44,6 +44,16 @@ The keys' layout, shapes and lettering, and the LCD legends, sit where photograp
 
 Choose dots drawn apart as on the real glass, and a contrast from 0 to 100. As on the real unit, the legends that are off fade and darken with the contrast too.
 
+### Smooth movement with frame interpolation
+
+With "Afterimage (frame interpolation)" on, something that moves a dot at a time (a game's ship, scrolling stars) is drawn sliding smoothly from its last place to the next. Even when a game redraws the screen only a few times a second, the movement does not jerk. The lines between the dots in the Real look stay still.
+
+### Playing with a gamepad
+
+Map the machine's keys to the buttons of an XInput (Xbox-style) or DirectInput gamepad. The buttons you press light up on a picture of the pad, so you can check the mapping as you set it. Keep as many mappings as you like as presets.
+
+![Controller](app/manual/images-en/controller.png)
+
 ### Case-only and screen-only windows
 
 Double-click the case away from the keys to step through normal → case only → screen only. The frameless views still move and resize by dragging, and the right-click menu holds every command.
@@ -70,13 +80,15 @@ Copy the LCD as text. Clipboard text is typed in as key presses, so a BASIC prog
 
 ### Debugger
 
-Watch the CPU registers, the internal RAM and memory, and edit them in place. Load and save BIN files (SAVEM headers included) and compute checksums: handy for trying machine-code programs.
+Watch the CPU registers, the internal RAM and memory, and edit them in place. Load and save BIN files (SAVEM headers included), and check what you type with the checksum the memory view shows for every eight bytes: handy for trying machine-code programs.
 
 ![Debug window](app/manual/images-en/debugger.png)
 
 ### And more
 
+- **Load program**: load a BAS or BIN file from the PC into the machine, from the toolbar or by drag and drop. A BAS in the form the machine saves goes straight into RAM, with no `LOAD` typed.
 - **Memory**: 8 to 256KB of internal RAM (up to the E650/U6000 expansion mod). RAM cards are image files you create and swap.
+- **AMC**: the CPU's address conversion is supported, so a RAM card can join directly below the internal RAM. The card image and state file formats are unchanged. See [what is implemented and checked](src/native/AMC.md).
 - **Saving**: the contents survive power-off. Save and restore the whole state at any time.
 - **Speed**: 0.5x to 4x, with BEEP sound.
 - **Language**: Japanese or English.
@@ -88,14 +100,15 @@ Watch the CPU registers, the internal RAM and memory, and edit them in place. Lo
 2. Put the ROM dumped from your machine in the data folder's `rom`. "Open the data folder" in the right-click menu opens it.
 3. Start it, press **PF1** (F1 on the PC) to initialise memory, then **BASIC** (F7).
 
-## What is new in 0.0.5 (since 0.0.4)
+## What is new in 0.1.0 (since 0.0.5)
 
-- **Printing on paper**: the CE-126P's output can go to a USB thermal printer (58 mm, ESC/POS) or a Windows printer.
-- **Lighter**: autosave writes off the screen's thread, waiting for a key or switched off costs less, and drawing is lighter.
-- **The PC's Ctrl key**: typing with Ctrl held gives the machine's CTRL keys.
-- **Checking a download**: the release notes list SHA-256 sums.
-- Many fixes, among them the CE-140F, RAM files and the binary editor.
-- A state file saved by this version does not load in 0.0.4 or earlier.
+- **Load program**: load a BAS or BIN from the PC through the toolbar or by dropping it on the window. A BAS saved by the machine goes straight into RAM, with no `LOAD` typed.
+- **Game pads**: XInput and DirectInput pads can press the machine's keys. The pad picture lights the buttons pressed, and presets hold the key sets.
+- **Frame interpolation**: things moving a dot at a time slide smoothly to their next place. The screen is also drawn in step with the display's refresh.
+- **Held keys**: while a PC key is held down, the machine's key stays down too.
+- **Look and status bar**: a Windows 11 look with light and dark themes. The status bar shows the machine's state, ROM, RAM, machine-code area, peripherals, sound and controller; click a field to open its window.
+- **Machine-code area**: reserve it while seeing the internal RAM layout. The debugger has a memory map and a checksum every 8 bytes.
+- **Settings**: Always on top, and a switch for the auto power off.
 
 The full list is in [CHANGELOG.md](CHANGELOG.md) (Japanese).
 
@@ -103,7 +116,7 @@ The full list is in [CHANGELOG.md](CHANGELOG.md) (Japanese).
 
 | File | Contents |
 |---|---|
-| [MANUAL_en.md](MANUAL_en.md) | How to use it and how it works, in detail (keys, settings, RAM, CE-140F and CE-126P, saving, dumping the ROM, building and testing) |
+| [MANUAL_en.md](MANUAL_en.md) | How to use it and how it works, in detail (keys, settings, the game controller, RAM, CE-140F and CE-126P, loading programs, saving, dumping the ROM, building and testing) |
 | [app/manual/index_en.html](app/manual/index_en.html) | The illustrated user manual (the Help button opens it) |
 | [CHANGELOG.md](CHANGELOG.md) | Change history (Japanese) |
 

@@ -59,15 +59,15 @@ internal static class BinaryTransfer
 }
 
 /// <summary>BIN の読込・保存のウィンドウ。</summary>
-internal sealed class BinaryTransferDialog : Form
+internal sealed class BinaryTransferDialog : ThemedForm
 {
     readonly bool saving;
     readonly Func<Core?> read;
-    readonly TextBox file=new(){Width=360};
+    readonly TextBox file=new(){Width=300};
     readonly TextBox address=new(){Width=90,Font=Fonts.Mono};
     readonly TextBox length=new(){Width=90,Font=Fonts.Mono};
     readonly CheckBox header=new(){AutoSize=true};
-    readonly Label info=new(){AutoSize=true,MaximumSize=new Size(470,0)};
+    readonly NoteLabel info=new("",500);
     byte[]? loaded;
     // Set when the transfer succeeded: where it started, so the caller can show it.
     /// <summary>成功したときの先頭アドレス（呼び出し元がその位置を表示する）。</summary>
@@ -81,32 +81,29 @@ internal sealed class BinaryTransferDialog : Form
         this.read=read;this.saving=saving;
         Text=saving?L.T("BIN書出し (メモリ → ファイル)","Save BIN (memory → file)"):L.T("BIN書込み (ファイル → メモリ)","Load BIN (file → memory)");
         FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=MinimizeBox=false;ShowInTaskbar=false;
-        StartPosition=FormStartPosition.CenterParent;Font=Fonts.Ui;ClientSize=new Size(500,saving?230:250);
-        int y=14;
-        Control Row(string title,Control c,int rowHeight=30) {
-            var r=new FlowLayoutPanel{Location=new Point(14,y),Size=new Size(476,rowHeight),WrapContents=false};
-            r.Controls.Add(new Label{Text=title,Width=100,TextAlign=ContentAlignment.MiddleLeft});r.Controls.Add(c);
-            Controls.Add(r);y+=rowHeight+2;return r;
-        }
-        var fileRow=(FlowLayoutPanel)Row(L.T("ファイル","File"),file);
-        var browse=new Button{Text=L.T("参照","Browse"),AutoSize=true};fileRow.Controls.Add(browse);
+        StartPosition=FormStartPosition.CenterParent;Font=Fonts.Ui;ClientSize=new Size(572,10);
+        var body=new FlowLayoutPanel{Dock=DockStyle.Top,AutoSize=true,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(16,16,16,8)};
+        var card=new CardPanel{Margin=new Padding(0)};var stack=card.Stack(516);body.Controls.Add(card);
+        var browse=new FluentButton{Text=L.T("参照","Browse"),AutoSize=true};
         browse.Click+=(_,_)=>Browse();
+        stack.Controls.Add(Row(L.T("ファイル","File"),110,file,browse));
         // The bytes held belong to the path they came from: a path typed or pasted afterwards is read afresh.
         file.TextChanged+=(_,_)=>loaded=null;
         address.Text=suggestedAddress.ToString("X5");
-        Row(L.T("アドレス (16進)","Address (hex)"),address);
+        stack.Controls.Add(Row(L.T("アドレス (16進)","Address (hex)"),110,address));
         if(saving) {
-            length.Text="100";Row(L.T("長さ (16進)","Length (hex)"),length);
+            length.Text="100";stack.Controls.Add(Row(L.T("長さ (16進)","Length (hex)"),110,length));
             header.Text=L.T("SAVEMヘッダー(16バイト)を付けて書き出す","Write with a 16-byte SAVEM header");header.Checked=true;
         } else {
             header.Text=L.T("SAVEMヘッダーを除き、ヘッダーの開始アドレスへ書き込む","Strip the SAVEM header and load at its start address");header.Enabled=false;
             header.CheckedChanged+=(_,_)=>address.Enabled=!header.Checked;
         }
-        header.Location=new Point(14,y);Controls.Add(header);y+=30;
-        info.Location=new Point(14,y);Controls.Add(info);
-        var ok=new Button{Text=saving?L.T("書出し","Save"):L.T("書込み","Load"),AutoSize=true,Location=new Point(320,ClientSize.Height-44)};
-        var cancel=new Button{Text=L.T("キャンセル","Cancel"),AutoSize=true,Location=new Point(410,ClientSize.Height-44),DialogResult=DialogResult.Cancel};
-        Controls.Add(ok);Controls.Add(cancel);AcceptButton=ok;CancelButton=cancel;
+        header.Margin=new Padding(0,6,0,2);stack.Controls.Add(header);stack.Controls.Add(info);
+        var footer=new FooterBar();
+        var cancel=footer.Add(L.T("キャンセル","Cancel"),null,DialogResult.Cancel);
+        var ok=footer.Add(saving?L.T("書出し","Save"):L.T("書込み","Load"));
+        Controls.Add(body);Controls.Add(footer);AcceptButton=ok;CancelButton=cancel;
+        Load+=(_,_)=>FitHeight(body,footer);
         ok.Click+=(_,_)=>{try{Run();}catch(Exception ex){MessageBox.Show(this,ex.Message,Text,MessageBoxButtons.OK,MessageBoxIcon.Error);}};
         info.Text=saving?L.T("指定した範囲のメモリをそのままファイルへ書き出します。","Writes the selected memory range to a file as it is."):L.T("ファイルの内容を指定アドレスから書き込みます。内蔵RAM・RAMカードの範囲のみ書き込めます。","Loads the file at the given address. Only internal RAM and the RAM card can be written.");
     }

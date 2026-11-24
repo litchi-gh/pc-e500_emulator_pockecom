@@ -62,7 +62,7 @@ public:
  void AddState(BYTE n);
  /// 内部メモリの d から len バイトを読む前に呼ばれる（キー入力の読み直し、machine.cpp）。
  void Chk_imemAdr_Read(BYTE d,BYTE len);
- void Chk_imemAdr(BYTE d,BYTE len,UINT32 data=0) {}
+ void Chk_imemAdr(BYTE d,BYTE len,UINT32 data=0);
  /// 1命令を実行する（HALT・電源 OFF 中は時間だけ進める、machine.cpp）。
  void step();
  // 以下は PockEmul から抜き出した関数。Op_00〜Op_ff は各オペコードの命令、
@@ -91,6 +91,9 @@ macros='''#include "machine.h"
 '''
 out=header[:header.index('#pragma once')]+macros
 for k,(ret,args,body) in selected.items():
+ # The upstream reset uses ACM/FEh, the typo in the manual's reset table.
+ # AMC is EFh (pp.8-9); resetting AME must not clear LCC bit7 at FEh.
+ if k=='Reset':body=body.replace('imem[IMEM_ACM]', 'imem[IMEM_AMC]')
  # 内部メモリの添字があふれないよう、8 ビットで折り返す。
  body=body.replace('imem[adr+1]','imem[(adr+1)&255]').replace('imem[adr+2]','imem[(adr+2)&255]')
  # A prefix ran the instruction after it by calling Step_sc62015_, so a run of

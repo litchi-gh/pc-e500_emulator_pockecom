@@ -26,15 +26,232 @@ extern "C" int e500_write(Machine*,int,const BYTE*,int);
 extern "C" int e500_dump(Machine*,int,BYTE*,int);
 extern "C" int e500_peek(Machine*,int);
 extern "C" int e500_run(Machine*,int);
+extern "C" int e500_can_load(Machine*);
+extern "C" int e500_tape_connect(Machine*,int);
+extern "C" int e500_tape_remote(Machine*,int);
+extern "C" void e500_printer_connect(Machine*,int);
+extern "C" int e500_tape_load(Machine*,const uint32_t*,const BYTE*,int);
+extern "C" int e500_tape_append(Machine*,const uint32_t*,const BYTE*,int);
+extern "C" int e500_tape_play(Machine*);
+extern "C" int e500_tape_record(Machine*);
+extern "C" int e500_tape_stop(Machine*);
+extern "C" int e500_tape_status(Machine*);
+extern "C" int e500_tape_read(Machine*,uint32_t*,BYTE*,int);
 
 // 確認の数と、確認の本体（条件が偽なら message の例外で止める）。
 int checks=0;
 void check(bool condition,const char* message) {++checks;if(!condition)throw std::runtime_error(message);}
+void testAmc() {
+    auto joined=std::make_unique<Machine>();auto &r=joined->cpu;
+    joined->internalKB=32;joined->cardKB=64;r.Reset();
+    std::fill(joined->mem.begin()+0xb8000,joined->mem.begin()+0xc0000,0xa5);
+    for(UINT32 n=0;n<65536;n++)joined->mem[0x40000+n]=BYTE(n^(n>>8));
+    r.imem[IMEM_AMC]=0x8f;
+    // The official32KB CE0/64KB CE1 example: virtual A8000..B7FFF
+    // immediately precedes populated CE0 B8000..BFFFF.
+    check(joined->amcBase()==0xb8000 && joined->mirror(0xa8000)==0x40000 &&
+          joined->mirror(0xb7fff)==0x4ffff && joined->mirror(0xb8000)==0xb8000,
+          "AMC official contiguous CE1/CE0 mapping");
+    joined->Set_8(0xa8123,0x37);
+    check(joined->Get_8(0x40123)==0x37 && joined->mem[0xb8123]==0xa5,
+          "AMC CPU writes reach physical card without internal-RAM aliasing");
+    // CE1 still mirrors below its populated window: the CPU has no CE1
+    // capacity register, so mapping cannot depend on the card image length.
+    check(joined->mirror(0x98000)==0x40000 && joined->mirror(0xa7fff)==0x4ffff,
+          "AMC lower CE0 aliases preserve external card mirroring");
+    struct Geometry {BYTE am;UINT32 base;};
+    const Geometry geometry[]={{0,0xbf800},{1,0xbf000},{3,0xbe000},{7,0xbc000},
+                               {15,0xb8000},{31,0xb0000},{63,0xa0000}};
+    for(const auto &g:geometry)for(int card:{2,4,8,16,32,64,128,256}) {
+        joined->cardKB=card;r.imem[IMEM_AMC]=BYTE(0x80|g.am);
+        UINT32 bytes=UINT32(card)*1024;
+        check(joined->amcBase()==g.base,"AMC documented2KB..128KB control codes");
+        check(joined->mirror(g.base-1)==0x40000+bytes-1,"AMC last card byte adjoins CE0");
+        check(joined->Get_8(g.base)==0xa5,"AMC CE0 remains physical internal RAM");
+        if(g.base-bytes>=0x80000)
+            check(joined->mirror(g.base-bytes)==0x40000,"AMC first card byte for a window inside CE0 decode");
+        check(joined->mirror(0x40000)==0x40000,"AMC preserves direct CE1 access");
+        r.imem[IMEM_AMC]|=0x40;
+        check(joined->amcBase()==g.base && joined->mirror(g.base-1)==0x40000+bytes-1,
+              "AMC reserved bit6 does not change the address translation");
+        r.imem[IMEM_AMC]&=0x7f;
+        check(joined->mirror(0xa8000)==0xb8000,"AMC disabled preserves ordinary internal mirrors");
+    }
+    joined->cardKB=64;r.imem[IMEM_AMC]=0x8f;
+    BYTE patch[]={1,2,3,4},got[4]{};
+    check(e500_write(joined.get(),0xb7ffe,patch,4)==1 &&
+          joined->mem[0x4fffe]==1 && joined->mem[0x4ffff]==2 &&
+          joined->mem[0xb8000]==3 && joined->mem[0xb8001]==4,
+          "AMC debugger write atomically crosses distinct card/internal banks");
+    check(e500_dump(joined.get(),0xb7ffe,got,4)==1 && std::equal(got,got+4,patch),
+          "AMC debugger dump follows the contiguous logical view");
+    std::vector<BYTE> tooLong(98305,0x73);
+    check(!e500_write(joined.get(),0xa8000,tooLong.data(),int(tooLong.size())) &&
+          joined->mem[0x4fffe]==1 && joined->mem[0xb8000]==3,
+          "AMC debugger rejects a range reaching ROM before any bank is changed");
+    std::vector<BYTE> wrapping(65537,0x71);
+    BYTE guard=joined->mem[0x48000];
+    check(!e500_write(joined.get(),0x80000,wrapping.data(),int(wrapping.size())) &&
+          joined->mem[0x48000]==guard,"AMC debugger still rejects wrapping card aliases atomically");
+    BYTE ownCode[]={0x08,42,0xde}; // MV A,42 / HALT; no manufacturer ROM.
+    check(e500_write(joined.get(),0xb7fff,ownCode,3)==1,"AMC own instruction spans the bank boundary");
+    r.reg.x.p=0xb7fff;r.halt=false;r.step();r.step();
+    check(r.reg.r.a==42 && r.halt && r.reg.x.p==0xb8002 && r.imem[IMEM_AMC]==0x8f,
+          "AMC instruction/operand fetch crosses CE1/CE0 and HALT retains control");
+    std::vector<BYTE> state(e500_state_size());
+    check(e500_save(joined.get(),state.data(),int(state.size()))==1,"AMC idle snapshot save");
+    r.imem[IMEM_AMC]=0;joined->mem[0x40000]=0;
+    check(e500_load(joined.get(),state.data(),int(state.size()))==1 &&
+          r.imem[IMEM_AMC]==0x8f && joined->mirror(0xa8000)==0x40000,
+          "AMC snapshot restores the control and physical memory without a format change");
+    r.imem[0xfe]=0xe3;r.Reset();
+    check(r.imem[IMEM_AMC]==0x0f && r.imem[0xfe]==0xe3,
+          "AMC reset disables AME, retains size bits and leaves LCC bit7 intact");
+    auto absent=std::make_unique<Machine>();absent->cpu.imem[IMEM_AMC]=0x8f;
+    absent->Set_8(0xa8000,0x42);
+    check(absent->Get_8(0xa8000)==0xff && absent->mem[0xb8000]==0xff,
+          "AMC absent card does not fall through to an internal-RAM mirror");
+}
 int main() {
     try {
+        testAmc();
         auto m=std::make_unique<Machine>();auto &c=m->cpu;
         m->mem[0xffffd]=0x00;m->mem[0xffffe]=0x01;m->mem[0xfffff]=0x0c;
         c.Reset();check(c.reg.x.p==0xc0100,"reset vector");
+        {
+            auto recorder=std::make_unique<Machine>();auto &r=recorder->cpu;r.Reset();
+            uint32_t durations[]={13,9,31};BYTE levels[]={1,0,1};
+            check(e500_tape_connect(recorder.get(),1)==1,"cassette connection");
+            check(e500_tape_load(recorder.get(),durations,levels,3)==1,"cassette host pulse input");
+            uint32_t invalid[]={0};
+            check(!e500_tape_load(recorder.get(),invalid,levels,1)&&recorder->tape.pendingInput()==3,"cassette invalid input leaves loaded waveform intact");
+            check(!e500_can_save(recorder.get())&&!e500_can_load(recorder.get()),"pending external cassette input rejects snapshots");
+            check(e500_tape_play(recorder.get())==1&&!(r.imem[IMEM_SSR]&2),"CI input disabled without SCR BZ2");
+            r.imem[IMEM_SCR]=0x40;r.AddState(12);
+            check((r.imem[IMEM_SSR]&2)&&!recorder->toneLevel(4),"enabled CI high with independent low CO mode");
+            r.AddState(1);check(!(r.imem[IMEM_SSR]&2),"CI changes at the pulse's exact end cycle");
+            r.imem[IMEM_SCR]=0x60;r.AddState(9);
+            check((r.imem[IMEM_SSR]&2)&&recorder->toneLevel(6),"CO mode6 mirrors physical CI");
+            r.imem[IMEM_SCR]=0;r.AddState(1);
+            check(!(r.imem[IMEM_SSR]&2),"disabling input gate clears CI without rewinding playback");
+            r.imem[IMEM_SCR]=0x70;r.AddState(1);
+            check((r.imem[IMEM_SSR]&2)&&recorder->toneLevel(7),"CO mode7 mirrors the ongoing input pulse");
+            r.AddState(29);
+            check(!(r.imem[IMEM_SSR]&2)&&!recorder->tape.playing(),"exhausted cassette waveform returns CI low");
+            int16_t samples[8]{};
+            check(e500_audio(recorder.get(),samples,8)==3&&samples[0]==-6000&&samples[1]==6000&&samples[2]==6000,"cassette CI monitor reaches real48kHz audio at sample cycles");
+            std::vector<BYTE> saved(e500_state_size());
+            check(e500_save(recorder.get(),saved.data(),int(saved.size()))==1,"idle cassette permits snapshot");
+            r.imem[IMEM_SCR]=0;
+            check(e500_tape_record(recorder.get())==1&&!e500_can_save(recorder.get()),"cassette recording rejects rollback snapshot");
+            r.AddState(10);r.imem[IMEM_SCR]=0x10;r.AddState(1);
+            r.AddState(9);r.imem[IMEM_SCR]=0;r.AddState(1);
+            check(e500_tape_stop(recorder.get())==1&&(e500_tape_status(recorder.get())&32),"cassette CO output capture closes");
+            check(e500_load(recorder.get(),saved.data(),int(saved.size()))==1,"idle state load with external cassette output");
+            e500_reset(recorder.get(),0);
+            uint32_t got[4]{};BYTE high[4]{};
+            check(e500_tape_read(recorder.get(),got,high,4)==2&&got[0]==11&&got[1]==10&&!high[0]&&high[1],"snapshot load and reset retain exact external output history");
+            check(e500_tape_connect(nullptr,1)==0&&e500_tape_load(recorder.get(),nullptr,nullptr,-1)==0&&
+                  e500_tape_read(recorder.get(),nullptr,nullptr,1)==0,"cassette public API rejects malformed buffers/counts");
+        }
+        {
+            auto oscillator=std::make_unique<Machine>();oscillator->cpu.Reset();
+            e500_tape_connect(oscillator.get(),1);oscillator->cpu.imem[IMEM_SCR]=0x20;
+            check(e500_tape_record(oscillator.get())==1,"cassette records hardware tone output");
+            oscillator->cpu.AddState(255);oscillator->cpu.AddState(255);
+            e500_tape_stop(oscillator.get());uint32_t cycles[4]{};BYTE high[4]{};
+            check(e500_tape_read(oscillator.get(),cycles,high,4)==3&&
+                  cycles[0]==192&&cycles[1]==192&&cycles[2]==126&&high[0]&&!high[1]&&high[2],
+                  "2kHz cassette output records exact edges inside long peripheral steps");
+        }
+        {
+            auto stream=std::make_unique<Machine>();stream->cpu.Reset();
+            stream->cpu.imem[IMEM_SCR]=0x40;e500_tape_connect(stream.get(),1);
+            uint32_t duration=13;BYTE high=1;
+            check(e500_tape_load(stream.get(),&duration,&high,1)&&e500_tape_play(stream.get()),"cassette streamed playback begins");
+            stream->cpu.AddState(5);uint32_t more[]={9,31};BYTE levels[]={0,1};
+            check(e500_tape_append(stream.get(),more,levels,2)==1,"append cassette pulses while the current pulse is partially consumed");
+            stream->cpu.AddState(8);check(!(stream->cpu.imem[IMEM_SSR]&2),"append retains the original current-pulse deadline");
+            stream->cpu.AddState(9);check(stream->cpu.imem[IMEM_SSR]&2,"appended pulse follows without a playback gap");
+            stream->cpu.AddState(31);check(!stream->tape.busy(),"streamed cassette input drains at its exact final cycle");
+        }
+        {
+            auto remote=std::make_unique<Machine>();auto &r=remote->cpu;r.Reset();
+            auto pins=[&](bool xout,bool busy,bool data) {
+                r.imem[IMEM_SCR]=xout?0x10:0;
+                r.imem[IMEM_EOL]=busy?0x40:0;
+                r.imem[IMEM_EOH]=data?4:0;
+                r.AddState(1);
+            };
+            auto device=[&](BYTE value,int bits=8) {
+                pins(true,false,false);
+                for(int n=0;n<bits;n++){pins(true,true,(value>>n)&1);pins(true,false,false);}
+                pins(false,false,false);
+            };
+            check(!e500_tape_remote(nullptr,1)&&!e500_tape_remote(remote.get(),2),"cassette remote API validates machine and boolean");
+            check(e500_tape_connect(remote.get(),1)&&e500_tape_remote(remote.get(),1),"cassette remote cable configured");
+            uint32_t durations[]={1000,1000};BYTE levels[]={1,0};
+            check(e500_tape_load(remote.get(),durations,levels,2)&&e500_tape_play(remote.get()),"remote playback armed before motor start");
+            r.imem[IMEM_SCR]=0x40;r.AddState(200);
+            check(!(r.imem[IMEM_SSR]&2)&&(e500_tape_status(remote.get())&0xca)==0x4a,"stopped remote motor retains pending input and keeps CI low");
+            check(!e500_tape_remote(remote.get(),0)&&!e500_can_save(remote.get()),"armed remote playback rejects configuration and snapshot rollback");
+            device(0x10,7);check(!remote->printer.remoteMotor,"partial motor code does not start deck");
+            device(0x10);check(remote->printer.remoteMotor&&(e500_tape_status(remote.get())&128),"complete10h starts external cassette motor");
+            r.imem[IMEM_SCR]=0x40;r.AddState(5);
+            check(r.imem[IMEM_SSR]&2,"remote motor advances actual CI waveform");
+            device(0x41);check(remote->printer.remoteMotor,"another device code retains cassette motor");
+            device(0x00);check(!remote->printer.remoteMotor&&!(e500_tape_status(remote.get())&128),"complete00h stops cassette motor");
+            r.imem[IMEM_SCR]=0x40;r.AddState(200);
+            check(!(r.imem[IMEM_SSR]&2)&&remote->tape.pendingInput()==2,"stopped motor freezes a partially consumed input pulse");
+            device(0x10);r.imem[IMEM_SCR]=0x40;r.AddState(1);
+            check(r.imem[IMEM_SSR]&2,"motor restart resumes retained pulse");
+            e500_printer_connect(remote.get(),0);
+            check(!remote->printer.remoteMotor&&!(r.imem[IMEM_SSR]&2)&&!(e500_tape_status(remote.get())&128),"unplugged CE126P stops motor and immediately clears CI");
+            device(0x10);check(!remote->printer.remoteMotor,"disconnected adapter ignores complete motor code");
+            e500_printer_connect(remote.get(),1);device(0x10);
+            check(remote->printer.remoteMotor,"reconnected adapter accepts next motor command");
+            e500_tape_stop(remote.get());e500_tape_load(remote.get(),nullptr,nullptr,0);
+            std::vector<BYTE> saved(e500_state_size());
+            check(e500_save(remote.get(),saved.data(),int(saved.size()))==1,"idle remote motor allows CPU snapshot");
+            device(0x00);check(e500_load(remote.get(),saved.data(),int(saved.size()))==1,"CPU snapshot reload with external motor stopped");
+            check(!remote->printer.remoteMotor&&!(e500_tape_status(remote.get())&128),"CPU snapshot does not rewind physical motor state");
+            device(0x10);e500_reset(remote.get(),0);
+            check(remote->printer.remoteMotor&&(e500_tape_status(remote.get())&0xc0)==0xc0,"CPU reset preserves powered external motor and cable preference");
+        }
+        {
+            auto uart=std::make_unique<Machine>();auto &u=uart->cpu;
+            u.Reset();uart->serial.connect(true,true,true,false);
+            u.Set_i8(0xf7,0x6c,0); // 9600, no parity, eight bits, one stop.
+            auto frame=uart->serial.frameCycles(0x6c);
+            check(frame==800,"UART frame duration derives from UCR and CPU clock");
+            u.Set_i8(0xfa,'A',0);
+            check(!(u.imem[0xf8]&8),"UART TX holding register becomes occupied");
+            uart->serial.tick(1,true,u.imem);
+            check((u.imem[0xf8]&0x18)==8 && (u.imem[0xfc]&0x10),"UART holding-to-shifter and TX interrupt");
+            auto remaining=uart->serial.txCycles;
+            uart->serial.tick(1000,false,u.imem);
+            check(uart->serial.txCycles==remaining,"UART stops its clock during HALT/OFF");
+            uart->serial.tick(frame,true,u.imem);
+            BYTE out=0;check(uart->serial.receive(&out,1)==1 && out=='A' && (u.imem[0xf8]&0x18)==0x18,"UART framed transmit completes");
+            BYTE incoming='B';check(uart->serial.inject(&incoming,1)==1,"UART host input accepted");
+            uart->serial.tick(frame-1,true,u.imem);
+            check(!(u.imem[0xf8]&0x20),"UART does not deliver an incomplete frame");
+            uart->serial.tick(1,true,u.imem);
+            check((u.imem[0xf8]&0x20) && (u.imem[0xfc]&0x20),"UART RX ready and interrupt");
+            check(u.Get_i8(0xf9,0)=='B',"UART RXD read returns received byte");
+            uart->serial.tick(1,true,u.imem);
+            check(!(u.imem[0xf8]&0x20),"UART RXD read clears RXR after the instruction");
+            u.Set_i8(0xf7,0x6e,0);incoming=0xff;
+            uart->serial.inject(&incoming,1,1);
+            uart->serial.tick(uart->serial.frameCycles(0x6e),true,u.imem);
+            check(u.imem[0xf9]==0x7f && (u.imem[0xf8]&1),"UART seven-bit receive and parity status");
+            incoming='C';uart->serial.inject(&incoming,1);
+            check(!uart->serial.quiescent(),"UART in-flight host input cannot be snapshotted");
+            uart->serial.tick(uart->serial.frameCycles(0x6e),true,u.imem);
+            check(u.imem[0xf8]&2,"UART unread receive reports overrun");
+            u.Set_i8(0xf7,0,0);
+            check((u.imem[0xf8]&0x3f)==0x18,"UART disabled control resets its status");
+        }
         m->mem[0xc0100]=0x08;m->mem[0xc0101]=0xff; // LD A,FF
         c.step();check(c.reg.r.a==255 && c.reg.x.p==0xc0102,"immediate load");
         m->mem[0xc0102]=0x40;m->mem[0xc0103]=1; // ADD A,1
