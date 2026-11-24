@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>pokecom</AssemblyName>
+    <RootNamespace>PokeCom</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Version>0.1.0</Version>
+    <Product>PC-E500 Emulator (PokeCom) command line</Product>
+  </PropertyGroup>
+  <!-- The core of the system built for: named by the runtime identifier, or the one building. -->
+  <PropertyGroup>
+    <ForWindows Condition="'$(RuntimeIdentifier)'!='' And $(RuntimeIdentifier.StartsWith('win'))">true</ForWindows>
+    <ForWindows Condition="'$(RuntimeIdentifier)'=='' And '$(OS)'=='Windows_NT'">true</ForWindows>
+    <CoreFile Condition="'$(ForWindows)'=='true'">../../bin/e500core.dll</CoreFile>
+    <CoreFile Condition="'$(ForWindows)'!='true'">../../bin/libe500core.so</CoreFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../shared/*.cs" LinkBase="shared" />
+    <None Include="$(CoreFile)" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+</Project>

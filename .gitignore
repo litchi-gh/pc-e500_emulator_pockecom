@@ -21,6 +21,8 @@
 /tests/test-core.*
 /src/desktop/bin/
 /src/desktop/obj/
+/src/cli/bin/
+/src/cli/obj/
 /src/native/*.obj
 *.pdb
 *.exp
