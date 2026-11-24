@@ -28,6 +28,7 @@
     <Compile Include="../shared/*.cs" LinkBase="shared" />
     <Compile Include="../ui/*.cs" LinkBase="ui" />
     <Compile Include="../desktop/AudioOutput.cs" LinkBase="desktop" />
+    <EmbeddedResource Include="pc-e500.png" LogicalName="pc-e500.png" />
     <None Include="$(CoreFile)" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 </Project>

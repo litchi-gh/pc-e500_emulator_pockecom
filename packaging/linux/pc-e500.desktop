@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PC-E500 Emulator
+Comment=SHARP PC-E500 series pocket computer emulator
+Comment[ja]=ポケットコンピュータ PC-E500 シリーズのエミュレータ
+Exec=/usr/bin/pc-e500
+Icon=pc-e500
+Terminal=false
+Categories=Game;Emulator;
+StartupWMClass=PC-E500

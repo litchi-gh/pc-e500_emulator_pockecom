@@ -18,3 +18,5 @@ The internal-RAM expansion sizes (128KB / 256KB) follow the well-known 62256 -> 
 The installer (`PC-E500-Emulator-<version>-win-x64-setup.exe`) is built with Inno Setup (https://jrsoftware.org/isinfo.php), Copyright (C) 1997-2026 Jordan Russell, portions Copyright (C) 2000-2026 Martijn Laan; its setup program carries Inno Setup's own copyright notice. Inno Setup is not part of this repository or of the program itself.
 
 The self-contained desktop build includes the Microsoft .NET runtime. Its third-party notices are distributed in `app/DOTNET-THIRD-PARTY-NOTICES.txt`; see also https://github.com/dotnet/runtime and https://github.com/dotnet/winforms.
+
+The program for Linux (`src/avalonia`) is built with Avalonia, SkiaSharp, HarfBuzzSharp, Tmds.DBus and MicroCom (MIT); their notices are in `third_party/avalonia/` and in the Linux packages.
