@@ -311,7 +311,7 @@ PRINT=LPRINT             ' send PRINT to the printer (PRINT=PRINT undoes it)</pr
 <p><b>Print to</b> sends the lines on to a printer as well (kept in the settings). A <b>USB thermal printer</b> (58 mm, 384 dots, ESC/POS, such as the MPT-II) prints each line as it comes, with no driver, and the paper is fed 12 mm once printing has paused for 3 seconds. A <b>Windows printer</b> gets the lines since its last job as one job, at their real size (2 mm a character, 4 mm a line), once printing has paused for 3 seconds. <b>Print paper</b> sends the whole paper. A printer that cannot be reached is reported at the bottom of the window; the machine goes on.</p>
 <figure><img src="images-en/printer.png" alt="CE-126P window"><figcaption>The CE-126P window, after LPRINT and LLIST</figcaption></figure>
 <ul>
-<li>Untick <b>Connected</b> and LPRINT reports <code>Printer error</code>, as on a real machine with no printer. The setting is kept.</li>
+<li>Untick <b>Connected</b> and the ROM skips <code>LPRINT</code> and the like without an error, as on a real machine with no printer. Untick it in the middle of a line and you get <code>Printer error</code>. The setting is kept.</li>
 <li>It shares the 11-pin bus with the CE-140F; both work together.</li>
 <li>The paper keeps up to 2000 lines, dropping the oldest. It is not part of a snapshot (a snapshot taken mid-line prints that line again in full when loaded).</li>
 <li>Printing takes no time. Saved as text, signs such as <code>¥</code> come out as printed.</li>
@@ -415,7 +415,7 @@ PRINT=LPRINT             ' send PRINT to the printer (PRINT=PRINT undoes it)</pr
 <tr><th>A 256KB Ver.8 ROM starts with lines across the screen and stops there</th><td>Ver.8 ROMs (E650/U6000, E500S) come as a main part (S3A) and an extension (S3B); the main part alone does not start. Dump S3B from the same machine as well and merge them into a 384KB image (<a href="#romdump">chapter 13</a>)</td></tr>
 <tr><th>Where do ROMs and data go?</th><td>In <code>rom\</code> in the folder that <b>Open the data folder</b> in the right-click menu opens (<code>%LocalAppData%\PockeComE500\</code> when installed, beside <code>PC-E500.exe</code> with the zip; <a href="#start">chapter 1</a>)</td></tr>
 <tr><th>The controller does nothing</th><td>Check that the main window is in front (the pad does nothing while another window is). Also check <b>Use a controller</b> in the Controller window, and that the status bar says "Pad connected" (<a href="#pad">chapter 3</a>)</td></tr>
-<tr><th>LPRINT says Printer error</th><td><b>Connected</b> is unticked in the CE-126P window (<a href="#printer">chapter 7</a>)</td></tr>
+<tr><th>LPRINT prints nothing</th><td><b>Connected</b> is unticked in the CE-126P window (<a href="#printer">chapter 7</a>)</td></tr>
 <tr><th>The title bar and buttons are gone</th><td>That is the case-only or screen-only view. <b>Window</b> → <b>Normal</b> in the right-click menu brings them back (<a href="#menu">chapter 4</a>)</td></tr>
 <tr><th>The installer shows "Windows protected your PC"</th><td>The installer is not signed. Choose <b>More info</b> → <b>Run anyway</b></td></tr>
 <tr><th>Open ROM refuses the file</th><td>Check that it is 256KB or 384KB (plus 16 bytes if it still has the header) and that it is not S3B alone (<a href="#romdump-header">chapter 13</a>)</td></tr>

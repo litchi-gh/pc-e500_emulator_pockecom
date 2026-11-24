@@ -375,7 +375,7 @@ LPRINT "HELLO"
 LLIST
 ```
 
-- Untick "Connected" and LPRINT reports `Printer error`, as on a real machine with no printer. The setting is kept.
+- Untick "Connected" and the ROM skips `LPRINT` and the like without an error, as on a real machine with no printer. Untick it in the middle of a line and you get `Printer error`. The setting is kept.
 - It shares the 11-pin bus with the CE-140F; both work together.
 - **Printing on a printer**: "Print to" in the CE-126P window sends the lines on to a printer as well; the choice is kept in the settings.
   - **A USB thermal printer** (58 mm, 384 dots across, ESC/POS, such as the MPT-II): written to directly, with no driver or print queue, a line at a time as it comes. The ROM's glyphs are drawn at three times their size, 2 mm a character and 4 mm a line. After printing has paused for 3 seconds, the paper is fed 12 mm.
