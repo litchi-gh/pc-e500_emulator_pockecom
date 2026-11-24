@@ -1,6 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 namespace PokeCom;
 
+/// <summary>キー入力の待ち行列のうち、キーを送る側が使うもの。</summary>
+internal interface IKeyInput
+{
+    /// <summary>待ち行列：キーコード、押すか離すか、その状態を保つサイクル数。</summary>
+    Queue<(int Code,bool Down,int Cycles)> Queue {get;}
+    /// <summary>待ち行列が空で、最後のキーの時間も過ぎたか。</summary>
+    bool Idle {get;}
+    /// <summary>キーを1回押して離す操作を待ち行列に入れ、すぐに始める。</summary>
+    void Tap(int code);
+    /// <summary>文字列をキー入力として送る。</summary>
+    string Paste(string value);
+}
+
 /// <summary>
 /// キー入力の待ち行列：押す・離すを順に本体へ送り、ROM がキーを読み取れる長さだけ保つ。
 /// PC のキーを押している間は本体のキーも押したままにする。
@@ -9,7 +22,7 @@ namespace PokeCom;
 /// <param name="getCore">今の本体（なければ null）</param>
 /// <param name="blocked">キーを受け付けないか（一時停止中など）</param>
 /// <param name="show">画面のキーを押した見た目にする・戻す</param>
-internal sealed class KeyInput<TBy>(Func<Core?> getCore,Func<bool> blocked,Action<string,bool> show) where TBy : notnull
+internal sealed class KeyInput<TBy>(Func<Core?> getCore,Func<bool> blocked,Action<string,bool> show) : IKeyInput where TBy : notnull
 {
     // The ROM scans the key matrix from its 64 Hz sub-timer, and only counts a key
     // whose press and release land in different scans with one scan between them.
@@ -24,7 +37,7 @@ internal sealed class KeyInput<TBy>(Func<Core?> getCore,Func<bool> blocked,Actio
     internal const int CpuHz=768000,KeyDownCycles=18000,KeyUpCycles=24000,ModeSettleCycles=200000,ModifierCycles=7500,
         ShiftLeadCycles=18000,ShiftTailCycles=18000;
     /// <summary>待ち行列：キーコード、押すか離すか、その状態を保つサイクル数。</summary>
-    internal readonly Queue<(int Code,bool Down,int Cycles)> Queue=new();
+    public Queue<(int Code,bool Down,int Cycles)> Queue {get;}=new();
     /// <summary>画面でクリックして押したままの SHIFT・CTRL。</summary>
     internal readonly HashSet<int> Held=new();
     // A PC key held down holds the machine's key down until it comes up, as a
@@ -36,7 +49,7 @@ internal sealed class KeyInput<TBy>(Func<Core?> getCore,Func<bool> blocked,Actio
     /// <summary>今のキーの状態を保つ残りのサイクル数（0 なら次のキーへ）。</summary>
     internal int Wait;
     /// <summary>待ち行列が空で、最後のキーの時間も過ぎたか。</summary>
-    internal bool Idle=>Queue.Count==0 && Wait==0;
+    public bool Idle=>Queue.Count==0 && Wait==0;
     /// <summary>送り終えるまでのサイクル数。</summary>
     internal int Backlog=>Wait+Queue.Sum(x=>x.Cycles);
     static int Shift=>Keyboard.Codes["SHIFT"];
@@ -44,7 +57,7 @@ internal sealed class KeyInput<TBy>(Func<Core?> getCore,Func<bool> blocked,Actio
     static string NameOf(int code)=>Keyboard.Matrix[code/8][code%8];
     /// <summary>キーを1回押して離す操作を待ち行列に入れ、すぐに始める。</summary>
     /// <param name="code">キーコード</param>
-    internal void Tap(int code) {
+    public void Tap(int code) {
         if(getCore() is null || blocked())return;
         Queue.Enqueue((code,true,KeyDownCycles));Queue.Enqueue((code,false,KeyUpCycles));
         if(ChangesMode(code))Queue.Enqueue((code,false,ModeSettleCycles));
@@ -142,7 +155,7 @@ internal sealed class KeyInput<TBy>(Func<Core?> getCore,Func<bool> blocked,Actio
     /// <summary>文字列をキー入力として送る（改行は ENTER、タブは空白4つ、対応しない文字は省く）。</summary>
     /// <param name="value">貼り付ける文字列（4096文字まで）</param>
     /// <returns>結果のメッセージ</returns>
-    internal string Paste(string value) {
+    public string Paste(string value) {
         if(getCore() is null)return L.T("ROMが読み込まれていません。","No ROM is loaded.");
         if(blocked())return L.T("一時停止を解除してから貼り付けてください。","Resume the machine before pasting.");
         if(value.Length>4096)return L.T("貼り付けは一度に4096文字までです。","Paste up to 4096 characters at a time.");

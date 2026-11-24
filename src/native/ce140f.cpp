@@ -315,12 +315,16 @@ Bytes Ce140f::command(const Bytes& packet) {
         // character as well as the closing 1Ah, it made the ROM report Disk full.
         // A last line with no CR (a file from a PC often has none) gets one:
         // the ROM drops a line that runs into the closing 1Ah.
-        case 0x12: {  // テキストファイルの LOAD：1行（CR まで）ずつ返す。ファイルの中の 1Ah で終わり、最後に 1Ah。CR のない最後の行には CR を補う
+        // A file made on Linux, or by an editor that saves that way, ends its lines
+        // with LF alone: each is taken for the CR the ROM wants.
+        case 0x12: {  // テキストファイルの LOAD：1行（CR まで）ずつ返す。ファイルの中の 1Ah で終わり、最後に 1Ah。CR のない最後の行には CR を補う。LF だけの行末は CR にする
             Bytes out{0};bool ended=false;
             while(transfer.position<transfer.bytes.size()) {
                 auto v=transfer.bytes[transfer.position++];
                 if(v==0x1a){transfer.position=transfer.bytes.size();break;}
-                if(v==10)continue;out.push_back(v);if(v==13){ended=true;break;}
+                bool alone=v==10 && (transfer.position<2 || transfer.bytes[transfer.position-2]!=13);
+                if(v==10 && !alone)continue;
+                out.push_back(alone?13:v);if(out.back()==13){ended=true;break;}
             }
             if(!ended && out.size()>1){out.push_back(13);ended=true;}
             if(!ended){out.push_back(0x1a);transfer.mode=0;}out=checked(out);out.push_back(0);return out;

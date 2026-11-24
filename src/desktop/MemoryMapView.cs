@@ -2,22 +2,6 @@
 using System.Drawing.Drawing2D;
 namespace PokeCom;
 
-internal static partial class RamLayout
-{
-    /// <summary>区画の種類の色。</summary>
-    internal static Color Color(RegionKind kind)=>kind switch{
-        RegionKind.Program=>Theme.Dark?System.Drawing.Color.FromArgb(76,160,255):System.Drawing.Color.FromArgb(0,103,192),
-        RegionKind.Variables=>Theme.Dark?System.Drawing.Color.FromArgb(56,196,186):System.Drawing.Color.FromArgb(0,153,143),
-        RegionKind.Block=>Theme.Dark?System.Drawing.Color.FromArgb(150,150,200):System.Drawing.Color.FromArgb(110,110,160),
-        RegionKind.RamDisk=>Theme.Dark?System.Drawing.Color.FromArgb(120,200,110):System.Drawing.Color.FromArgb(70,150,60),
-        RegionKind.Free=>Theme.Dark?System.Drawing.Color.FromArgb(58,58,58):System.Drawing.Color.FromArgb(232,232,232),
-        RegionKind.Stack=>Theme.Dark?System.Drawing.Color.FromArgb(190,150,240):System.Drawing.Color.FromArgb(135,100,184),
-        RegionKind.Work=>Theme.Dark?System.Drawing.Color.FromArgb(160,130,210):System.Drawing.Color.FromArgb(160,130,200),
-        RegionKind.MachineCode=>Theme.Dark?System.Drawing.Color.FromArgb(255,150,60):System.Drawing.Color.FromArgb(230,110,10),
-        RegionKind.System=>Theme.Dark?System.Drawing.Color.FromArgb(110,110,110):System.Drawing.Color.FromArgb(120,120,120),
-        _=>Theme.Dark?System.Drawing.Color.FromArgb(90,90,90):System.Drawing.Color.FromArgb(180,180,180)};
-}
-
 // One RAM slot as a bar, low addresses at the left: each region in its kind's
 // colour, wide in proportion to its size but never too thin to see or to point
 // at; its name inside where it fits. Hovering tells the region's range and size;
@@ -66,28 +50,7 @@ internal sealed class MemoryMapView : Control
     }
     IEnumerable<RegionKind> Kinds()=>regions.Select(r=>r.Kind).Distinct().OrderBy(k=>k);
     int LegendWidth(RegionKind k)=>S(14)+TextRenderer.MeasureText(RamLayout.KindName(k),Font,Size.Empty,TextFormatFlags.NoPadding).Width+S(14);
-    // Widths: each region gets its share of the bar, but none less than a few
-    // pixels; what the small ones are given comes out of the large ones.
-    /// <summary>区画ごとの幅（大きさの割合、細いものは下限まで広げ、その分を大きいものから引く）。</summary>
-    int[] Widths(int total) {
-        int n=regions.Count;if(n==0)return [];
-        long span=Math.Max(1,regions[^1].End-regions[0].Start);
-        int min=S(6);var w=new double[n];var small=new bool[n];
-        for(int pass=0;pass<4;pass++) {
-            double big=regions.Where((r,i)=>!small[i]).Sum(r=>(double)r.Size);
-            double left=total-small.Count(s=>s)*min;
-            bool changed=false;
-            for(int i=0;i<n;i++) {
-                if(small[i]){w[i]=min;continue;}
-                w[i]=big>0?left*regions[i].Size/big:0;
-                if(w[i]<min){small[i]=true;changed=true;}
-            }
-            if(!changed)break;
-        }
-        var result=new int[n];double acc=0;int prev=0;
-        for(int i=0;i<n;i++){acc+=w[i];int edge=(int)Math.Round(acc);result[i]=edge-prev;prev=edge;}
-        return result;
-    }
+    int[] Widths(int total)=>RamLayout.Widths(regions,total,S(6));
     protected override void OnPaint(PaintEventArgs e) {
         var g=e.Graphics;g.Clear(Parent?.BackColor??Theme.Card);
         laid.Clear();if(regions.Count==0)return;
@@ -102,7 +65,7 @@ internal sealed class MemoryMapView : Control
             for(int i=0;i<regions.Count;i++) {
                 var r=regions[i];var area=new Rectangle(x,bar.Y,widths[i],bar.Height);x+=widths[i];
                 laid.Add((area,r));
-                var color=RamLayout.Color(r.Kind);
+                var color=RamLayout.Color(r.Kind,Theme.Dark);
                 if(Emphasis is RegionKind em && r.Kind!=em && r.Kind!=RegionKind.Free)color=Theme.Mix(color,Theme.Card,0.45f);
                 using(var brush=new SolidBrush(color))g.FillRectangle(brush,area);
                 if(r.Kind==RegionKind.Free) {
@@ -137,7 +100,7 @@ internal sealed class MemoryMapView : Control
             int w=LegendWidth(k);
             if(lx>0 && lx+w>Width){lx=0;y+=Font.Height+S(4);}
             var sw=new Rectangle(lx,y+(Font.Height-S(10))/2,S(10),S(10));
-            using(var path=Theme.Rounded(sw,S(2)))using(var brush=new SolidBrush(RamLayout.Color(k)))g.FillPath(brush,path);
+            using(var path=Theme.Rounded(sw,S(2)))using(var brush=new SolidBrush(RamLayout.Color(k,Theme.Dark)))g.FillPath(brush,path);
             TextRenderer.DrawText(g,RamLayout.KindName(k),Font,new Point(lx+S(14),y),Theme.SubText,TextFormatFlags.NoPadding);
             lx+=w;
         }

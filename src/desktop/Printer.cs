@@ -32,20 +32,7 @@ internal sealed partial class PrinterPaper
     internal void Render(Bitmap bitmap,int[] pixels,byte[] font,int top,int height)
     {
         var data=bitmap.LockBits(new Rectangle(0,0,Width,height),ImageLockMode.WriteOnly,PixelFormat.Format32bppArgb);
-        Array.Fill(pixels,Color.White.ToArgb(),0,Width*height);
-        int ink=Color.FromArgb(40,40,48).ToArgb();
-        int first=Math.Max(0,(top-Margin)/LineHeight),last=Math.Min(lines.Count-1,(top+height-Margin)/LineHeight);
-        for(int row=first;row<=last;row++) {
-            var line=lines[row];
-            for(int col=0;col<Math.Min(Columns,line.Length);col++) {
-                int at=(line[col]-0x20)*CellWidth;
-                if(at<0 || at+CellWidth>font.Length)continue;
-                for(int x=0;x<CellWidth;x++) for(int y=0;y<8;y++) {
-                    int py=Margin+row*LineHeight+y-top;
-                    if(py>=0 && py<height && (font[at+x]>>y&1)!=0)pixels[py*Width+Margin+col*CellWidth+x]=ink;
-                }
-            }
-        }
+        Pixels(pixels,font,top,height);
         System.Runtime.InteropServices.Marshal.Copy(pixels,0,data.Scan0,Width*height);
         bitmap.UnlockBits(data);
     }

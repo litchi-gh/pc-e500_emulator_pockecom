@@ -252,6 +252,7 @@ class HardwareTests(unittest.TestCase):
                                  ('EOF right after the last line',b'10 PRINT 123\r\n20 PRINT 456\x1a',b'10 PRINT 123\r\n20 PRINT 456\r\n'),
                                  ('padded after EOF',b'10 PRINT 123\r\n\x1a\x00\x00\xff99 REM\r\n',b'10 PRINT 123\r\n'),
                                  ('no EOF',b'10 PRINT 123\r\n',b'10 PRINT 123\r\n'),
+                                 ('LF line ends',b'10 PRINT 456\n20 PRINT 123\n',b'10 PRINT 456\r\n20 PRINT 123\r\n'),
                                  ('no EOF, no line end',b'10 PRINT 123\r\n20 PRINT 456',b'10 PRINT 123\r\n20 PRINT 456\r\n')]:
             with self.subTest(label),tempfile.TemporaryDirectory(prefix='pce500-eof-') as folder:
                 pathlib.Path(folder,'A.BAS').write_bytes(data)
