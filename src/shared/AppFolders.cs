@@ -33,7 +33,7 @@ internal static class AppFolders
         // （zip 版が上へ探すと、関係のない上のフォルダの rom をデータの場所にしてしまった）。
         if(Installed || Directory.Exists(Path.Combine(here,"rom")) || Directory.Exists(Path.Combine(here,"manual")))return here;
         char s=Path.DirectorySeparatorChar;
-        if(!here.Contains($"{s}src{s}desktop{s}bin{s}",StringComparison.OrdinalIgnoreCase))return here;
+        if(!((string[])["desktop","avalonia"]).Any(p=>here.Contains($"{s}src{s}{p}{s}bin{s}",StringComparison.OrdinalIgnoreCase)))return here;
         for(var d=new DirectoryInfo(here);d is not null;d=d.Parent) {
             if(Directory.Exists(Path.Combine(d.FullName,"rom")))return d.FullName;
             if(Directory.Exists(Path.Combine(d.FullName,"app","rom")))return Path.Combine(d.FullName,"app");
