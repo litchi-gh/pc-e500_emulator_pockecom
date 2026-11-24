@@ -23,6 +23,10 @@ internal static class MachineCodeArea
         if(start<bottom || start>Top)return null;
         return (start,Top-start);
     }
+    // Room is left for the BASIC program and variables to work in: the ROM stops a
+    // request it cannot meet, but one that leaves nothing would stop BASIC instead.
+    /// <summary>機械語エリアにできるいちばん大きい値（今の大きさと空きから、BASIC の分を 200h 残して 100h 単位に）。</summary>
+    internal static int Largest(int current,int free)=>Math.Max(current,(current+free-0x200)/0x100*0x100);
     // POKE and CALL in decimal: every character of it is on the machine's keys.
     /// <summary>機械語エリアを size バイトにする BASIC の命令（ROM の確保の処理を呼ぶ）。</summary>
     internal static string Command(int size)=>$"POKE {0xbfe03},{Pointer&0xff},{(Pointer>>8)&0xff},{Pointer>>16},{size&0xff},{(size>>8)&0xff},{size>>16}:CALL {0xfffd8}";

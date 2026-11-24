@@ -891,7 +891,7 @@ internal sealed class MainForm : Form
     // Room is left for the BASIC program and variables to work in: the ROM stops a
     // request it cannot meet, but one that leaves nothing would stop BASIC instead.
     /// <summary>機械語エリアにできるいちばん大きい値（今の大きさと空きから、BASIC の分を 200h 残して 100h 単位に）。</summary>
-    static int LargestMachineCode(int current,int free)=>Math.Max(current,(current+free-0x200)/0x100*0x100);
+    static int LargestMachineCode(int current,int free)=>MachineCodeArea.Largest(current,free);
     /// <summary>機械語エリアを size バイトにする（ROM の確保の処理を打ち込み、メインメニューから BASIC に戻す）。</summary>
     /// <returns>結果のメッセージ</returns>
     /// <summary>確保が終わるのを待って書き込む BIN（名前、ファイルの中身、確保する大きさ）。</summary>
