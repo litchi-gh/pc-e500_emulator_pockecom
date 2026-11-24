@@ -862,7 +862,7 @@ internal sealed class MainForm : Form
             Short:padDevice is not null?L.T("接続中","on"):L.T("未接続","off"));
         status.ShortOrder=pad is null?[3,4,6,5,2,1,0]:[3,4,6,7,5,2,1,0];
         status.SetParts(state,message,[
-            new(Theme.Icons.Chip,$"ROM Ver.{core.RomVersion} ({(core.IsE650Family?"E650":"E500")})",Tip:$"{core.RomKB}KB ({(core.IsE650Family?"E650/U6000":"E500")})\n{core.RomPath}",Short:$"Ver.{core.RomVersion}"),
+            new(Theme.Icons.Chip,$"ROM Ver.{core.RomVersion} ({(core.IsE500S?"E500S":core.IsE650Family?"E650":"E500")})",Tip:$"{core.RomKB}KB ({(core.IsE500S?"E500S":core.IsE650Family?"E650/U6000":"E500")})\n{core.RomPath}",Short:$"Ver.{core.RomVersion}"),
             new(Theme.Icons.Memory,$"RAM {core.InternalKB}KB{card}",Click:()=>TryAction(ConfigureHardware),
                 Tip:L.T($"内蔵RAM {core.InternalKB}KB / ",$"Internal RAM {core.InternalKB}KB / ")+(core.HasCard?L.T($"RAMカード {core.CardKB}KB ({core.CardName})",$"RAM card {core.CardKB}KB ({core.CardName})"):L.T("RAMカードなし","no RAM card"))+L.T("\n押すと「設定」を開きます","\nClick to open Settings"),Short:$"{core.InternalKB}KB{card}"),
             new(Theme.Icons.Code,ml is not {Size:>0} m?L.T("機械語 なし","ML none"):L.T($"機械語 {Bytes(m.Size)}",$"ML {Bytes(m.Size)}"),Click:()=>TryAction(ShowMachineCode),
@@ -1013,7 +1013,7 @@ internal sealed class MainForm : Form
             SaveSettings();
         }
         // An open settings window offers the RAM sizes of the machine now running.
-        if(windows.TryGetValue("hardware",out var open) && open is HardwareDialog hardware && !hardware.IsDisposed)hardware.SetRom(core.RomKB,settings.InternalKB);
+        if(windows.TryGetValue("hardware",out var open) && open is HardwareDialog hardware && !hardware.IsDisposed)hardware.SetRom(core.StandardRamKB,settings.InternalKB);
         paused=false;pause.Text=PauseCommand;
         // The drive goes in before the snapshot, which may hold its place in a
         // device code; mounted afterwards it would start that code over. A drive
@@ -1084,7 +1084,7 @@ internal sealed class MainForm : Form
     void ConfigureHardware() {
         ShowWindow("hardware",()=>{
             Directory.CreateDirectory(CardFolder());
-            var dialog=new HardwareDialog(settings,core?.RomKB??256,CardFolder()){InUse=()=>core?.CardPath};
+            var dialog=new HardwareDialog(settings,core?.StandardRamKB??32,CardFolder()){InUse=()=>core?.CardPath};
             dialog.Apply=edit=>{
                 try {ReleaseKeys();ApplyHardware(edit(settings));return true;}
                 catch(Exception ex) {MessageBox.Show(ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Error);return false;}

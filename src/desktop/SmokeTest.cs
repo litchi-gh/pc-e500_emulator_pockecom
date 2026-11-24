@@ -652,7 +652,7 @@ internal static class SmokeTest
             }
             string banks=Path.Combine(output,"memory-roundtrip");
             foreach(int kb in HardwareSettings.Sizes) {
-                int internalKB=HardwareSettings.CoerceInternal(core.RomKB,kb);
+                int internalKB=HardwareSettings.CoerceInternal(core.StandardRamKB,kb);
                 // A card is an image file: its size is the capacity, its bytes the
                 // contents, and the contents go back to the same file.
                 string cardImage=Path.Combine(banks,$"card-{kb}KB.ram");
@@ -711,8 +711,8 @@ internal static class SmokeTest
             catch(InvalidDataException){}
             try {using var missing=new Core(rom,64,Path.Combine(output,"no-such-card.ram"));throw new Exception("A missing card image was accepted");}
             catch(FileNotFoundException){}
-            if(core.IsE650Family) {
-                foreach(int kb in HardwareSettings.InternalSizes(core.RomKB)) {
+            if(core.StandardRamKB==64) {
+                foreach(int kb in HardwareSettings.InternalSizes(core.StandardRamKB)) {
                     using var expanded=new Core(rom,kb);
                     if(expanded.InternalKB!=kb)throw new Exception($"E650/U6000 internal RAM expansion to {kb}KB was not applied");
                 }
@@ -755,7 +755,7 @@ internal static class SmokeTest
             var coerced=HardwareSettings.LoadOrReset(config,out string? fine,out _);
             if(fine is not null || coerced.InternalKB!=32 || coerced.Appearance!="PC-E500" || coerced.DiskFolder!=settings.DiskFolder || coerced.CardPath!=settings.CardPath)
                 throw new Exception("A settings file with one bad value was not kept with that value at its default");
-            using(var dialog=new HardwareDialog(settings,core.RomKB,Path.Combine(output,"memory-roundtrip"))) {
+            using(var dialog=new HardwareDialog(settings,core.StandardRamKB,Path.Combine(output,"memory-roundtrip"))) {
                 dialog.Show(form);Application.DoEvents();
                 if(dialog.Over(settings)!=settings)throw new Exception("Hardware dialog values mismatch");
                 // Settings the dialog does not show come through an apply as they are.

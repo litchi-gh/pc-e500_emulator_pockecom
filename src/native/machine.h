@@ -6,6 +6,7 @@
 #include <array>
 #include <algorithm>
 #include <deque>
+#include <vector>
 #include "ce140f.h"
 #include "ce126p.h"
 #include "serial.h"
@@ -39,8 +40,10 @@ public:
     Csc62015 cpu;
     /// 内蔵 RAM と RAM カードの容量（KB、カードなしは 0）。
     int internalKB=32,cardKB=0;
-    /// ROM の容量（KB）。PC-E500 は 256、PC-E650・PC-U6000 は 384。
+    /// ROM の容量（KB）。PC-E500 は 256、PC-E500S・PC-E650・PC-U6000 は 384。
     int romKB=256;
+    /// 標準の内蔵 RAM（KB）。62256 が 1 個の PC-E500・E500S は 32、2 個の PC-E650・U6000 は 64。
+    int standardKB=32;
     /// ROM の中身のチェックサム（FNV-1a）。状態ファイルが同じ ROM のものかを確かめる。
     uint32_t romSum=0;
     /// 11ピンにつながる周辺機器。
@@ -59,6 +62,25 @@ public:
     /// デバッガのウォッチ：このアドレスを読んだ回数を数える。
     UINT32 watchAddr=0xffffffff;
     UINT32 watchHits=0;
+    // The debugger API (e500_debug_*, used by the VS Code debug server) only:
+    // the emulator's own run (e500_run) never looks at these, so it costs it nothing.
+    /// デバッガのブレークポイント（1MB を1ビットずつ。設定したときだけ確保する）。
+    std::vector<BYTE> breakBits;
+    /// 呼び出しの記録1つ：呼んだ番地、飛び先、戻り先を積んだあとの S、割り込みか。
+    struct CallFrame {UINT32 site,target,sp,interrupt;};
+    /// デバッガが数える呼び出しの記録（CALL・CALLF・割り込みで積み、戻り先が取り出されたら外す）。
+    std::vector<CallFrame> frames;
+    /// 読み出しウォッチ（実際の格納先の番地で 1MB を1ビットずつ）と、最後に引っかかった番地（なければ 0xffffffff）。
+    /// BASIC のデバッグで、インタプリタが行の最初のバイトを読んだところで止めるのに使う。
+    std::vector<BYTE> readBits;
+    UINT32 readHit=0xffffffff;
+    /// 読み出しウォッチの絞り込み：読んだ命令のあとの P がこの番地のときだけ止まる（0xffffffff なら絞らない）。
+    /// BASIC の行は、インタプリタが文を取り出す同じ1か所で読み始めるので、その場所だけに絞る。
+    UINT32 readFilter=0xffffffff;
+    /// a がブレークポイントか。
+    bool isBreak(UINT32 a) const {a&=0xfffff;return !breakBits.empty() && (breakBits[a>>3]>>(a&7)&1);}
+    /// デバッガの1命令（プリフィクスとその命令は1つ）。呼び出しの記録も更新する。budget は HALT 中に進めてよいサイクル数。
+    void debugStep(uint64_t budget=3);
     Machine():cpu(this) {mem.fill(0xff);}
     /// アドレスが RAM（内蔵 RAM の領域、またはカードがあるならカードの領域）か。
     bool isRam(UINT32 a) const {

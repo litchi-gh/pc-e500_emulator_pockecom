@@ -40,10 +40,10 @@ internal sealed record HardwareSettings(int InternalKB=32,string CardPath="",boo
     // The stock E500 carries one 62256 (32KB) and the E650/U6000 two of them (64KB,
     // B0000-BFFFF). Replacing each 32KB SRAM with a 128KB 628128 is the well-known
     // expansion mod, so an E650/U6000 reaches 128KB or 256KB (80000-BFFFF) instead.
-    /// <summary>ROM の容量（機種）に合う内蔵 RAM の容量の一覧。</summary>
-    internal static int[] InternalSizes(int romKB)=>romKB==384?[64,128,256]:Sizes;
-    /// <summary>機種に合わない内蔵 RAM の容量を、その機種の標準の容量（E500 は 32KB、E650 は 64KB）にする。</summary>
-    internal static int CoerceInternal(int romKB,int kb)=>InternalSizes(romKB).Contains(kb)?kb:romKB==384?64:32;
+    /// <summary>機種（標準の内蔵 RAM の容量）に合う内蔵 RAM の容量の一覧。</summary>
+    internal static int[] InternalSizes(int standardKB)=>standardKB==64?[64,128,256]:Sizes;
+    /// <summary>機種に合わない内蔵 RAM の容量を、その機種の標準の容量（E500・E500S は 32KB、E650・U6000 は 64KB）にする。</summary>
+    internal static int CoerceInternal(int standardKB,int kb)=>InternalSizes(standardKB).Contains(kb)?kb:standardKB;
     // The PC-U6000 case is a PC-E650 with a different nameplate, so it is not
     // offered as its own appearance; stored settings naming it fall back to E650.
     /// <summary>選べる外観。</summary>
@@ -137,13 +137,13 @@ internal sealed class HardwareDialog : ThemedForm
     internal Func<string?>? InUse;
     readonly NoteLabel ramNote=new("",560);
     /// <summary>本体の ROM が変わったときに、選べる内蔵 RAM の容量と説明を、その機種に合わせ直す。</summary>
-    /// <param name="romKB">ROM の容量</param>
+    /// <param name="standardKB">機種の標準の内蔵 RAM の容量（32 か 64）</param>
     /// <param name="internalKB">今の内蔵 RAM の容量</param>
-    internal void SetRom(int romKB,int internalKB) {
-        int[] sizes=HardwareSettings.InternalSizes(romKB);
+    internal void SetRom(int standardKB,int internalKB) {
+        int[] sizes=HardwareSettings.InternalSizes(standardKB);
         internalRam.Items.Clear();internalRam.Items.AddRange(sizes.Cast<object>().ToArray());
         internalRam.SelectedItem=sizes.Contains(internalKB)?internalKB:sizes[0];
-        ramNote.Text=romKB==384
+        ramNote.Text=standardKB==64
             ?L.T("実機は 64KB。128・256KB は増設改造に合わせた値です。容量ごとに内容を残し、変えると再起動します。","The machine has 64KB; 128 and 256KB match the expansion mod. Kept per capacity; a change restarts.")
             :L.T("容量ごとに内容を残し、変えると再起動します。8・16KB では BASIC の空きが少なくなります。","Kept per capacity; a change restarts. 8 and 16KB leave little room for BASIC.");
     }
@@ -157,9 +157,9 @@ internal sealed class HardwareDialog : ThemedForm
     // the attach dialog opens.
     /// <summary>ウィンドウを作る。</summary>
     /// <param name="settings">今の設定（初期値）</param>
-    /// <param name="romKB">ROM の容量（選べる内蔵 RAM の容量が変わる）</param>
+    /// <param name="standardKB">機種の標準の内蔵 RAM の容量（選べる内蔵 RAM の容量が変わる）</param>
     /// <param name="cardFolder">新しい RAM カードを作る場所</param>
-    internal HardwareDialog(HardwareSettings settings,int romKB=256,string? cardFolder=null)
+    internal HardwareDialog(HardwareSettings settings,int standardKB=32,string? cardFolder=null)
     {
         Text=L.T("ハードウェア・外観設定","Hardware and Appearance");ClientSize=new(660,780);MinimumSize=new Size(560,360);StartPosition=FormStartPosition.CenterScreen;Load+=(_,_)=>LockWidth();
         Font=Fonts.Ui;
@@ -168,7 +168,7 @@ internal sealed class HardwareDialog : ThemedForm
         FlowLayoutPanel Card(string title){var card=new CardPanel{Title=title,Margin=new Padding(0,0,0,10)};panel.Controls.Add(card);return card.Stack(584);}
         appearance.Items.AddRange(HardwareSettings.Appearances);appearance.SelectedItem=settings.Appearance;
         language.Items.AddRange(LanguageNames);language.SelectedIndex=Math.Max(0,Array.IndexOf(L.Codes,L.Codes.Contains(settings.Language)?settings.Language:L.Default));
-        SetRom(romKB,settings.InternalKB);
+        SetRom(standardKB,settings.InternalKB);
         const int Label=150;
         var look=Card(L.T("表示","Display"));
         look.Controls.Add(Row(L.T("言語 / Language","Language / 言語"),Label,language));

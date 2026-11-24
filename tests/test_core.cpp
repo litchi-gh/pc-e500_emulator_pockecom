@@ -112,9 +112,64 @@ void testAmc() {
     check(absent->Get_8(0xa8000)==0xff && absent->mem[0xb8000]==0xff,
           "AMC absent card does not fall through to an internal-RAM mirror");
 }
+extern "C" void e500_set_reg(Machine*,int,UINT32);
+extern "C" void e500_debug_breakpoints(Machine*,const uint32_t*,int);
+extern "C" int e500_debug_run(Machine*,int,int,int);
+extern "C" int e500_debug_step(Machine*);
+extern "C" int e500_debug_frames(Machine*,uint32_t*,int);
+extern "C" int e500_debug_call(Machine*,int,int,int);
+extern "C" void e500_debug_watch_reads(Machine*,const uint32_t*,int,int);
+extern "C" int e500_debug_read_hit(Machine*);
+extern "C" int e500_debug_write_imem(Machine*,int,const BYTE*,int);
+// デバッガの API：ブレークポイント、呼び出しの記録、ステップアウト、1命令、レジスタの書き込み、呼び出し。
+void testDebugger() {
+    auto m=std::make_unique<Machine>();auto &c=m->cpu;c.Reset();
+    // B8000: CALL 8010 / NOP / HALT    B8010: MV A,5 / RET
+    const BYTE code[]={0x04,0x10,0x80,0x00,0xde};const BYTE sub[]={0x08,0x05,0x06};
+    std::copy_n(code,sizeof code,m->mem.begin()+0xb8000);std::copy_n(sub,sizeof sub,m->mem.begin()+0xb8010);
+    c.reg.x.p=0xb8000;c.reg.x.s=0xbff00;c.imem[IMEM_IMR]=0;
+    uint32_t bp=0xb8010;e500_debug_breakpoints(m.get(),&bp,1);
+    check(e500_debug_run(m.get(),1000,0,-1)==2 && c.reg.x.p==0xb8010,"debugger stops at a breakpoint before running it");
+    uint32_t f[8]{};
+    check(e500_debug_frames(m.get(),f,2)==1 && f[0]==0xb8000 && f[1]==0xb8010 && f[2]==0xbfefe && f[3]==0,"debugger records the CALL as a frame");
+    check(e500_debug_run(m.get(),1000,0,-1)==2,"debugger stays at the breakpoint without flag 1");
+    check(e500_debug_run(m.get(),1000,1,1)==3 && c.reg.x.p==0xb8003 && c.reg.r.a==5 && m->frames.empty(),"step out returns to the caller");
+    check(e500_debug_step(m.get())==0 && c.reg.x.p==0xb8004,"one step runs one instruction");
+    e500_set_reg(m.get(),0,0x177);e500_set_reg(m.get(),9,0xfb8010);
+    check(c.reg.r.a==0x77 && c.reg.x.p==0xb8010,"registers are written masked to their width");
+    e500_debug_breakpoints(m.get(),nullptr,0);
+    check(!m->isBreak(0xb8010),"breakpoints are cleared");
+    uint32_t sentinel=0xbfff2;e500_debug_breakpoints(m.get(),&sentinel,1);
+    check(e500_debug_call(m.get(),0xb8010,0xbfff2,0)==1 && m->frames.size()==1,"a near call is pushed");
+    check(e500_debug_run(m.get(),1000,0,-1)==2 && c.reg.x.p==0xbfff2 && c.reg.x.s==0xbff00 && m->frames.empty(),"the near call returns to the sentinel");
+    // A far call, as BASIC's CALL makes, returns by RETF.
+    const BYTE farSub[]={0x08,0x09,0x07};std::copy_n(farSub,sizeof farSub,m->mem.begin()+0xb8020);
+    sentinel=0xffff2;e500_debug_breakpoints(m.get(),&sentinel,1);
+    check(e500_debug_call(m.get(),0xb8020,0xffff2,1)==1 && e500_debug_run(m.get(),1000,0,-1)==2 && c.reg.x.p==0xffff2 && c.reg.r.a==9 && c.reg.x.s==0xbff00,"the far call returns by RETF");
+    // A read watch stops after the instruction that read the byte, through a mirror too.
+    // B8030: NOP / MV A,[B9000] / NOP     (B1000 is the same byte as B9000 in 32KB)
+    const BYTE reader[]={0x00,0x88,0x00,0x90,0x0b,0x00};std::copy_n(reader,sizeof reader,m->mem.begin()+0xb8030);
+    m->mem[0xb9000]=0x5a;e500_debug_breakpoints(m.get(),nullptr,0);
+    uint32_t watched=0xb1000;e500_debug_watch_reads(m.get(),&watched,1,-1);
+    c.reg.x.p=0xb8030;c.halt=false;
+    check(e500_debug_run(m.get(),1000,0,-1)==4 && c.reg.x.p==0xb8035 && c.reg.r.a==0x5a && e500_debug_read_hit(m.get())==0xb9000,"a read watch stops after the reading instruction");
+    // Filtered to reads that leave P elsewhere, this one goes by; at its own place it stops.
+    e500_debug_watch_reads(m.get(),&watched,1,0xb8099);c.reg.x.p=0xb8030;c.reg.r.a=0;
+    check(e500_debug_run(m.get(),200,0,-1)==0 && c.reg.r.a==0x5a,"a read from another place passes the filter by");
+    e500_debug_watch_reads(m.get(),&watched,1,0xb8035);c.reg.x.p=0xb8030;
+    check(e500_debug_run(m.get(),1000,0,-1)==4 && c.reg.x.p==0xb8035,"a read at the filter's place stops");
+    e500_debug_watch_reads(m.get(),nullptr,0,-1);
+    check(e500_debug_read_hit(m.get())==-1 && m->readBits.empty(),"read watches are cleared");
+    // The internal RAM up to PY; not the AMC and the I/O after it.
+    const BYTE two[]={0x12,0x34};BYTE amc=c.imem[IMEM_AMC];
+    check(e500_debug_write_imem(m.get(),0xed,two,2)==1 && c.imem[0xed]==0x12 && c.imem[0xee]==0x34,"internal RAM is written up to PY");
+    check(!e500_debug_write_imem(m.get(),0xee,two,2) && c.imem[0xee]==0x34 && c.imem[IMEM_AMC]==amc,"a write reaching the AMC writes nothing");
+    check(!e500_debug_write_imem(m.get(),0xfb,two,1) && !e500_debug_write_imem(m.get(),-1,two,1) && !e500_debug_write_imem(m.get(),0,two,0),"I/O and bad ranges are refused");
+}
 int main() {
     try {
         testAmc();
+        testDebugger();
         auto m=std::make_unique<Machine>();auto &c=m->cpu;
         m->mem[0xffffd]=0x00;m->mem[0xffffe]=0x01;m->mem[0xfffff]=0x0c;
         c.Reset();check(c.reg.x.p==0xc0100,"reset vector");
@@ -373,6 +428,15 @@ int main() {
             }
             for(int kb:{8,16,32})
                 check(e500_create_config(familyRom.data(),int(familyRom.size()),kb,0)==nullptr,"PC-E650/U6000 rejects capacities below its two 62256 sockets");
+            // The PC-E500S packs its ROM the same way, but its model code (FFFF1h) is 3
+            // and it has one 62256, so it starts with 32KB and takes the E500's sizes.
+            std::vector<BYTE> e500sRom(familyRom);e500sRom[e500sRom.size()-15]=3;
+            std::unique_ptr<Machine,void(*)(Machine*)> e500s(e500_create(e500sRom.data(),int(e500sRom.size())),e500_destroy);
+            check(e500s && e500s->romKB==384 && e500s->standardKB==32 && e500s->internalKB==32 && e500s->Get_8(0x20000)==0xa5,"PC-E500S: split ROM map, 32KB internal RAM");
+            for(int kb:{8,16,32,64,128,256}) {
+                std::unique_ptr<Machine,void(*)(Machine*)> sized(e500_create_config(e500sRom.data(),int(e500sRom.size()),kb,0),e500_destroy);
+                check(sized && sized->internalKB==kb,"PC-E500S internal RAM capacity");
+            }
             configured->Set_8(0x80000,0x81);
             check(configured->Get_8(0x80000)==0x81 && configured->Get_8(0xbffff)!=0x81,"256KB internal RAM reaches 80000 without mirroring");
             // Debugger writes land in RAM only, through the mirrors, and all or nothing.

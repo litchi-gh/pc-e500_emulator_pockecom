@@ -4,7 +4,7 @@
 
 How to use the emulator and how it works, in detail. The overview and highlights are in [README_en.md](README_en.md). The illustrated user manual is at [app/manual/index_en.html](app/manual/index_en.html) (the Help button opens it). The UI is available in Japanese and English; pick the language in Settings.
 
-Supported models: the PC-E500, PC-E550, PC-1480U, PC-1490U and PC-1490UII (256KB ROM), and the PC-E650 and PC-U6000 (384KB ROM).
+Supported models: the PC-E500, PC-E550, PC-1480U, PC-1490U and PC-1490UII (256KB ROM), and the PC-E500S, PC-E650 and PC-U6000 (384KB ROM).
 
 **ROM images are not included.** Dump the ROM from your own machine (see [Dumping the ROM](#dumping-the-rom-and-toolsmerge_savem_rompy)).
 
@@ -28,7 +28,7 @@ Built from source, double-click `Start-PC-E500.cmd`, or open `app/PC-E500.exe` d
 | `app/state/` | Settings, controller presets (`controller.json`), internal RAM contents, automatic snapshots, pre-reset backups |
 | `app/manual/` | The illustrated manual (`index.html` Japanese, `index_en.html` English) |
 
-- ROMs are read from `app/rom/`. "Open ROM" accepts 256KB and 384KB images; a dump straight from the machine with its 16-byte `SAVEM` header (256KB+16) opens as it is. Verified to work with ROMs of the PC-E500, PC-E550, PC-1480U, PC-1490UII, PC-E650 and PC-U6000.
+- ROMs are read from `app/rom/`. "Open ROM" accepts 256KB and 384KB images; a dump straight from the machine with its 16-byte `SAVEM` header (256KB+16) opens as it is. Verified to work with ROMs of the PC-E500, PC-E500S, PC-E550, PC-1480U, PC-1490UII, PC-E650 and PC-U6000.
 - The system requirements (OS, CPU, memory and so on) are in [README_en.md](README_en.md#system-requirements). Tested on Windows 11 (x64); Windows 10 and Windows on ARM are untested.
 
 ### New versions and updating
@@ -187,7 +187,7 @@ Bytes are coloured by region.
 | Colour | Region |
 |---|---|
 | Black | Internal RAM and RAM card with their mirrors (writable) |
-| Blue | Internal ROM (CE2), E650/U6000 extension ROM (CE3) |
+| Blue | Internal ROM (CE2), E500S/E650/U6000 extension ROM (CE3) |
 | Grey | Unmapped (card slot without a card, CE6, the internal area, …) |
 
 ![Boundary between internal RAM and ROM](app/manual/images-en/debugger-ram-rom.png)
@@ -234,16 +234,16 @@ Right-click the case for a menu with the toolbar's commands (plus the speed, the
 
 Appearance switches the case shape and colour, LCD and key positions and the nameplate. The PC-U6000 shares the PC-E650 case, so only PC-E500 and PC-E650 are offered. Appearance does not change the ROM or RAM size; choose those separately.
 
-### The 384KB PC-E650 / PC-U6000 ROM
+### The 384KB PC-E500S / PC-E650 / PC-U6000 ROM
 
-The E650/U6000 internal ROM is mapped as follows.
+The E500S/E650/U6000 internal ROM is mapped as follows.
 
 | In the file | CPU address | Size | Chip select |
 |---|---:|---:|---|
 | `00000-1FFFF` | `20000-3FFFF` | 128KB | CE3 |
 | `20000-5FFFF` | `C0000-FFFFF` | 256KB | CE2 |
 
-"Open ROM" tells 256KB PC-E500 images and 384KB PC-E650/U6000 images apart automatically; the ROM field of the status bar shows the family, and its tip the size and the file. The 384KB file has the low-address extension ROM first and the 256KB main ROM after it.
+"Open ROM" tells 256KB PC-E500 images and 384KB PC-E500S/E650/U6000 images apart automatically; a 384KB image whose main ROM has model code 3 (the version's lower digit) is taken as a PC-E500S. The ROM field of the status bar shows the family (E500, E500S or E650), and its tip the size and the file. The 384KB file has the low-address extension ROM first and the 256KB main ROM after it.
 
 The status bar also shows `ROM Ver.x.y`, read from the major/minor version bytes in the ROM's 16-byte trailer (the ones the service screen uses), not from the file name. The PC-E500 ROM used for testing is Ver.7.2, the PC-E650 ROM Ver.8.5.
 
@@ -253,10 +253,10 @@ On the real machine, `SAVEM "d:filename",start,end` writes memory to a file (`d:
 
 ```basic
 SAVEM "L:S3A.ROM",&HC0000,&HFFFFF
-SAVEM "L:S3B.ROM",&H20000,&H3FFFF     ' PC-E650 / PC-U6000 only
+SAVEM "L:S3B.ROM",&H20000,&H3FFFF     ' PC-E500S / PC-E650 / PC-U6000 only
 ```
 
-`SAVEM` output starts with a 16-byte header (`FF 00 06 01 10` + 3-byte length + 3-byte start address + `FF FF FF 00 0F`). A PC-E500 family `S3A.ROM` opens with the header in place. For the PC-E650/U6000, merge `S3A.ROM` and `S3B.ROM` into a 384KB image with `tools/merge_savem_rom.py` (Python 3).
+`SAVEM` output starts with a 16-byte header (`FF 00 06 01 10` + 3-byte length + 3-byte start address + `FF FF FF 00 0F`). A PC-E500 family `S3A.ROM` opens with the header in place. For the PC-E500S/E650/U6000, merge `S3A.ROM` and `S3B.ROM` into a 384KB image with `tools/merge_savem_rom.py` (Python 3).
 
 ```powershell
 python tools/merge_savem_rom.py S3A.ROM S3B.ROM --info                              # inspect the headers
@@ -268,22 +268,22 @@ python tools/merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o
 
 Coverage below 100% means the dump is incomplete. Chapter 13 of the manual walks through the whole procedure.
 
-Stock internal RAM on the E650/U6000 is 64KB at `B0000-BFFFF`; the RAM card sits at `40000` according to its size.
+Stock internal RAM on the E650/U6000 is 64KB at `B0000-BFFFF`, and on the E500S 32KB at `B8000-BFFFF`, as on the E500; the RAM card sits at `40000` according to its size.
 
 #### Internal RAM expansion (62256 → 628128)
 
-Internal RAM sits directly below `C0000` and grows downwards. The real E500 has one 32KB SRAM (62256), the E650/U6000 two of them (64KB); replacing each with a 128KB 628128 is a well-known expansion mod, and the emulator offers the same result.
+Internal RAM sits directly below `C0000` and grows downwards. The real E500 and E500S have one 32KB SRAM (62256), the E650/U6000 two of them (64KB); replacing each with a 128KB 628128 is a well-known expansion mod, and the emulator offers the same result.
 
 | Model | Stock | 628128×1 | 628128×2 |
 |---|---:|---:|---:|
-| PC-E500 | 32KB (`B8000-BFFFF`) | 128KB (`A0000-BFFFF`) | — |
+| PC-E500 / PC-E500S | 32KB (`B8000-BFFFF`) | 128KB (`A0000-BFFFF`) | — |
 | PC-E650 / PC-U6000 | 64KB (`B0000-BFFFF`) | 128KB (`A0000-BFFFF`) | 256KB (`80000-BFFFF`) |
 
-With a 384KB ROM the internal RAM choices are 64 / 128 / 256KB. The ROM itself measures the size at boot, so the choice shows up in BASIC (`PRINT FRE(0)` gives 61368, 126904 and 257976). 8/16/32KB do not exist on a real E650/U6000 and are not offered; such a stored setting starts as 64KB.
+With an E650/U6000 384KB ROM the internal RAM choices are 64 / 128 / 256KB. The ROM itself measures the size at boot, so the choice shows up in BASIC (`PRINT FRE(0)` gives 61368, 126904 and 257976). 8/16/32KB do not exist on a real E650/U6000 and are not offered; such a stored setting starts as 64KB. The PC-E500S's 384KB ROM offers the same sizes as the PC-E500.
 
 Reference: [E500 series memory expansion](https://www.oit.ac.jp/labs/rd/rssrv/kobayashi-lab/~yagshi/old_web/misc/pocketcom/memup/index.html)
 
-- Internal RAM is **8 / 16 / 32 / 64 / 128 / 256 KB**, 32KB by default; **64 / 128 / 256 KB** with a 384KB ROM.
+- Internal RAM is **8 / 16 / 32 / 64 / 128 / 256 KB**, 32KB by default; **64 / 128 / 256 KB** (64KB by default) with an E650/U6000 384KB ROM; the PC-E500S is as the PC-E500.
 - Changing the size saves the current contents and restarts. Contents are kept per size, so switching back restores what that size held.
 
 ### RAM cards (image files)
@@ -399,11 +399,11 @@ LLIST
 
 ## Scope
 
-Implemented: SC62015 instruction execution, the 256KB ROM (PC-E500, PC-E550, PC-1480U, PC-1490U, PC-1490UII) and the 384KB ROM (PC-E650, PC-U6000), internal RAM and RAM card with mirrors, two HD61102 LCD controllers (240×32 dots), key matrix, timer interrupts, ON/BRK and OFF, 0.5/1/2/4x speed, state save/restore, BEEP, folder-based CE-140F, CE-126P printer.
+Implemented: SC62015 instruction execution, the 256KB ROM (PC-E500, PC-E550, PC-1480U, PC-1490U, PC-1490UII) and the 384KB ROM (PC-E500S, PC-E650, PC-U6000), internal RAM and RAM card with mirrors, two HD61102 LCD controllers (240×32 dots), key matrix, timer interrupts, ON/BRK and OFF, 0.5/1/2/4x speed, state save/restore, BEEP, folder-based CE-140F, CE-126P printer.
 
 **Not implemented:** printers other than the CE-126P, cassette, RS-232C/UART, RTC. Not every instruction, BASIC command or timing has been verified against the real machine; LCD busy time is omitted. Machine-code programs and peripheral-heavy programs need further verification.
 
-Verified to work with ROMs of the PC-E500, PC-E550, PC-1480U, PC-1490UII, PC-E650 and PC-U6000.
+Verified to work with ROMs of the PC-E500, PC-E500S, PC-E550, PC-1480U, PC-1490UII, PC-E650 and PC-U6000.
 
 ## Manual
 
@@ -427,7 +427,7 @@ cd Emulator
 - `src/desktop/ManualShots.cs`: renders the manual's pictures (`--manual-shots`)
 - `tests/test_core.cpp`: some twenty thousand checks on the CPU, every RAM size, debugger writes, LCD, timers, audio, the CE-140F, the CE-126P and the 11-pin bus, and the snapshot format
 - `src/desktop/SmokeTest.cs`: integration test with the installed ROM: UI input, internal RAM file and card image restore, settings dialog, debugger editing and BIN I/O, Windows audio, the CE-126P paper, the right-click menu and window views, the LCD look, the new-version notice and where data lives
-- `tests/test_hardware.py`: on the real ROM: every RAM size, E650/U6000 expansion, ON+RESET, BEEP waveform and key click timing, multi-block and ASCII save/load, sequential files and file commands
+- `tests/test_hardware.py`: on the real ROM: every RAM size, E650/U6000 expansion, the E500S's internal RAM, the BATT symbol, ON+RESET, BEEP waveform and key click timing, multi-block and ASCII save/load, sequential files and file commands
 - `tests/test_roms.py`: every ROM in `app/rom` through start-up, a calculation, a program, SAVE and LOAD on the CE-140F and LPRINT (screens in `tests/output/roms/`)
 - `installer/`, `package.ps1`: the installer's definition and the script that makes the zip and the installer
 - `tests/output/`: test results and screenshots

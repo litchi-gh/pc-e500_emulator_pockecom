@@ -408,10 +408,10 @@ internal sealed class PocketSurface : Control
     readonly List<RectangleF> areas=[];
     /// <summary>キャッシュの絵に描いてある、押したキーと表示シンボルの状態。</summary>
     readonly HashSet<string> drawnPressed=[];
-    (int,int,int) drawnSymbols;
+    (int,int,int,int) drawnSymbols;
     /// <summary>画面に出した LCD のドットと表示シンボル（変わったときだけ描き直すため）。</summary>
     readonly byte[] shownPixels=new byte[240*32];
-    (int,int,int) shownSymbols;
+    (int,int,int,int) shownSymbols;
     bool shownAny;
     /// <summary>ケースの絵を全部作り直した回数（テスト用）。</summary>
     internal int ChromeBuilds {get;private set;}
@@ -819,9 +819,11 @@ internal sealed class PocketSurface : Control
     }
     // Glass is the bare LCD green, for legends cut out of a segment.
     static readonly Color Ink=Color.FromArgb(53,75,48),Ghost=Color.FromArgb(143,169,105),Glass=Color.FromArgb(181,202,125);
-    /// <summary>表示シンボルの点灯ビット（BUSY などの段、2ndF などの段、DEG などの段）。</summary>
-    (int,int,int) Symbols=>Core is null?(0,0,0)
-        :(Native.e500_symbols(Core.Handle,0),Native.e500_symbols(Core.Handle,4),Native.e500_symbols(Core.Handle,5));
+    /// <summary>表示シンボルの点灯ビット（BUSY などの段、2ndF などの段、DEG などの段、BATT の段）。</summary>
+    // The ROM writes the BATT flag (BFC97h) as the whole byte of page 6 (ROM 7.2 F30BAh), so BATT is page 6 bit 0.
+    // ROM は BATT の作業域（BFC97h）をページ 6 の 1 バイトとして書く（ROM 7.2 の F30BAh）。BATT はページ 6 の bit0。
+    (int,int,int,int) Symbols=>Core is null?(0,0,0,0)
+        :(Native.e500_symbols(Core.Handle,0),Native.e500_symbols(Core.Handle,4),Native.e500_symbols(Core.Handle,5),Native.e500_symbols(Core.Handle,6));
     // The annunciator row is fifteen pieces of measured, antialiased text, which is
     // far too much to redraw at 62 Hz for a row that changes when a mode does. It
     // rides along in the cached layer and its own state joins the cache key.
@@ -844,7 +846,7 @@ internal sealed class PocketSurface : Control
         // 角度の表示は DE・G・RAD の3区画。ROM は DEGREE で DE と G（s5 のビット16と8）、
         // GRAD で G と RAD（8と4）、RADIAN で RAD（4）だけを点ける（test_angle_mode_symbols で確認）。
         const float E500Dot=1.45f,E500Cap=CapDots*1.9375f;
-        var (s0,s4,s5)=Symbols;
+        var (s0,s4,s5,s6)=Symbols;
         (string Name,float From,float To,float Row,int Value,int Mask,bool Joined)[] symbols=[
             ("BUSY",4.2f,17.4f,LowerRow,s0,1,false),("DBL",24.3f,33.9f,LowerRow,s0,8,false),
             ("RUN",39.3f,49.2f,LowerRow,s0,2,false),("PRO",54.3f,64.5f,LowerRow,s0,4,false),
@@ -864,7 +866,7 @@ internal sealed class PocketSurface : Control
         // terminal a small stub off its left end, about half the body's height.
         // 電池の形：塗りつぶした本体に BATT の文字を抜き、左端に本体の半分弱の高さの小さな端子が出る。
         float battX=pixelX+219.7f*dotW,battMiddle=pixelY+LowerRow*dotH;
-        using(var battery=new SolidBrush((s5&128)!=0?lit:off)) {
+        using(var battery=new SolidBrush((s6&1)!=0?lit:off)) {
             g.FillRectangle(battery,battX,battMiddle-3.1f,15.9f*E500Dot,6.2f);
             // Overlapping the body a little, so no antialiased seam shows between them.
             g.FillRectangle(battery,battX-1.3f*E500Dot,battMiddle-1.3f,1.3f*E500Dot+0.6f,2.6f);

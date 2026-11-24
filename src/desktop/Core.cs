@@ -73,8 +73,15 @@ internal sealed class Core : IDisposable
     internal string? CardPath {get;}
     internal string? CardName=>CardPath is null?null:Path.GetFileName(CardPath);
     internal bool HasCard=>CardPath is not null;
-    /// <summary>ROM の容量（KB）。256 は PC-E500・E550・1480U・1490U・1490UII、384 は PC-E650・PC-U6000。</summary>
+    /// <summary>ROM の容量（KB）。256 は PC-E500・E550・1480U・1490U・1490UII、384 は PC-E500S・PC-E650・PC-U6000。</summary>
     internal int RomKB {get;}
+    /// <summary>ROM の機種コード（版の下の桁）。PC-E500S は 3、PC-U6000 は 4、PC-E650 は 5。</summary>
+    internal int RomModel {get;}
+    /// <summary>384KB の ROM のうち PC-E500S のもの（機種コード 3）。</summary>
+    internal bool IsE500S=>RomKB==384 && RomModel==3;
+    /// <summary>標準の内蔵 RAM（KB）。62256 が 1 個の PC-E500・E500S は 32、2 個の PC-E650・U6000 は 64。</summary>
+    internal int StandardRamKB=>StandardRam(RomKB,RomModel);
+    internal static int StandardRam(int romKB,int model)=>romKB==384 && model!=3?64:32;
     /// <summary>ROM の版（末尾16バイトの先頭2バイト）。読めなければ「不明」。</summary>
     internal string RomVersion {get;}
     internal bool IsE650Family=>RomKB==384;
@@ -90,7 +97,7 @@ internal sealed class Core : IDisposable
     internal int InternalKB=>Native.e500_capacity(Handle,0);
     internal int CardKB=>Native.e500_capacity(Handle,1);
     /// <summary>ROM の大きさが違うときのメッセージ。</summary>
-    static string WrongRomSize=>L.T("PC-E500・PC-E550・PC-1480U・PC-1490U・PC-1490UIIの256KB ROM、またはPC-E650/PC-U6000の384KB ROMを選択してください。SAVEMヘッダー付きの吸い出しファイルはそのまま開けます。","Choose a 256KB ROM of a PC-E500, PC-E550, PC-1480U, PC-1490U or PC-1490UII, or a 384KB PC-E650/PC-U6000 ROM. A dump with its SAVEM header opens as it is.");
+    static string WrongRomSize=>L.T("PC-E500・PC-E550・PC-1480U・PC-1490U・PC-1490UIIの256KB ROM、またはPC-E500S/PC-E650/PC-U6000の384KB ROMを選択してください。SAVEMヘッダー付きの吸い出しファイルはそのまま開けます。","Choose a 256KB ROM of a PC-E500, PC-E550, PC-1480U, PC-1490U or PC-1490UII, or a 384KB PC-E500S/PC-E650/PC-U6000 ROM. A dump with its SAVEM header opens as it is.");
     /// <summary>ROM を読み込み、ネイティブの本体を作る。</summary>
     /// <param name="path">ROM ファイル（256KB・384KB、または SAVEM ヘッダー付きの吸い出し）</param>
     /// <param name="ram">内蔵 RAM の容量（KB）。機種に合わなければ標準の容量にする</param>
@@ -134,10 +141,11 @@ internal sealed class Core : IDisposable
         // E650 8.5 image. Read the image itself so renamed files stay accurate.
         byte versionMajor=rom[^16],versionMinor=rom[^15];
         RomVersion=versionMajor<=99 && versionMinor<=99?$"{versionMajor}.{versionMinor}":L.T("不明","unknown");
+        RomModel=versionMinor;
         RomPath=Path.GetFullPath(path);RomHash=Hash=Convert.ToHexString(SHA256.HashData(rom));
         // A stored 32KB setting from a PC-E500 session is not a size the E650/U6000
         // hardware can be built with, so fall back to that machine's stock capacity.
-        Handle=Native.e500_create_config(rom,rom.Length,HardwareSettings.CoerceInternal(RomKB,ram),card is null?0:card.Length/1024);
+        Handle=Native.e500_create_config(rom,rom.Length,HardwareSettings.CoerceInternal(StandardRamKB,ram),card is null?0:card.Length/1024);
         if(Handle==IntPtr.Zero) throw new InvalidOperationException(L.T("エミュレータを初期化できません。","Could not initialise the emulator."));
         if(card is not null)Native.e500_memory(Handle,1,card,card.Length,1);
         // The E650/U6000 character generator table resides in the CE3 extension.

@@ -39,6 +39,7 @@ BYTE Machine::Get_8(UINT32 a) {
     a&=0xfffff;
     if(a==watchAddr)watchHits++;
     a=mirror(a);
+    if(!readBits.empty() && (readBits[a>>3]>>(a&7)&1))readHit=a;
     if(a<0x10000 && (a&0x6000)==0x2000) return display(a&15,0);
     return mem[a];
 }
@@ -165,6 +166,26 @@ void Machine::step(uint64_t budget) {
         cpu.CallSubLevel++;
     }
 }
+// The debugger's step. The frames are what a call stack view shows: a CALL,
+// CALLF or interrupt (CallSubLevel rose) adds one at the S that holds its return
+// address, and once S is above that the return address has been taken off, by a
+// RET, RETF or RETI or by a stack set anew (an error unwinding to the prompt).
+// デバッガの1命令。CALL・CALLF・割り込み（CallSubLevel が増えた）で記録を積み、
+// S がその戻り先より上になったら（RET・RETF・RETI、エラーでスタックを戻したとき）外す。
+void Machine::debugStep(uint64_t budget) {
+    UINT32 site=cpu.reg.x.p&0xfffff;int level=cpu.CallSubLevel;
+    BYTE op=(cpu.halt||cpu.off)?0xff:mem[mirror(site)];
+    step(budget);
+    if(cpu.prefixed)step(budget);
+    UINT32 sp=cpu.reg.x.s&0xfffff;
+    while(!frames.empty() && frames.back().sp<sp)frames.pop_back();
+    if(cpu.CallSubLevel>level) {
+        // A call that never returns (a jump back to the prompt) leaves its frame
+        // until S passes it; a runaway one is capped, oldest first.
+        if(frames.size()>=4096)frames.erase(frames.begin());
+        frames.push_back({site,cpu.reg.x.p&0xfffff,sp,UINT32(op==0x04||op==0x05?0:1)});
+    }
+}
 // LCD のドット：左右の端（0-63・176-239）はコントローラ2、中央はコントローラ1。
 // 右半分は桁の向きが逆で、表示開始行（start）だけ上下にずらして読む。
 void Machine::pixels(BYTE *out) {
@@ -178,7 +199,7 @@ void Machine::pixels(BYTE *out) {
 
 // ---- DLL の公開 API（デスクトップ側の Core.cs から P/Invoke で呼ぶ） ----
 #define API extern "C" __declspec(dllexport)
-// 本体を作る。rom：ROM イメージ、size：256KB（PC-E500）か 384KB（PC-E650・U6000）。失敗したら null。
+// 本体を作る。rom：ROM イメージ、size：256KB（PC-E500）か 384KB（PC-E500S・E650・U6000）。失敗したら null。
 API Machine* e500_create(const BYTE *rom,int size) {
     constexpr int MainRomSize=256*1024;
     constexpr int ExtendedRomSize=128*1024;
@@ -187,13 +208,17 @@ API Machine* e500_create(const BYTE *rom,int size) {
     if(size==MainRomSize) {
         std::copy_n(rom,MainRomSize,m->mem.begin()+0xc0000);
     } else {
-        // Packed PC-E650 / PC-U6000 image, in ascending memory-map order:
+        // Packed PC-E500S / PC-E650 / PC-U6000 image, in ascending memory-map order:
         //   file 00000-1FFFF -> CPU 20000-3FFFF (CE3)
         //   file 20000-5FFFF -> CPU C0000-FFFFF (CE2)
         std::copy_n(rom,ExtendedRomSize,m->mem.begin()+0x20000);
         std::copy_n(rom+ExtendedRomSize,MainRomSize,m->mem.begin()+0xc0000);
         m->romKB=384;
-        m->internalKB=64;
+        // The model code (FFFF1h, the last image byte but 14) tells them apart: the
+        // E500S (3) carries one 62256 like the E500, the E650 (5) and U6000 (4) two.
+        // 機種コード（FFFF1h）で分ける。E500S（3）は E500 と同じ 62256 が 1 個、E650（5）・U6000（4）は 2 個。
+        m->standardKB=rom[size-15]==3?32:64;
+        m->internalKB=m->standardKB;
     }
     // FNV-1a of the image: a snapshot says which ROM it was taken with.
     uint32_t sum=2166136261u;for(int i=0;i<size;i++)sum=(sum^rom[i])*16777619u;
@@ -205,12 +230,12 @@ bool validCapacity(int kb,bool optional=false) {return (optional && (kb==0||kb==
 // Internal RAM sits below C0000. The stock E500 carries one 62256 (32KB) and the
 // E650/U6000 two of them (64KB, B0000-BFFFF); the well-known 628128 replacement
 // swaps each 32KB SRAM for a 128KB part, so an E650/U6000 reaches 128KB or 256KB.
-bool validInternal(int kb,int romKB) {return romKB==384?(kb==64||kb==128||kb==256):validCapacity(kb);}
+bool validInternal(int kb,int standardKB) {return standardKB==64?(kb==64||kb==128||kb==256):validCapacity(kb);}
 // 内蔵 RAM（ram KB）と RAM カード（card KB、0 でなし）を指定して本体を作る。
 API Machine* e500_create_config(const BYTE *rom,int size,int ram,int card) {
     if(!validCapacity(ram)||!validCapacity(card,true))return nullptr;
     auto m=e500_create(rom,size);if(!m)return nullptr;
-    if(!validInternal(ram,m->romKB)){delete m;return nullptr;}
+    if(!validInternal(ram,m->standardKB)){delete m;return nullptr;}
     m->internalKB=ram;m->cardKB=card;return m;
 }
 // 内蔵 RAM（card=0）か RAM カード（card=1）の容量（KB）。
@@ -421,6 +446,110 @@ API int e500_imem(Machine *m,BYTE *out) {
 // 起動からの CPU のサイクル数。
 API uint64_t e500_cycles(Machine *m) {return m?m->cpu.cycles:0;}
 
+// ---- デバッガ（VS Code のデバッグサーバー e500dbg が使う） ----
+// レジスタを書く（id は REGNAME。P・S などは 20 ビット、BA・I は 16 ビット、A・IL・F は 8 ビット）。
+API void e500_set_reg(Machine *m,int id,UINT32 value) {
+    if(!m || id<0 || id>REG_F)return;
+    switch(REGNAME(id)) {
+    case REG_A:case REG_IL:case REG_F:value&=0xff;break;
+    case REG_BA:case REG_I:value&=0xffff;break;
+    case REG_PC:return;
+    default:value&=0xfffff;break;
+    }
+    m->cpu.set_reg(REGNAME(id),value);
+}
+// ブレークポイントを list の count 個にする（0 個で全部外す）。
+API void e500_debug_breakpoints(Machine *m,const uint32_t *list,int count) {
+    if(!m)return;
+    if(!list || count<=0){m->breakBits.clear();m->breakBits.shrink_to_fit();return;}
+    m->breakBits.assign(0x100000/8,0);
+    for(int i=0;i<count;i++){UINT32 a=list[i]&0xfffff;m->breakBits[a>>3]|=BYTE(1<<(a&7));}
+}
+// Runs like e500_run, but looks for a breakpoint before every instruction
+// (flags bit 0: not before the first, to go on from one) and keeps the frames.
+// depth >= 0 stops once fewer frames than that are left: a step out, or the
+// rest of a step over a call. 0 ran the cycles, 1 undefined instruction,
+// 2 at a breakpoint (not yet run), 3 returned to the depth, 4 an instruction read
+// a watched byte (it has run; e500_debug_read_hit says which), -1 bad arguments.
+// e500_run と同じに実行し、命令の前ごとにブレークポイントを見る（flags の bit0：最初の命令では見ない）。
+// depth が 0 以上なら、呼び出しの記録がそれより少なくなったら止まる（ステップアウト、CALL のステップオーバー）。
+// 戻り値 0：サイクルを実行した、1：未定義命令、2：ブレークポイント（その命令はまだ）、3：depth に戻った、
+// 4：命令が読み出しウォッチの番地を読んだ（その命令は実行済み。番地は e500_debug_read_hit）、-1：引数が違う。
+API int e500_debug_run(Machine *m,int cycles,int flags,int depth) {
+    if(!m || cycles<0 || cycles>10240000)return -1;
+    auto target=m->cpu.cycles+cycles;
+    m->scanKeys();
+    bool first=true;
+    m->readHit=0xffffffff;
+    while(m->cpu.cycles<target) {
+        if(m->cpu.fault)return 1;
+        bool running=!(m->cpu.halt||m->cpu.off) || m->cpu.prefixed;
+        if(running && !(first && (flags&1)) && m->isBreak(m->cpu.reg.x.p))return 2;
+        first=false;
+        m->debugStep(target-m->cpu.cycles);
+        if(m->readHit!=0xffffffff) {
+            // A read from elsewhere than the filter's place goes by unseen.
+            if(m->readFilter==0xffffffff || (m->cpu.reg.x.p&0xfffff)==m->readFilter)return m->cpu.fault?1:4;
+            m->readHit=0xffffffff;
+        }
+        if(depth>=0 && int(m->frames.size())<depth)return m->cpu.fault?1:3;
+    }
+    return m->cpu.fault?1:0;
+}
+// 1命令だけ実行する（HALT 中なら時間を少し進める）。戻り値は 0、未定義命令なら 1。
+API int e500_debug_step(Machine *m) {
+    if(!m)return -1;
+    if(m->cpu.fault)return 1;
+    m->scanKeys();m->debugStep();
+    return m->cpu.fault?1:0;
+}
+// 呼び出しの記録を out に（1つ 4 語：呼んだ番地・飛び先・S・割り込みなら 1）古い順に max 個まで書き、全部の数を返す。
+API int e500_debug_frames(Machine *m,uint32_t *out,int max) {
+    if(!m)return 0;
+    int n=int(m->frames.size());
+    for(int i=0;out && i<n && i<max;i++) {
+        auto &f=m->frames[i];out[i*4]=f.site;out[i*4+1]=f.target;out[i*4+2]=f.sp;out[i*4+3]=f.interrupt;
+    }
+    return n;
+}
+// Calls entry as CALLF (far) or CALL would from returnAddress: the return
+// address goes on the S stack (3 bytes or the low 2), the CPU leaves HALT,
+// and the call is the newest frame. The debug server stops at returnAddress.
+// entry を呼ぶ：戻り先 returnAddress を S に積み（far なら 3 バイト、そうでなければ下位 2 バイト）、HALT を解いて飛ぶ。
+API int e500_debug_call(Machine *m,int entry,int returnAddress,int far) {
+    if(!m || m->cpu.off || m->cpu.fault)return 0;
+    auto &r=m->cpu.reg.x;
+    if(far){r.s=(r.s-3)&0xfffff;m->Set_20(r.s,UINT32(returnAddress)&0xfffff);}
+    else{r.s=(r.s-2)&0xfffff;m->Set_16(r.s,WORD(returnAddress));}
+    r.p=UINT32(entry)&0xfffff;m->cpu.halt=false;
+    m->frames.push_back({UINT32(returnAddress)&0xfffff,r.p,r.s,0});
+    return 1;
+}
+// 呼び出しの記録を消す。
+API void e500_debug_clear_frames(Machine *m) {if(m)m->frames.clear();}
+// 読み出しウォッチを list の count 個の番地にする（0 個で全部外す）。番地はミラーを含めた実際の格納先で覚える。
+// after が 0 以上なら、読んだ命令のあとの P がその番地のときだけ止まる（BASIC の行の始まりだけを捕まえる）。
+API void e500_debug_watch_reads(Machine *m,const uint32_t *list,int count,int after) {
+    if(!m)return;
+    m->readHit=0xffffffff;
+    m->readFilter=after<0?0xffffffff:UINT32(after)&0xfffff;
+    if(!list || count<=0){m->readBits.clear();m->readBits.shrink_to_fit();return;}
+    m->readBits.assign(0x100000/8,0);
+    for(int i=0;i<count;i++){UINT32 a=m->mirror(list[i]&0xfffff);m->readBits[a>>3]|=BYTE(1<<(a&7));}
+}
+// 最後の e500_debug_run を止めた読み出しの番地（実際の格納先。なければ -1）。
+API int e500_debug_read_hit(Machine *m) {return m && m->readHit!=0xffffffff?int(m->readHit):-1;}
+// Debugger writes to the internal RAM: 00h-EEh, the plain bytes and BP, PX, PY. The
+// AMC (EFh) and the I/O from F0h act when written, so they are refused.
+// デバッガの内部メモリの書き込み：00h〜EEh（普通の所と BP・PX・PY）だけ。AMC（EFh）と F0h からの I/O は、書くと働くので断る。
+// 範囲の外を含めば何も書かずに 0。
+API int e500_debug_write_imem(Machine *m,int at,const BYTE *data,int length) {
+    if(!m || !data || at<0 || length<=0 || length>IMEM_AMC || at>IMEM_AMC-length)return 0;
+    std::copy_n(data,length,m->cpu.imem+at);return 1;
+}
+// HALT の状態を戻す（e500_debug_call の前に HALT していた本体を、戻ったあとで元のとおり待たせる）。
+API void e500_debug_halt(Machine *m,int on) {if(m && !m->cpu.off)m->cpu.halt=on!=0;}
+
 // ---- 状態保存（スナップショット） ----
 // 固定長のバイナリ。形式は先頭8バイトの magic（E500ST01・02・04）で区別する。
 // Fixed-layout snapshot, local little-endian Windows x64 format v1.
@@ -534,7 +663,7 @@ API int e500_load(Machine *m,const BYTE *data,int size) {
     bool prefixOk=s.prefixed?(s.prefixed==1 && s.pre1<=3 && s.pre2<=3 && !s.halt):(s.pre1==1 && s.pre2==1);
     if(memcmp(s.magic,"E500ST05",8) || s.romKB!=uint32_t(m->romKB) || s.romSum!=m->romSum || !prefixOk ||
        std::any_of(std::begin(s.reserved),std::end(s.reserved),[](BYTE b){return b!=0;}) ||
-       !validInternal(s.internalKB,m->romKB) || !validCapacity(s.cardKB,true) ||
+       !validInternal(s.internalKB,m->standardKB) || !validCapacity(s.cardKB,true) ||
        s.halt>1 || s.off>1 || s.reg.x.p>0xfffff ||
        s.ticks>=OldMainTimerCycles || s.ticks2>=OldSubTimerCycles || s.cycles>UINT64_MAX-10240000)return 0;
     for(auto &l:s.lcd)if(l.page>7 || l.column>63 || l.start>63 || l.on>1)return 0;

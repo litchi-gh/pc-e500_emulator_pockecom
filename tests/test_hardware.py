@@ -21,6 +21,11 @@ def has_three(e):
     p=e.pixels()
     return any(all(bool(p[(y+dy)*240+234+dx])==(THREE[dy][dx]=='#') for dy in range(8) for dx in range(6)) for y in [0,8,16,24])
 
+def rom_384k(e500s):
+    """384KB ROM images in app/rom: the PC-E500S's (model code 3, the last byte but 14) or the E650/U6000's."""
+    # 384KB の ROM のうち、E500S（機種コード 3）のもの、または E650・U6000 のもの。
+    return [p for p in sorted((ROOT/'app'/'rom').iterdir()) if p.suffix.lower()=='.rom' and p.stat().st_size==384*1024 and (p.read_bytes()[-15]==3)==e500s]
+
 class HardwareTests(unittest.TestCase):
     def test_pc_u6000_384k_rom_map_and_basic(self):
         # The merged 384KB image, named model(version).ROM or, as before, PC-U6000-full.rom.
@@ -71,9 +76,22 @@ class HardwareTests(unittest.TestCase):
                         self.assertTrue(has_three(e))
                     finally:e.close()
 
+    def test_e500s_one_62256(self):
+        """The E500S packs its 384KB ROM like the E650 but has one 62256: 32KB, the E500's sizes."""
+        rom_path=next(iter(rom_384k(e500s=True)),None)
+        if rom_path is None:self.skipTest('No 384KB PC-E500S ROM is installed')
+        for kb in [32,64]:
+            with self.subTest(kb=kb):
+                e=Emulator(rom=rom_path,ram=kb)
+                try:
+                    e.run(10240000);e.key('F1');e.run(10240000)
+                    e.key('BASIC');e.run();e.type('1+2')
+                    self.assertTrue(has_three(e))
+                finally:e.close()
+
     def test_e650_internal_ram_expansion(self):
         """A 628128 SRAM swap takes the stock 64KB E650/U6000 to 128KB or 256KB."""
-        rom_path=next((p for p in sorted((ROOT/'app'/'rom').iterdir()) if p.suffix.lower()=='.rom' and p.stat().st_size==384*1024),None)
+        rom_path=next(iter(rom_384k(e500s=False)),None)
         if rom_path is None:self.skipTest('No 384KB PC-E650/PC-U6000 ROM is installed')
         for kb in [64,128,256]:
             with self.subTest(kb=kb):
@@ -192,6 +210,16 @@ class HardwareTests(unittest.TestCase):
             e.boot();self.assertEqual(e.symbols(5)&0x1c,0x18)
             for command,bits in [('RADIAN',0x04),('GRAD',0x0c),('DEGREE',0x18)]:
                 e.type(command);self.assertEqual(e.symbols(5)&0x1c,bits,command)
+        finally:e.close()
+    def test_batt_symbol_is_page_6_bit_0(self):
+        """BATT の表示シンボル。ROM は作業域 BFC97h（785559）をページ 6 の 1 バイトとして書くので、
+        BATT はページ 6 の bit0（ページ 5 の bit7 ではない）。CLS で表示シンボルが描き直される。"""
+        e=Emulator()
+        try:
+            e.boot()
+            for value in (1,0):
+                e.type(f'POKE 785559,{value}:CLS');e.run(2000000)
+                self.assertEqual(e.symbols(6)&1,value);self.assertEqual(e.symbols(5)&0x80,0)
         finally:e.close()
     def test_ce140f_binary_multiblock_and_ascii(self):
         with tempfile.TemporaryDirectory(prefix='pce500-disk-test-') as folder:

@@ -91,7 +91,7 @@ internal static class ManualShots
             if(sampleCard)Core.CreateCardImage(card,64);
             try {
                 var settings=new HardwareSettings(32,card,true,false,Path.Combine("app","drive-x"),false,50,false,"PC-E500",L.Code);
-                using var dialog=new HardwareDialog(settings,core.RomKB,cardFolder);dialog.Show(form);Shot(dialog,"settings");dialog.Close();
+                using var dialog=new HardwareDialog(settings,core.StandardRamKB,cardFolder);dialog.Show(form);Shot(dialog,"settings");dialog.Close();
             } finally {if(sampleCard)File.Delete(card);}
             using(var ask=new CardSizeDialog()){ask.StartPosition=FormStartPosition.CenterScreen;ask.Show(form);Shot(ask,"card-size");ask.Close();}
 

@@ -85,7 +85,7 @@ internal static class DemoVideo
                         Key("ON/BRK");core.Run(1024000);form.TestText("CLS");form.TestTypeOnly("PRINT \"LONG PRESS\"");form.TestRunCycles(768000);break;
                     case "settings":
                         // The folder shown is the usual one, not the scratch folder (whose path has the PC's user name in it).
-                        hardware=new HardwareDialog(form.TestSettings with{DiskFolder="drive-x"},core.RomKB,"ram"){StartPosition=FormStartPosition.CenterScreen};hardware.Show(form);overlay=hardware;
+                        hardware=new HardwareDialog(form.TestSettings with{DiskFolder="drive-x"},core.StandardRamKB,"ram"){StartPosition=FormStartPosition.CenterScreen};hardware.Show(form);overlay=hardware;
                         scroller=Scroller(hardware);break;
                     case "ml":
                         Key("ON/BRK");core.Run(1024000);form.TestText("CLS");form.TestRefresh();
