@@ -37,7 +37,8 @@ public:
     /// @param path    フォルダのパス。null か空文字列なら取り外す
     /// @param protect 書き込み禁止にするか
     /// @return 接続できたか（取り外しは常に true）
-    bool mount(const wchar_t *path,bool protect);
+    /// path は Windows では UTF-16、Linux では UTF-8。
+    bool mount(const std::filesystem::path::value_type *path,bool protect);
     /// CPU の命令ごとに呼ばれ、バスの信号の変化を処理する。
     /// @param now  CPU のサイクル数
     /// @param xout XOUT 信号

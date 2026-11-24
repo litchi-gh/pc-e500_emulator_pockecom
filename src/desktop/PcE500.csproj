@@ -12,6 +12,7 @@
     <Product>PC-E500 Emulator (PokeCom)</Product>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../shared/*.cs" LinkBase="shared" />
     <None Include="../../bin/e500core.dll" Link="e500core.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../third_party/dotnet/*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

@@ -7,12 +7,21 @@
 #include <numeric>
 #include <cstring>
 #include <stdexcept>
+#ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 namespace fs=std::filesystem;
 using Bytes=std::vector<uint8_t>;
 // 扱うファイルの上限（1MB）。
 static constexpr size_t MaxFile=1024*1024;
+// What differs between Windows and Linux, in one place: links, the read-only
+// mark, and putting a finished file in the place of the old one.
+// Windows と Linux で違う所：リンクか、読み取り専用の印、書き終えたファイルの置き換え。
+#ifdef _WIN32
 // パスがシンボリックリンク・ジャンクションなど、別の場所を指すものか。
 static bool reparse(const fs::path &p) {
     auto a=GetFileAttributesW(p.c_str());if(a==INVALID_FILE_ATTRIBUTES || !(a&FILE_ATTRIBUTE_REPARSE_POINT))return false;
@@ -23,6 +32,33 @@ static bool reparse(const fs::path &p) {
     FILE_ATTRIBUTE_TAG_INFO info{};bool ok=GetFileInformationByHandleEx(h,FileAttributeTagInfo,&info,sizeof(info));CloseHandle(h);
     return !ok || IsReparseTagNameSurrogate(info.ReparseTag);
 }
+// ファイルが読み取り専用か（なければ missing を立てる）。
+static bool readOnlyFile(const fs::path &p,bool &missing) {
+    auto a=GetFileAttributesW(p.c_str());missing=a==INVALID_FILE_ATTRIBUTES;return !missing && (a&FILE_ATTRIBUTE_READONLY);
+}
+static bool setReadOnly(const fs::path &p,bool on) {
+    auto a=GetFileAttributesW(p.c_str());
+    return a!=INVALID_FILE_ATTRIBUTES && SetFileAttributesW(p.c_str(),on?a|FILE_ATTRIBUTE_READONLY:a&~FILE_ATTRIBUTE_READONLY);
+}
+static bool replaceFile(const fs::path &from,const fs::path &to) {return MoveFileExW(from.c_str(),to.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;}
+#else
+// パスがシンボリックリンクか。
+static bool reparse(const fs::path &p) {std::error_code e;return fs::is_symlink(fs::symlink_status(p,e));}
+// ファイルが読み取り専用（所有者が書けない）か（なければ missing を立てる）。
+static bool readOnlyFile(const fs::path &p,bool &missing) {
+    std::error_code e;auto s=fs::status(p,e);missing=e||!fs::exists(s);
+    return !missing && (s.permissions()&fs::perms::owner_write)==fs::perms::none;
+}
+static bool setReadOnly(const fs::path &p,bool on) {
+    std::error_code e;fs::permissions(p,fs::perms::owner_write,on?fs::perm_options::remove:fs::perm_options::add,e);return !e;
+}
+static bool replaceFile(const fs::path &from,const fs::path &to) {
+    int f=open(from.c_str(),O_RDONLY);if(f<0)return false;
+    bool flushed=fsync(f)==0;close(f);
+    std::error_code e;if(flushed)fs::rename(from,to,e);
+    return flushed && !e;
+}
+#endif
 // 数値を count バイトのリトルエンディアンにし、先頭に 0（成功）、末尾にチェックサムを付けた応答を作る。
 static Bytes number(uint32_t n,int count) {Bytes b{0};uint8_t sum=0;while(count--){b.push_back(n&255);sum+=n&255;n>>=8;}b.push_back(sum);return b;}
 // 末尾にチェックサム（全バイトの和の下位8ビット）を付ける。
@@ -103,7 +139,7 @@ bool Ce140f::restoreCode(const CodeState& s,uint64_t now) {
     return true;
 }
 // フォルダを検査して（リンクは拒否）ドライブとして接続する。
-bool Ce140f::mount(const wchar_t *path,bool protect) {
+bool Ce140f::mount(const fs::path::value_type *path,bool protect) {
     // Mounted again (another folder, or the protection changed), the drive keeps
     // its place in a device code going by: the folder has nothing to do with the
     // bus, and losing the bits taken would fail the ROM's selection of 41h.
@@ -143,6 +179,19 @@ fs::path Ce140f::safePath(const std::string& n) const {
     if(stem=="CON"||stem=="PRN"||stem=="AUX"||stem=="NUL"||(stem.size()==4&&(stem.substr(0,3)=="COM"||stem.substr(0,3)=="LPT")&&stem[3]>='1'&&stem[3]<='9'))throw std::runtime_error("Reserved filename");
     auto p=root/fs::path(n);
     if(reparse(p)||reparse(root)||fs::canonical(root)!=root)throw std::runtime_error("Reparse points are not disk files");
+#ifndef _WIN32
+    // A DOS disk has no small letters: prog.bas copied from a PC is PROG.BAS on
+    // it. Windows finds the file itself; here the folder is looked through.
+    // ディスクの名前に大文字・小文字の区別はない（prog.bas は PROG.BAS）。Windows は自分で見つけるが、ここでは探す。
+    std::error_code gone;
+    if(!fs::exists(fs::symlink_status(p,gone)))for(auto &e:fs::directory_iterator(root)) {
+        auto name=e.path().filename().string();
+        std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return char(c>='a'&&c<='z'?c-32:c);});
+        if(name!=n)continue;
+        if(reparse(e.path()))throw std::runtime_error("Reparse points are not disk files");
+        return e.path();
+    }
+#endif
     return p;
 }
 std::string Ce140f::fileName(const Bytes& b,size_t at) const {
@@ -156,15 +205,15 @@ Bytes Ce140f::read(const std::string& name) const {
     auto p=safePath(name);if(!fs::is_regular_file(p)||fs::file_size(p)>MaxFile)throw std::runtime_error("File missing or too large");
     std::ifstream f(p,std::ios::binary);Bytes b((std::istreambuf_iterator<char>(f)),{});if(!f.eof() && f.fail())throw std::runtime_error("Disk read failed");return b;
 }
-bool Ce140f::protectedFile(const std::string& name) const {auto a=GetFileAttributesW(safePath(name).c_str());return a!=INVALID_FILE_ATTRIBUTES && (a&FILE_ATTRIBUTE_READONLY);}
+bool Ce140f::protectedFile(const std::string& name) const {bool missing;return readOnlyFile(safePath(name),missing);}
 void Ce140f::requireWrite(const std::string& name) const {if(readOnly||protectedFile(name))throw std::runtime_error("Write protected");}
 // 一時ファイルに書いてから置き換えるので、途中で失敗しても元のファイルは壊れない。
 void Ce140f::write(const std::string& name,const Bytes& b) {
     requireWrite(name);if(b.size()>MaxFile)throw std::runtime_error("File too large");
-    auto p=safePath(name),tmp=p;tmp+=L".ce140f-tmp";
+    auto p=safePath(name),tmp=p;tmp+=".ce140f-tmp";
     if(reparse(tmp))throw std::runtime_error("Unsafe temporary file");
     {std::ofstream f(tmp,std::ios::binary|std::ios::trunc);f.write(reinterpret_cast<const char*>(b.data()),b.size());f.flush();if(!f)throw std::runtime_error("Disk write failed");}
-    if(!MoveFileExW(tmp.c_str(),p.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw std::runtime_error("Disk commit failed");
+    if(!replaceFile(tmp,p))throw std::runtime_error("Disk commit failed");
 }
 Bytes Ce140f::command(const Bytes& packet) {
     if(!mounted)return {0xff};
@@ -233,8 +282,8 @@ Bytes Ce140f::command(const Bytes& packet) {
             else write(dest,read(src));return {0};
         }
         case 0x0c: {  // SET：読み取り専用の属性を付け外しする
-            need(17);if(readOnly)throw std::runtime_error("Write protected");auto p=safePath(fileName(b,3));auto a=GetFileAttributesW(p.c_str());if(a==INVALID_FILE_ATTRIBUTES)throw std::runtime_error("File not found");
-            if(!SetFileAttributesW(p.c_str(),(b[16]&1)?a|FILE_ATTRIBUTE_READONLY:a&~FILE_ATTRIBUTE_READONLY))throw std::runtime_error("Attribute write failed");return {0};
+            need(17);if(readOnly)throw std::runtime_error("Write protected");auto p=safePath(fileName(b,3));bool missing;readOnlyFile(p,missing);if(missing)throw std::runtime_error("File not found");
+            if(!setReadOnly(p,(b[16]&1)!=0))throw std::runtime_error("Attribute write failed");return {0};
         }
         // 0Eh LOAD の開始（サイズを返す）、17h 1バイトずつ、0Fh 残りをまとめて（256バイトごとにチェックサム）
         case 0x0e: {flushAll();transfer={};transfer.name=fileName(b,3);transfer.bytes=read(transfer.name);transfer.mode=1;auto out=number(uint32_t(transfer.bytes.size()),3);out.insert(out.begin()+1,0x20);out.back()+=0x20;return out;}

@@ -581,14 +581,17 @@ int main() {
                       disk.command(packet({0x42}))==std::vector<BYTE>{0},"COMP is not a device name");
                 check(disk.command(packet(filename(0x10,"COM1")))==std::vector<BYTE>{255},"COM1 is a device name");
                 // FILES lists PROG and COMP.BAS though a name outside the code page sits beside them.
-                std::ofstream(path/fs::path(L"\u2603.TXT"))<<"x";
+                std::ofstream(path/fs::u8path("\xe2\x98\x83.TXT"))<<"x";
                 std::ofstream(path/"lower.bas")<<"x";
                 auto listed=disk.command(packet(filename(0x05,"????????","???")));
                 // LOG.TXT CR.TXT ASCII.TXT B256.BIN PROG COMP.BAS LOWER.BAS TEST.BAS
                 check(listed.size()==3 && listed[1]==8,"FILES lists the disk past a name it cannot show");
+                // A small-letter name copied from a PC is read by the name FILES shows.
+                auto small=disk.command(packet(filename(0x0e,"LOWER","BAS")));
+                check(small.size()>1 && small[0]==0 && small[2]==1,"LOAD finds a lower-case file");
                 // INIT clears what FILES shows, lower-case names included.
                 check(disk.command(packet({0x09}))==std::vector<BYTE>{0} && !fs::exists(path/"lower.bas") && !fs::exists(path/"PROG"),"INIT clears lower-case and extensionless names");
-                fs::remove(path/fs::path(L"\u2603.TXT"));
+                fs::remove(path/fs::u8path("\xe2\x98\x83.TXT"));
             }
             // Only the specifically created file and empty test directory are removed.
             fs::remove(path/"TEST.BAS");fs::remove(path);

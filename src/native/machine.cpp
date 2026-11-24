@@ -198,7 +198,11 @@ void Machine::pixels(BYTE *out) {
 }
 
 // ---- DLL の公開 API（デスクトップ側の Core.cs から P/Invoke で呼ぶ） ----
+#ifdef _WIN32
 #define API extern "C" __declspec(dllexport)
+#else
+#define API extern "C" __attribute__((visibility("default")))
+#endif
 // 本体を作る。rom：ROM イメージ、size：256KB（PC-E500）か 384KB（PC-E500S・E650・U6000）。失敗したら null。
 API Machine* e500_create(const BYTE *rom,int size) {
     constexpr int MainRomSize=256*1024;
@@ -264,7 +268,7 @@ API int e500_audio(Machine *m,int16_t *data,int size) {
     for(int i=0;i<n;i++){data[i]=m->audio.front();m->audio.pop_front();}return n;
 }
 // CE-140F にフォルダを接続する（folder が null なら取り外す）。
-API int e500_disk_mount(Machine *m,const wchar_t *folder,int readOnly) {
+API int e500_disk_mount(Machine *m,const std::filesystem::path::value_type *folder,int readOnly) {
     if(!m)return 0;return m->disk.mount(folder,readOnly!=0);
 }
 // CE-140F の状態ビット（Ce140f::status）とトレースの取り出し。

@@ -323,15 +323,15 @@ class HardwareTests(unittest.TestCase):
                 self.assertEqual(pathlib.Path(folder,'NEW.DAT').read_bytes(),b'HELLO\r\nWORLD\r\n')
                 self.assertFalse(pathlib.Path(folder,'COPY.DAT').exists())
                 e.type('SET "X:NEW.DAT","P"')
-                self.assertTrue(c.windll.kernel32.GetFileAttributesW(str(pathlib.Path(folder,'NEW.DAT')))&1)
+                self.assertFalse(pathlib.Path(folder,'NEW.DAT').stat().st_mode&0o200)
                 e.type('SET "X:NEW.DAT"," "')
                 # Verify the actual ROM attribute-clear variant before deleting the test file.
-                self.assertFalse(c.windll.kernel32.GetFileAttributesW(str(pathlib.Path(folder,'NEW.DAT')))&1)
+                self.assertTrue(pathlib.Path(folder,'NEW.DAT').stat().st_mode&0o200)
                 e.type('KILL "X:NEW.DAT"');self.assertFalse(pathlib.Path(folder,'NEW.DAT').exists())
                 self.assertNotIn('ERROR:',e.trace())
             finally:
                 e.close()
-                for p in pathlib.Path(folder).iterdir():c.windll.kernel32.SetFileAttributesW(str(p),128)
+                for p in pathlib.Path(folder).iterdir():p.chmod(0o644)
 
     def test_ce126p_lprint_llist_and_disconnect(self):
         e=Emulator()

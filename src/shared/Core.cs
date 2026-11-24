@@ -11,14 +11,15 @@ namespace PokeCom;
 /// </summary>
 internal static class Native
 {
-    const string Dll = "e500core.dll";
+    // "e500core.dll" on Windows, "libe500core.so" on Linux.
+    const string Dll = "e500core";
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern IntPtr e500_create(byte[] rom, int size);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern IntPtr e500_create_config(byte[] rom,int size,int ram,int card);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_capacity(IntPtr m,int card);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern void e500_reset(IntPtr m,int clearInternal);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_memory(IntPtr m,int card,byte[] data,int size,int write);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_audio(IntPtr m,[Out]short[] data,int count);
-    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl,CharSet=CharSet.Unicode)] internal static extern int e500_disk_mount(IntPtr m,string? path,int readOnly);
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl,CharSet=CharSet.Auto)] internal static extern int e500_disk_mount(IntPtr m,string? path,int readOnly);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_disk_status(IntPtr m);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_disk_trace(IntPtr m,[Out]byte[] output,int length);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern void e500_printer_connect(IntPtr m,int on);
@@ -129,7 +130,7 @@ internal sealed class Core : IDisposable
             if(!File.Exists(CardPath))throw new FileNotFoundException(L.T("RAMカードのイメージファイルが見つかりません。\n","The RAM card image file was not found.\n")+CardPath);
             // Its size is checked before it is read, as the ROM's is.
             long bytes=new FileInfo(CardPath).Length;
-            if(bytes%1024!=0 || bytes>256*1024 || !HardwareSettings.Sizes.Contains((int)(bytes/1024)))
+            if(bytes%1024!=0 || bytes>256*1024 || !RamSizes.Sizes.Contains((int)(bytes/1024)))
                 throw new InvalidDataException(L.T($"RAMカードのイメージは8/16/32/64/128/256KBのいずれかにしてください。\n{CardPath} ({bytes}バイト)",$"A RAM card image must be 8, 16, 32, 64, 128 or 256KB.\n{CardPath} ({bytes} bytes)"));
             card=File.ReadAllBytes(CardPath);
             if(card.Length!=bytes)throw new InvalidDataException(L.T("RAMカードのイメージが読み込みの途中で変わりました。\n","The RAM card image changed while it was being read.\n")+CardPath);
@@ -145,7 +146,7 @@ internal sealed class Core : IDisposable
         RomPath=Path.GetFullPath(path);RomHash=Hash=Convert.ToHexString(SHA256.HashData(rom));
         // A stored 32KB setting from a PC-E500 session is not a size the E650/U6000
         // hardware can be built with, so fall back to that machine's stock capacity.
-        Handle=Native.e500_create_config(rom,rom.Length,HardwareSettings.CoerceInternal(StandardRamKB,ram),card is null?0:card.Length/1024);
+        Handle=Native.e500_create_config(rom,rom.Length,RamSizes.CoerceInternal(StandardRamKB,ram),card is null?0:card.Length/1024);
         if(Handle==IntPtr.Zero) throw new InvalidOperationException(L.T("エミュレータを初期化できません。","Could not initialise the emulator."));
         if(card is not null)Native.e500_memory(Handle,1,card,card.Length,1);
         // The E650/U6000 character generator table resides in the CE3 extension.
@@ -368,7 +369,7 @@ internal sealed class Core : IDisposable
     /// <param name="path">作るファイル</param>
     /// <param name="kb">容量（8〜256KB）</param>
     internal static void CreateCardImage(string path,int kb) {
-        if(!HardwareSettings.Sizes.Contains(kb))throw new ArgumentOutOfRangeException(nameof(kb));
+        if(!RamSizes.Sizes.Contains(kb))throw new ArgumentOutOfRangeException(nameof(kb));
         var data=new byte[kb*1024];Array.Fill(data,(byte)0xff);
         AtomicFile.Write(path,data);
     }

@@ -35,15 +35,10 @@ internal sealed record HardwareSettings(int InternalKB=32,string CardPath="",boo
     WindowView View=WindowView.Normal,float ViewZoom=0,int ViewLeft=0,int ViewTop=0,
     bool CheckUpdates=true,DateTime UpdateCheckedAt=default,string SkippedUpdate="",PrintTarget? PrintTo=null,string RomFile="",bool AutoPowerOff=true,bool LcdAfterimage=true,bool LoadRun=false,string Theme="System",bool TopMost=false)
 {
-    /// <summary>選べる RAM の容量（KB）。</summary>
-    internal static readonly int[] Sizes=[8,16,32,64,128,256];
-    // The stock E500 carries one 62256 (32KB) and the E650/U6000 two of them (64KB,
-    // B0000-BFFFF). Replacing each 32KB SRAM with a 128KB 628128 is the well-known
-    // expansion mod, so an E650/U6000 reaches 128KB or 256KB (80000-BFFFF) instead.
-    /// <summary>機種（標準の内蔵 RAM の容量）に合う内蔵 RAM の容量の一覧。</summary>
-    internal static int[] InternalSizes(int standardKB)=>standardKB==64?[64,128,256]:Sizes;
-    /// <summary>機種に合わない内蔵 RAM の容量を、その機種の標準の容量（E500・E500S は 32KB、E650・U6000 は 64KB）にする。</summary>
-    internal static int CoerceInternal(int standardKB,int kb)=>InternalSizes(standardKB).Contains(kb)?kb:standardKB;
+    /// <summary>選べる RAM の容量（KB）。機種ごとの一覧と直し方は RamSizes。</summary>
+    internal static int[] Sizes=>RamSizes.Sizes;
+    internal static int[] InternalSizes(int standardKB)=>RamSizes.InternalSizes(standardKB);
+    internal static int CoerceInternal(int standardKB,int kb)=>RamSizes.CoerceInternal(standardKB,kb);
     // The PC-U6000 case is a PC-E650 with a different nameplate, so it is not
     // offered as its own appearance; stored settings naming it fall back to E650.
     /// <summary>選べる外観。</summary>
