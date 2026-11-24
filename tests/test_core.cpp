@@ -505,7 +505,7 @@ int main() {
             auto filename=[](BYTE cmd,std::string stem,std::string ext="BAS") {
                 std::vector<BYTE> b{cmd,'X',':'};stem.resize(8,' ');stem+='.';stem+=ext;stem.resize(12,' ');b.insert(b.end(),stem.begin(),stem.end());return b;
             };
-            check(disk.command({5,0})==std::vector<BYTE>{255},"CE rejects checksum mismatch");
+            check(disk.command({5,0})==std::vector<BYTE>{0x40},"CE rejects checksum mismatch");
             check(disk.command(packet(filename(0x10,"TEST")))==std::vector<BYTE>{0},"SAVE filename");
             check(!disk.canSnapshot(),"SAVE context prevents inconsistent snapshots");
             check(disk.command(packet({0x11,0,3,0,0}))==std::vector<BYTE>{0},"SAVE size");
@@ -526,7 +526,7 @@ int main() {
                 check(disk.command(packet(filename(0x05,"T??","???")))==std::vector<BYTE>({0,0,0}),"FILES T??.??? does not match TEST");
                 fs::remove(path/"A.BAS");fs::remove(path/"LONGNAME.TXT");
             }
-            auto bad=filename(0x10,"..\\EVIL");check(disk.command(packet(bad))==std::vector<BYTE>{255},"CE rejects path traversal");
+            auto bad=filename(0x10,"..\\EVIL");check(disk.command(packet(bad))==std::vector<BYTE>{0x31},"CE rejects path traversal");
             {
                 // A folder that cannot be opened (here a file) leaves the drive on the
                 // one it had, with its open file still open.
@@ -534,10 +534,10 @@ int main() {
                 auto open=filename(0x03,"TEST");open.push_back(1);open.push_back(2);
                 check(disk.command(packet(open))==std::vector<BYTE>{0},"CE140F file open before a bad mount");
                 check(!disk.mount((path/"TEST.BAS").c_str(),false),"CE140F refuses a file as its folder");
-                check((disk.status()&1) && !disk.canSnapshot() && disk.command(packet({0x1b,2}))!=std::vector<BYTE>{255},"CE140F keeps its folder and open file after a refused mount");
+                check((disk.status()&1) && !disk.canSnapshot() && disk.command(packet({0x1b,2})).size()==5,"CE140F keeps its folder and open file after a refused mount");
                 check(disk.command(packet({0x04,0xff}))==std::vector<BYTE>{0} && disk.canSnapshot(),"CE140F closes the file");
             }
-            disk.mount(path.c_str(),true);check(disk.command(packet(filename(0x0a,"TEST")))==std::vector<BYTE>{255} && fs::exists(path/"TEST.BAS"),"write protection enforces KILL");
+            disk.mount(path.c_str(),true);check(disk.command(packet(filename(0x0a,"TEST")))==std::vector<BYTE>{0x33} && fs::exists(path/"TEST.BAS"),"write protection enforces KILL");
             {
                 // The machine's RESET closes the drive's files and transfer: BASIC
                 // has no file number left to close them with.
@@ -579,7 +579,27 @@ int main() {
                       disk.command(packet({0x41}))==std::vector<BYTE>{0} && fs::exists(path/"PROG"),"SAVE with no extension");
                 check(disk.command(packet(filename(0x10,"COMP")))==std::vector<BYTE>{0} && disk.command(packet({0x11,0,1,0,0}))==std::vector<BYTE>{0} &&
                       disk.command(packet({0x42}))==std::vector<BYTE>{0},"COMP is not a device name");
-                check(disk.command(packet(filename(0x10,"COM1")))==std::vector<BYTE>{255},"COM1 is a device name");
+                check(disk.command(packet(filename(0x10,"COM1")))==std::vector<BYTE>{0x31},"COM1 is a device name");
+                // Every error is a status the ROM makes a BASIC error of: FFh, and
+                // anything below 10h, pass for success there.
+                // エラーは、ROM が BASIC のエラーにする状態で返す（FFh と 10h 未満は成功とみなされる）。
+                auto two=[&](BYTE cmd,std::string from,std::string to){auto b=filename(cmd,from),c=filename(0,to);b.insert(b.end(),c.begin()+1,c.end());return disk.command(packet(b));};
+                const std::vector<BYTE> done{0},notFound{0x32},isProtected{0x33},full{0x34},nameError{0x35},mode{0x3e},io{0x40};
+                check(opened("NONE","DAT",1,2)==notFound && disk.command(packet(filename(0x0e,"NONE")))==notFound && disk.command(packet(filename(0x0a,"NONE")))==notFound,"OPEN, LOAD and KILL of a missing file");
+                check(two(0x0b,"NONE","NEW")==notFound && two(0x0d,"NONE","NEW")==notFound,"NAME and COPY of a missing file");
+                check(two(0x0b,"TEST","COMP")==nameError && two(0x0b,"TEST","COM1")==nameError && fs::exists(path/"TEST.BAS"),"NAME to a name taken, or one that cannot be used");
+                auto attribute=filename(0x0c,"NONE");attribute.push_back('P');attribute.push_back(1);check(disk.command(packet(attribute))==notFound,"SET of a missing file");
+                fs::create_directory(path/"SUB");check(disk.command(packet(filename(0x0a,"SUB","")))==notFound && fs::exists(path/"SUB"),"KILL leaves a folder alone");fs::remove(path/"SUB");
+                check(opened("CR","TXT",1,2)==done && disk.command(packet({0x15,2}))==mode,"PRINT# to a file open for INPUT");
+                check(opened("OUT","TXT",2,3)==done && disk.command(packet({0x13,3}))==mode,"INPUT# from a file open for OUTPUT");
+                disk.command(packet({0x04,0xff}));fs::remove(path/"OUT.TXT");
+                check(disk.command(packet({0x13,2}))==io && disk.command(packet({0x7f,0}))==io,"a file not open, and a command there is not");
+                check(disk.command(packet(filename(0x10,"BIG")))==done && disk.command(packet({0x11,0,1,0,0x20}))==full && disk.canSnapshot(),"SAVE too large for the disk ends there");
+                {std::ofstream f(path/"EMPTY.BAS");}
+                check(disk.command(packet(filename(0x0e,"EMPTY"))).size()>1 && disk.command(packet({0x17,1}))==io && disk.canSnapshot(),"LOAD past the end of a file");fs::remove(path/"EMPTY.BAS");
+                check(disk.mount(path.c_str(),true) && opened("NEW","TXT",2,2)==isProtected && opened("CR","TXT",3,2)==isProtected && disk.command(packet(filename(0x10,"NEW")))==isProtected &&
+                      two(0x0b,"TEST","NEW")==isProtected && two(0x0d,"TEST","NEW")==isProtected && disk.command(packet({0x08}))==isProtected && disk.command(packet({0x09}))==isProtected,"a write-protected disk");
+                check(disk.mount(path.c_str(),false),"CE140F mounted again");
                 // FILES lists PROG and COMP.BAS though a name outside the code page sits beside them.
                 std::ofstream(path/fs::u8path("\xe2\x98\x83.TXT"))<<"x";
                 std::ofstream(path/"lower.bas")<<"x";
@@ -808,7 +828,7 @@ int main() {
             auto idle=p.save();check(idle.lastActivity==0,"CE126P idle state carries no time");
             // With no printer on the bus the disk answers a code that starts with
             // 1, as 41h does (0Fh), all the way, and stays silent through one that
-            // starts with 0 (20h), so the ROM finds no printer and LPRINT fails at once.
+            // starts with 0 (20h), so the ROM finds no printer and passes LPRINT over at once.
             p.connected=false;tick(false,false);
             for(BYTE c:{BYTE(0x0f),BYTE(0x20)}) {
                 xout=true;tick(false,false);bool answered=true,silent=true;

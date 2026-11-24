@@ -16,6 +16,16 @@
 #endif
 namespace fs=std::filesystem;
 using Bytes=std::vector<uint8_t>;
+// The status bytes of an error, each of which the ROM turns into a BASIC error.
+// It takes anything below 10h, and FFh, for success (EC26Fh): with FFh
+// for every error, OPEN of a file not there passed and LOAD waited forever.
+// ROM がそれぞれの BASIC のエラーにする状態のバイト。10h 未満と FFh は成功とみなされる。
+// （以前はどのエラーも FFh で、ないファイルの OPEN が通り、LOAD は待ち続けた。）
+enum Status:uint8_t {BadName=0x31,NotFound=0x32,WriteProtected=0x33,DiskFull=0x34,NameError=0x35,WrongMode=0x3e,IoError=0x40};
+struct DiskError:std::runtime_error {
+    uint8_t status;
+    DiskError(Status s,const char *text):std::runtime_error(text),status(s) {}
+};
 // 扱うファイルの上限（1MB）。
 static constexpr size_t MaxFile=1024*1024;
 // What differs between Windows and Linux, in one place: links, the read-only
@@ -172,13 +182,13 @@ fs::path Ce140f::safePath(const std::string& n) const {
     // 拡張子のない名前も受け付ける（以前は Windows が点を落として作り、FILES にも INIT にも出なかった）。
     auto dot=n.find('.');
     if(n.empty()||dot==0||(dot==std::string::npos?n.size()>8:dot>8||n.size()-dot-1>3||n.size()-dot-1==0||n.find('.',dot+1)!=std::string::npos))
-        throw std::runtime_error("Invalid 8.3 filename");
-    for(unsigned char c:n)if(!((c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.'))throw std::runtime_error("Unsafe filename");
+        throw DiskError(BadName,"Invalid 8.3 filename");
+    for(unsigned char c:n)if(!((c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.'))throw DiskError(BadName,"Unsafe filename");
     std::string stem=n.substr(0,dot);
     // Only the device names: COMP or LPTR is an ordinary name.
-    if(stem=="CON"||stem=="PRN"||stem=="AUX"||stem=="NUL"||(stem.size()==4&&(stem.substr(0,3)=="COM"||stem.substr(0,3)=="LPT")&&stem[3]>='1'&&stem[3]<='9'))throw std::runtime_error("Reserved filename");
+    if(stem=="CON"||stem=="PRN"||stem=="AUX"||stem=="NUL"||(stem.size()==4&&(stem.substr(0,3)=="COM"||stem.substr(0,3)=="LPT")&&stem[3]>='1'&&stem[3]<='9'))throw DiskError(BadName,"Reserved filename");
     auto p=root/fs::path(n);
-    if(reparse(p)||reparse(root)||fs::canonical(root)!=root)throw std::runtime_error("Reparse points are not disk files");
+    if(reparse(p)||reparse(root)||fs::canonical(root)!=root)throw DiskError(BadName,"Reparse points are not disk files");
 #ifndef _WIN32
     // A DOS disk has no small letters: prog.bas copied from a PC is PROG.BAS on
     // it. Windows finds the file itself; here the folder is looked through.
@@ -188,48 +198,48 @@ fs::path Ce140f::safePath(const std::string& n) const {
         auto name=e.path().filename().string();
         std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return char(c>='a'&&c<='z'?c-32:c);});
         if(name!=n)continue;
-        if(reparse(e.path()))throw std::runtime_error("Reparse points are not disk files");
+        if(reparse(e.path()))throw DiskError(BadName,"Reparse points are not disk files");
         return e.path();
     }
 #endif
     return p;
 }
 std::string Ce140f::fileName(const Bytes& b,size_t at) const {
-    if(at+12>b.size())throw std::runtime_error("Truncated filename");
+    if(at+12>b.size())throw DiskError(IoError,"Truncated filename");
     std::string s;for(size_t i=at;i<at+12;i++)if(b[i] && b[i]!=' ')s+=char(toupper(b[i]));
     // "PROG    .   " is PROG, with no extension.
     if(!s.empty() && s.back()=='.')s.pop_back();
     return s;
 }
 Bytes Ce140f::read(const std::string& name) const {
-    auto p=safePath(name);if(!fs::is_regular_file(p)||fs::file_size(p)>MaxFile)throw std::runtime_error("File missing or too large");
-    std::ifstream f(p,std::ios::binary);Bytes b((std::istreambuf_iterator<char>(f)),{});if(!f.eof() && f.fail())throw std::runtime_error("Disk read failed");return b;
+    auto p=safePath(name);if(!fs::is_regular_file(p))throw DiskError(NotFound,"File not found");if(fs::file_size(p)>MaxFile)throw DiskError(IoError,"File too large to read");
+    std::ifstream f(p,std::ios::binary);Bytes b((std::istreambuf_iterator<char>(f)),{});if(!f.eof() && f.fail())throw DiskError(IoError,"Disk read failed");return b;
 }
 bool Ce140f::protectedFile(const std::string& name) const {bool missing;return readOnlyFile(safePath(name),missing);}
-void Ce140f::requireWrite(const std::string& name) const {if(readOnly||protectedFile(name))throw std::runtime_error("Write protected");}
+void Ce140f::requireWrite(const std::string& name) const {if(readOnly||protectedFile(name))throw DiskError(WriteProtected,"Write protected");}
 // 一時ファイルに書いてから置き換えるので、途中で失敗しても元のファイルは壊れない。
 void Ce140f::write(const std::string& name,const Bytes& b) {
-    requireWrite(name);if(b.size()>MaxFile)throw std::runtime_error("File too large");
+    requireWrite(name);if(b.size()>MaxFile)throw DiskError(DiskFull,"File too large");
     auto p=safePath(name),tmp=p;tmp+=".ce140f-tmp";
-    if(reparse(tmp))throw std::runtime_error("Unsafe temporary file");
-    {std::ofstream f(tmp,std::ios::binary|std::ios::trunc);f.write(reinterpret_cast<const char*>(b.data()),b.size());f.flush();if(!f)throw std::runtime_error("Disk write failed");}
-    if(!replaceFile(tmp,p))throw std::runtime_error("Disk commit failed");
+    if(reparse(tmp))throw DiskError(IoError,"Unsafe temporary file");
+    {std::ofstream f(tmp,std::ios::binary|std::ios::trunc);f.write(reinterpret_cast<const char*>(b.data()),b.size());f.flush();if(!f)throw DiskError(fs::space(root).available<b.size()?DiskFull:IoError,"Disk write failed");}
+    if(!replaceFile(tmp,p))throw DiskError(IoError,"Disk commit failed");
 }
 Bytes Ce140f::command(const Bytes& packet) {
-    if(!mounted)return {0xff};
+    if(!mounted)return {IoError};
     // チェックサムを確かめ、コマンド番号を決める（続きのパケットなら前のコマンドの続き）。
-    if(packet.size()<2 || uint8_t(std::accumulate(packet.begin(),packet.end()-1,0))!=packet.back()) {error=true;note("Checksum error");continuation=0;return {0xff};}
+    if(packet.size()<2 || uint8_t(std::accumulate(packet.begin(),packet.end()-1,0))!=packet.back()) {error=true;note("Checksum error");continuation=0;return {IoError};}
     Bytes b(packet.begin(),packet.end()-1);
     int cmd=continuation?continuation:b[0];continuation=0;
     char label[80];snprintf(label,sizeof(label),"CMD %02X (%zu bytes)",cmd,b.size());note(label);
     std::string hex;for(size_t i=0;i<std::min(size_t(48),b.size());i++){char v[4];snprintf(v,sizeof(v),"%02X ",b[i]);hex+=v;}note(hex);
-    auto need=[&](size_t n){if(b.size()<n)throw std::runtime_error("Truncated command");};
-    auto openFile=[&]() -> File& {need(2);int n=int(b[1])-2;if(n<0||n>=6||!files[n].mode)throw std::runtime_error("File not open");return files[n];};
+    auto need=[&](size_t n){if(b.size()<n)throw DiskError(IoError,"Truncated command");};
+    auto openFile=[&]() -> File& {need(2);int n=int(b[1])-2;if(n<0||n>=6||!files[n].mode)throw DiskError(IoError,"File not open");return files[n];};
     try {
         error=false;
         switch(cmd) {
         case 0x03: {  // OPEN：ファイルを開く（1 読み出し、2 書き込み、3 追記）
-            need(17);int n=int(b[16])-2,mode=b[15];if(n< -1||n>=6||mode<1||mode>3)throw std::runtime_error("Invalid OPEN");
+            need(17);int n=int(b[16])-2,mode=b[15];if(n< -1||n>=6||mode<1||mode>3)throw DiskError(WrongMode,"Invalid OPEN");
             auto name=fileName(b,3);safePath(name);File f;f.name=name;f.mode=mode;
             for(auto &other:files)if(other.mode && other.name==name)flush(other);
             // APPEND to a file not there yet starts it, as on a disk.
@@ -238,7 +248,7 @@ Bytes Ce140f::command(const Bytes& packet) {
             if(n==-1)transfer=std::move(f);else files[n]=std::move(f);return {0};
         }
         case 0x04: need(2);  // CLOSE：ファイルを閉じる（FFh ならすべて）
-            if(b[1]==255){for(auto &f:files)flush(f);files={};transfer={};}else if(b[1]==1)transfer={};else {int n=b[1]-2;if(n<0||n>=6)throw std::runtime_error("Invalid CLOSE");flush(files[n]);files[n]={};}return {0};
+            if(b[1]==255){for(auto &f:files)flush(f);files={};transfer={};}else if(b[1]==1)transfer={};else {int n=b[1]-2;if(n<0||n>=6)throw DiskError(IoError,"Invalid CLOSE");flush(files[n]);files[n]={};}return {0};
         case 0x05: {  // FILES：パターンに合うファイルの一覧を作り、件数を返す
             listing.clear();listIndex=-1;std::string pattern=b.size()>=15?fileName(b,3):"*.*";if(pattern.empty()||pattern==".")pattern="*.*";
             flushAll();
@@ -259,9 +269,9 @@ Bytes Ce140f::command(const Bytes& packet) {
             Bytes out{0};out.insert(out.end(),s.begin(),s.end());return checked(out);
         }
         // 書き込みできるかの確認
-        case 0x08: if(readOnly)throw std::runtime_error("Write protected");return {0};
+        case 0x08: if(readOnly)throw DiskError(WriteProtected,"Write protected");return {0};
         case 0x09: {  // INIT（フォーマット）：フォルダ内の 8.3 形式のファイルを消す
-            if(readOnly)throw std::runtime_error("Write protected");
+            if(readOnly)throw DiskError(WriteProtected,"Write protected");
             // Folder-backed virtual disk: format only disk-visible 8.3 files, never recurse.
             // Names compared as FILES shows them, in capitals: prog.bas copied from a PC is PROG.BAS on the disk.
             std::vector<std::string> names;for(auto &e:fs::directory_iterator(root)) {
@@ -275,19 +285,22 @@ Bytes Ce140f::command(const Bytes& packet) {
             for(auto &n:names)fs::remove(safePath(n));for(auto &f:files)f.dirty=false;files={};transfer={};return {0};
         }
         // KILL：ファイルを消す
-        case 0x0a: {flushAll();auto n=fileName(b,3);requireWrite(n);if(!fs::remove(safePath(n)))throw std::runtime_error("File not found");return {0};}
+        case 0x0a: {flushAll();auto n=fileName(b,3);requireWrite(n);if(!fs::is_regular_file(safePath(n)) || !fs::remove(safePath(n)))throw DiskError(NotFound,"File not found");return {0};}
         case 0x0b:case 0x0d: {  // 0Bh NAME（名前の変更）、0Dh COPY
-            flushAll();auto src=fileName(b,3);auto dest=fileName(b,17);requireWrite(dest);
-            if(cmd==0x0b){requireWrite(src);if(fs::exists(safePath(dest)))throw std::runtime_error("Destination exists");fs::rename(safePath(src),safePath(dest));}
+            flushAll();auto src=fileName(b,3);auto dest=fileName(b,17);
+            // NAME reports a new name it cannot use as a NAME error, COPY as any other command does.
+            if(cmd==0x0b)try {safePath(dest);} catch(const DiskError &e) {throw DiskError(NameError,e.what());}
+            requireWrite(dest);
+            if(cmd==0x0b){requireWrite(src);if(!fs::is_regular_file(safePath(src)))throw DiskError(NotFound,"File not found");if(fs::exists(safePath(dest)))throw DiskError(NameError,"Destination exists");fs::rename(safePath(src),safePath(dest));}
             else write(dest,read(src));return {0};
         }
         case 0x0c: {  // SET：読み取り専用の属性を付け外しする
-            need(17);if(readOnly)throw std::runtime_error("Write protected");auto p=safePath(fileName(b,3));bool missing;readOnlyFile(p,missing);if(missing)throw std::runtime_error("File not found");
-            if(!setReadOnly(p,(b[16]&1)!=0))throw std::runtime_error("Attribute write failed");return {0};
+            need(17);if(readOnly)throw DiskError(WriteProtected,"Write protected");auto p=safePath(fileName(b,3));if(!fs::is_regular_file(p))throw DiskError(NotFound,"File not found");
+            if(!setReadOnly(p,(b[16]&1)!=0))throw DiskError(IoError,"Attribute write failed");return {0};
         }
         // 0Eh LOAD の開始（サイズを返す）、17h 1バイトずつ、0Fh 残りをまとめて（256バイトごとにチェックサム）
         case 0x0e: {flushAll();transfer={};transfer.name=fileName(b,3);transfer.bytes=read(transfer.name);transfer.mode=1;auto out=number(uint32_t(transfer.bytes.size()),3);out.insert(out.begin()+1,0x20);out.back()+=0x20;return out;}
-        case 0x17: {if(transfer.position>=transfer.bytes.size())return {0xff};return checked({0,transfer.bytes[transfer.position++]});}
+        case 0x17: {if(transfer.position>=transfer.bytes.size())throw DiskError(IoError,"Past the end of the file");return checked({0,transfer.bytes[transfer.position++]});}
         case 0x0f: {
             Bytes out{0};uint8_t sum=0;size_t count=0;
             while(transfer.position<transfer.bytes.size()) {auto v=transfer.bytes[transfer.position++];out.push_back(v);sum+=v;if(++count%256==0){out.push_back(sum);sum=0;}}
@@ -314,11 +327,11 @@ Bytes Ce140f::command(const Bytes& packet) {
         }
         // 10h SAVE の開始、11h サイズの通知（続くパケットがデータ）、16h テキストの SAVE の開始
         case 0x10: {transfer={};transfer.name=fileName(b,3);safePath(transfer.name);requireWrite(transfer.name);transfer.mode=2;return {0};}
-        case 0x11: {need(5);expectedSize=b[2]|(b[3]<<8)|(b[4]<<16);if(expectedSize<1||expectedSize>MaxFile)throw std::runtime_error("Invalid SAVE size");transfer.bytes.clear();continuation=0xff;return {0};}
-        case 0x16: if(transfer.name.empty())throw std::runtime_error("ASCII file not open");continuation=0xfe;return {0};
+        case 0x11: {need(5);expectedSize=b[2]|(b[3]<<8)|(b[4]<<16);if(expectedSize<1)throw DiskError(IoError,"Invalid SAVE size");if(expectedSize>MaxFile)throw DiskError(DiskFull,"File too large");transfer.bytes.clear();continuation=0xff;return {0};}
+        case 0x16: if(transfer.name.empty())throw DiskError(IoError,"ASCII file not open");continuation=0xfe;return {0};
         case 0xff: {  // SAVE のデータの続き。予定のサイズに達したら書き込む
             transfer.bytes.insert(transfer.bytes.end(),b.begin(),b.end());
-            if(transfer.bytes.size()>size_t(expectedSize))throw std::runtime_error("SAVE overflow");
+            if(transfer.bytes.size()>size_t(expectedSize))throw DiskError(IoError,"SAVE overflow");
             if(transfer.bytes.size()==size_t(expectedSize)){write(transfer.name,transfer.bytes);note("Saved "+transfer.name);transfer.mode=0;}
             else continuation=0xff;return {0};
         }
@@ -328,19 +341,19 @@ Bytes Ce140f::command(const Bytes& packet) {
         case 0xfe: {  // テキストの SAVE のデータの続き。1Ah で終わり（1Ah はファイルに書かない。ハードの CE-140F エミュレータと同じ）
             if(b[0]==0x1a){write(transfer.name,transfer.bytes);note("Saved ASCII "+transfer.name);transfer.mode=0;}
             // Written once, at the end, not again with every line.
-            else {transfer.bytes.insert(transfer.bytes.end(),b.begin(),b.end());if(transfer.bytes.size()>MaxFile)throw std::runtime_error("File too large");}
+            else {transfer.bytes.insert(transfer.bytes.end(),b.begin(),b.end());if(transfer.bytes.size()>MaxFile)throw DiskError(DiskFull,"File too large");}
             return {0};
         }
         // PRINT#：続くパケットを開いたファイルへ書く
-        case 0x15: {auto &f=openFile();if(f.mode==1)throw std::runtime_error("File is input only");printFile=b[1]-2;continuation=0xfd;return {0};}
+        case 0x15: {auto &f=openFile();if(f.mode==1)throw DiskError(WrongMode,"File is input only");printFile=b[1]-2;continuation=0xfd;return {0};}
         case 0xfd: {
-            auto &f=files[printFile];if(f.mode<2)throw std::runtime_error("File not writable");
+            auto &f=files[printFile];if(f.mode<2)throw DiskError(WrongMode,"File not writable");
             if(!b.empty()&&b.back()==0)b.pop_back();f.bytes.insert(f.bytes.end(),b.begin(),b.end());
-            if(f.bytes.size()>MaxFile)throw std::runtime_error("File too large");
+            if(f.bytes.size()>MaxFile)throw DiskError(DiskFull,"File too large");
             f.dirty=true;f.position=f.bytes.size();return {0};
         }
         case 0x13:case 0x14:case 0x20: {  // INPUT#・LINE INPUT#（1行）、20h は残りすべて
-            auto &f=openFile();if(f.mode!=1)throw std::runtime_error("File not readable");Bytes out{0};
+            auto &f=openFile();if(f.mode!=1)throw DiskError(WrongMode,"File not readable");Bytes out{0};
             // A line ends at LF, or at a CR with no LF after it (a file with CR line ends).
             while(f.position<f.bytes.size()){
                 auto v=f.bytes[f.position++];out.push_back(v);
@@ -353,9 +366,15 @@ Bytes Ce140f::command(const Bytes& packet) {
         case 0x1b: {auto &f=openFile();return number(uint32_t(f.bytes.size()),3);}
         case 0x1c: {auto &f=openFile();return number(uint32_t((f.position>>8)+1),2);}
         case 0x1d: return number(uint32_t(std::min(uintmax_t(0xffffff),fs::space(root).available)),3);
-        default:throw std::runtime_error("Unsupported command");
+        default:throw DiskError(IoError,"Unsupported command");
         }
-    } catch(const std::exception& e) {error=true;continuation=0;note(std::string("ERROR: ")+e.what());return {0xff};}
+    } catch(const std::exception& e) {
+        error=true;continuation=0;note(std::string("ERROR: ")+e.what());
+        // The ROM gives up the SAVE or LOAD with the error.
+        // ROM はエラーで SAVE・LOAD をやめる。
+        if(cmd==0x11||cmd==0x17||cmd==0xfe||cmd==0xff)transfer={};
+        auto known=dynamic_cast<const DiskError*>(&e);return {known?known->status:uint8_t(IoError)};
+    }
 }
 void Ce140f::tick(uint64_t now,bool x,bool busy,uint8_t data) {
     if(!mounted){oldBusy=busy;oldXout=x;return;}
@@ -370,7 +389,7 @@ void Ce140f::tick(uint64_t now,bool x,bool busy,uint8_t data) {
     // real drive does (and this one did up to 0.0.3), and then answers all eight
     // bits, since once a code has begun the ROM waits long for every ACK. A code
     // that starts with 0 - the printer's 20h - it lets go by in silence, so with
-    // no printer the ROM finds no device and LPRINT fails at once; answered,
+    // no printer the ROM finds no device and passes LPRINT over at once; answered,
     // the ROM went on to wait out the data phase (3 s for LPRINT, 9 s at PF1).
     // XOUT の立ち上がりで、どの段階からでもデバイスコードの受け取りへ移る（戻り先を resume に残す）。
     // ACK を返すのは、1ビット目が 1 のコード（41h と同じ）だけ。XOUT が High で DOUT が 1 に

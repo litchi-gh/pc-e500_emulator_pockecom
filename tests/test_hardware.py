@@ -461,11 +461,11 @@ class HardwareTests(unittest.TestCase):
 
     def test_ce140f_does_not_stand_in_for_a_missing_ce126p(self):
         # The other way round: the disk stays silent through a code whose first
-        # bit is 0, the printer's 20h, so with the printer unplugged LPRINT fails
-        # the same way, at the same moment, whether a disk is on the bus or not.
+        # bit is 0, the printer's 20h, so with the printer unplugged the ROM passes
+        # LPRINT over at the same moment, whether a disk is on the bus or not.
         # Answering it, the ROM went on to wait out the data phase, and PF1 at
         # power-on took long enough to swallow the keys typed after it.
-        # プリンタを外した LPRINT は、ディスクの有無にかかわらず同じ時点で同じエラーになる。
+        # プリンタを外した LPRINT は、ディスクの有無にかかわらず同じ時点で読み飛ばされる。
         results=[]
         with tempfile.TemporaryDirectory(prefix='pce500-disk-test-') as folder:
             for disk in (None,folder):
@@ -473,8 +473,8 @@ class HardwareTests(unittest.TestCase):
                 try:
                     e.lib.e500_printer_connect(e.m,0)
                     e.boot();e.type('LPRINT "A"',enter=False);r,b=KEYS['ENTER']
-                    # Timed from the press: with nothing on the bus the error comes
-                    # while ENTER is still down.
+                    # Timed from the press: with nothing on the bus it is over
+            # while ENTER is still down.
                     start=e.lib.e500_cycles(e.m);last=e.pixels();changed=0
                     e.lib.e500_key(e.m,r,b,1)
                     for i in range(1250):

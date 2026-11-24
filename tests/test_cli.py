@@ -235,11 +235,31 @@ class Scripts(Folder):
         self.script(f'run "{self.path("p.bas")}"\n', '--disk', str(drive))
         self.assertEqual((drive / 'OUT.DAT').read_bytes(), b'HI\r\n')
         (drive / 'OUT.DAT').unlink()
-        self.script(f'run "{self.path("p.bas")}"\n', '--disk', str(drive), '--disk-read-only', code=4)
+        self.assertIn('File write protected in 10', self.script(f'run "{self.path("p.bas")}"\n', '--disk', str(drive), '--disk-read-only', code=4))
         self.assertFalse((drive / 'OUT.DAT').exists())
         self.assertIn('not connected', self.script('configure --disk none\ninfo\n'))
         self.script('configure --disk none\ndrive-files\n', code=1)
         self.script('configure --disk none\nload --program "10 A=1"\nprogram\n')
+
+    def test_drive_errors(self):
+        # The ROM makes BASIC errors of the drive's statuses; FFh passed for success, and LOAD never ended.
+        drive = self.dir / 'X'
+        drive.mkdir()
+        (drive / 'A.BAS').write_bytes(b'10 PRINT 1\r\n')
+        (drive / 'B.BAS').write_bytes(b'10 PRINT 2\r\n')
+        (drive / 'EMPTY.BAS').write_bytes(b'')
+        on = ('--disk', str(drive))
+        for rom in ROMS:
+            with self.subTest(rom=rom.name):
+                for line in ('LOAD "X:NONE.BAS"', 'OPEN "X:NONE.DAT" FOR INPUT AS #2', 'KILL "X:NONE.BAS"'):
+                    self.assertEqual(cli('exec', line, *on, rom=rom)[::2], (4, 'BASIC error: File not found\n'), line)
+                self.assertIn('File write protected', cli('exec', 'KILL "X:A.BAS"', *on, '--disk-read-only', rom=rom)[2])
+        for line, error in (('LOAD M "X:NONE.BIN"', 'File not found'), ('MERGE "X:NONE.BAS"', 'File not found'), ('COPY "X:NONE.BAS" TO "X:C.BAS"', 'File not found'),
+                            ('NAME "X:NONE.BAS" AS "X:C.BAS"', 'File not found'), ('NAME "X:A.BAS" AS "X:B.BAS"', 'NAME error'), ('SET "X:NONE.BAS","P"', 'File not found'),
+                            ('LOAD "X:EMPTY.BAS"', 'I/O error'), ('SAVE M "X:CON.BIN",&HB8000,&HB8010', 'Syntax error')):
+            self.assertEqual(cli('exec', line, *on)[::2], (4, f'BASIC error: {error}\n'), line)
+        self.assertIn('File not found in 10', cli('run', '-', *on, text='10 OPEN "X:NONE.DAT" FOR INPUT AS #2\n')[2])
+        self.assertEqual(sorted(p.name for p in drive.iterdir()), ['A.BAS', 'B.BAS', 'EMPTY.BAS'])
 
     def test_card(self):
         card = self.path('c.ram')
@@ -260,7 +280,9 @@ class Scripts(Folder):
         self.assertIn('Internal RAM: 128KB', out)
         self.assertIn('42', out.split())
         self.assertIn('CE-126P: not connected', out)
-        self.assertIn('nothing printed', self.script('exec "LPRINT 5"\nprinted\n', '--no-printer'))
+        # With no printer the ROM passes LPRINT over without an error, on every model.
+        for rom in ROMS:
+            self.assertIn('nothing printed', self.script('exec "LPRINT 5"\nexec "LLIST"\nprinted\n', '--no-printer', rom=rom), rom.name)
         out = self.script('exec "LPRINT 5"\nconfigure --printer off\nexec "LPRINT 6"\nconfigure --printer on\nprinted\n')
         self.assertEqual(out.strip().split('\n')[-1].strip(), '5')
         out = self.script(f'exec "LPRINT 11"\nexec "LPRINT 22"\nprinted --to "{self.path("p.txt")}" --png "{self.path("p.png")}"\npaper-cut\nprinted\n')

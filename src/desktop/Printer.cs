@@ -169,7 +169,7 @@ internal sealed class PrinterDialog : ThemedForm
         var copy=new FluentButton{Text=L.T("文字をコピー","Copy text"),AutoSize=true};
         var saveText=new FluentButton{Text=L.T("テキストで保存","Save text"),AutoSize=true};
         var saveImage=new FluentButton{Text=L.T("画像で保存","Save image"),AutoSize=true};
-        attach.CheckedChanged+=(_,_)=>{connect(attach.Checked);result.Text=attach.Checked?L.T("接続しました。","Connected."):L.T("外しました。LPRINT は Printer error になります。","Disconnected. LPRINT now reports a printer error.");};
+        attach.CheckedChanged+=(_,_)=>{connect(attach.Checked);result.Text=attach.Checked?L.T("接続しました。","Connected."):L.T("外しました。LPRINT は印字されません。","Disconnected. LPRINT prints nothing.");};
         clear.Click+=(_,_)=>{paper.Clear();Render();};
         copy.Click+=(_,_)=>{
             if(paper.Count==0){result.Text=L.T("印字がありません。","Nothing printed.");return;}

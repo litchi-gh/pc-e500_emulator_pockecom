@@ -81,7 +81,7 @@ public:
     ~Ce140f();
     /// 受け取ったパケット（末尾はチェックサム）を1つ処理し、ROM へ返す応答を返す。
     /// @param packet コマンドのバイト列とチェックサム
-    /// @return 応答のバイト列（エラーなら FFh）
+    /// @return 応答のバイト列（エラーなら、ROM が BASIC のエラーにする状態の1バイト）
     std::vector<uint8_t> command(const std::vector<uint8_t>& packet);
 private:
     /// バス上の段階（クラスの説明を参照）。

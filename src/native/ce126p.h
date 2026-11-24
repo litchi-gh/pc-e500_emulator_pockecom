@@ -26,7 +26,7 @@ class Ce126p {
 public:
     /// 1行の桁数（CE-126P は24桁）。
     static constexpr int Columns=24;
-    /// 接続されているか。false の間は ACK を返さず、ROM は Printer error になる。
+    /// 接続されているか。false の間は ACK を返さず、ROM は LPRINT を読み飛ばす（印字の途中なら Printer error）。
     bool connected=true;
     /// プリンタが出している ACK 信号（11ピンの ACK は各機器のワイヤード OR）。
     bool ack=false;
