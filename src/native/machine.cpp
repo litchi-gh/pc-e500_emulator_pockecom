@@ -77,6 +77,12 @@ void Csc62015::AddState(BYTE n) {
     pPC->peripherals(n);
 }
 void Machine::peripherals(BYTE n) {
+    bool cassetteActive=tape.playing()||tape.recording();
+    auto cassetteInput=[&]() {
+        bool high=(cpu.imem[IMEM_SCR]&0x40)&&tape.inputHigh();
+        cpu.imem[IMEM_SSR]=(cpu.imem[IMEM_SSR]&~2)|(high?2:0);
+    };
+    cassetteInput();
     // 音のモードは SCR のビット4〜6。モードが変わったら波形の位相を最初からにする。
     int mode=soundMode();
     if(mode!=lastSoundMode){tonePhase=0;lastSoundMode=mode;}
@@ -86,7 +92,11 @@ void Machine::peripherals(BYTE n) {
     // half period is exactly six samples, so edges that land on the sample grid flip
     // side to side and detune the occasional beep into 5/7-sample half periods.
     for(BYTE i=0;i<n;i++) {
+        if(cassetteActive) {
+            tape.advance(cpu.cycles-n+i+1);cassetteInput();
+        }
         tonePhase++;samplePhase+=48000;
+        if(tape.recording())tape.observeOutput(cpu.cycles-n+i+1,toneLevel(mode));
         if(samplePhase>=CpuHz) {
             samplePhase-=CpuHz;
             if(audio.size()<48000)audio.push_back(cpu.off?0:(toneLevel(mode)?6000:-6000));
@@ -97,13 +107,22 @@ void Machine::peripherals(BYTE n) {
     auto bus=busLevels(mode);xout=bus.xout;bool busy=bus.busy;
     disk.tick(cpu.cycles,xout,busy,cpu.imem[IMEM_EOH]&15);
     printer.tick(cpu.cycles,xout,busy,(cpu.imem[IMEM_EOH]&4)!=0);
+    tape.setMotor(printer.connected&&printer.remoteMotor,cpu.cycles,toneLevel(mode));
+    cassetteInput();
     // ACK is wired-OR: any device holding it high pulls the line high.
     cpu.imem[IMEM_EIL]=(cpu.imem[IMEM_EIL]&0x7f)|(disk.ack||printer.ack?0x80:0);
     cpu.imem[IMEM_EIH]=(cpu.imem[IMEM_EIH]&15)|(disk.lines<<4);
+    serial.tick(n,!cpu.halt&&!cpu.off,cpu.imem);
 }
 // 内部メモリの KI を読む命令の前に、キーボードを読み直す。
 void Csc62015::Chk_imemAdr_Read(BYTE d,BYTE len) {
-    for(int i=0;i<len;i++) if(BYTE(d+i)==IMEM_KI) pPC->scanKeys();
+    for(int i=0;i<len;i++) {
+        if(BYTE(d+i)==IMEM_KI)pPC->scanKeys();
+        pPC->serial.read(BYTE(d+i));
+    }
+}
+void Csc62015::Chk_imemAdr(BYTE d,BYTE len,UINT32 data) {
+    for(int i=0;i<len;i++)pPC->serial.write(BYTE(d+i),BYTE(data>>(8*i)),imem);
 }
 // HALT・電源 OFF 中は時間だけを進める。そうでなければ PC の命令を1つ実行する。
 // A prefix only marks itself (tools/prepare_core.py); the instruction after it
@@ -182,7 +201,7 @@ API Machine* e500_create(const BYTE *rom,int size) {
     m->cpu.Reset();return m;
 }
 // RAM の容量として正しいか（optional なら 0 = なしも可）。
-bool validCapacity(int kb,bool optional=false) {return (optional && kb==0)||kb==8||kb==16||kb==32||kb==64||kb==128||kb==256;}
+bool validCapacity(int kb,bool optional=false) {return (optional && (kb==0||kb==2||kb==4))||kb==8||kb==16||kb==32||kb==64||kb==128||kb==256;}
 // Internal RAM sits below C0000. The stock E500 carries one 62256 (32KB) and the
 // E650/U6000 two of them (64KB, B0000-BFFFF); the well-known 628128 replacement
 // swaps each 32KB SRAM for a 128KB part, so an E650/U6000 reaches 128KB or 256KB.
@@ -200,9 +219,10 @@ API int e500_capacity(Machine *m,int card) {return m?(card?m->cardKB:m->internal
 // clearInternal なら内蔵 RAM も消す。
 API void e500_reset(Machine *m,int clearInternal) {
     if(!m)return;
+    m->tape.resetTimeline(m->cpu.cycles,0);
     if(clearInternal)std::fill(m->mem.begin()+0xc0000-m->internalKB*1024,m->mem.begin()+0xc0000,0xff);
     m->cpu=Csc62015(m);m->lcd[0]={};m->lcd[1]={};m->keys.fill(0);
-    m->audio.clear();m->samplePhase=m->tonePhase=0;m->lastSoundMode=-1;m->disk.reset();m->printer.resetBus();m->cpu.Reset();
+    m->audio.clear();m->samplePhase=m->tonePhase=0;m->lastSoundMode=-1;m->disk.reset();m->printer.resetBus();m->serial.reset();m->cpu.Reset();
 }
 // 内蔵 RAM（card=0）か RAM カード（card=1）の全体を読む（write=0）・書く（write=1）。size は容量ぴったり。
 API int e500_memory(Machine *m,int card,BYTE *data,int size,int write) {
@@ -226,9 +246,89 @@ API int e500_disk_mount(Machine *m,const wchar_t *folder,int readOnly) {
 API int e500_disk_status(Machine *m) {return m?m->disk.status():0;}
 API int e500_disk_trace(Machine *m,char *out,int length) {return m?m->disk.trace(out,length):0;}
 // CE-126P の接続・取り外し、状態ビット（Ce126p::status）、印字された行の取り出し。
-API void e500_printer_connect(Machine *m,int on) {if(m){m->printer.connected=on!=0;m->printer.resetBus();}}
+API void e500_printer_connect(Machine *m,int on) {
+    if(m) {
+        m->printer.connected=on!=0;m->printer.resetBus();
+        if(!on)m->printer.remoteMotor=false;
+        m->tape.setMotor(m->printer.connected&&m->printer.remoteMotor,m->cpu.cycles,m->toneLevel(m->soundMode()));
+        bool high=(m->cpu.imem[IMEM_SCR]&0x40)&&m->tape.inputHigh();
+        m->cpu.imem[IMEM_SSR]=(m->cpu.imem[IMEM_SSR]&~2)|(high?2:0);
+    }
+}
 API int e500_printer_status(Machine *m) {return m?m->printer.status():0;}
 API int e500_printer_read(Machine *m,BYTE *out,int length) {return m?m->printer.read(out,length):0;}
+// UART host endpoint. Injection is paced by configured frame length/baud rate.
+API void e500_serial_connect(Machine *m,int on,int cts,int cd,int loopback) {
+    if(m)m->serial.connect(on!=0,cts!=0,cd!=0,loopback!=0);
+}
+API int e500_serial_inject(Machine *m,const BYTE *data,int length,int status) {
+    return m?m->serial.inject(data,length,BYTE(status)):0;
+}
+API int e500_serial_read(Machine *m,BYTE *out,int length) {
+    return m?m->serial.receive(out,length):0;
+}
+// Physical cassette host endpoint: durations are CPU cycles and levels0/1.
+// No tape bytes, headers or checksums are decoded on the emulator side.
+static void tapeInput(Machine *m) {
+    if(!m)return;
+    m->tape.advance(m->cpu.cycles);
+    bool high=(m->cpu.imem[IMEM_SCR]&0x40)&&m->tape.inputHigh();
+    m->cpu.imem[IMEM_SSR]=(m->cpu.imem[IMEM_SSR]&~2)|(high?2:0);
+}
+API int e500_tape_connect(Machine *m,int on) {
+    if(!m)return 0;
+    bool okay=m->tape.connect(on!=0,m->cpu.cycles);tapeInput(m);return okay?1:0;
+}
+API int e500_tape_remote(Machine *m,int on) {
+    if(!m||(on!=0&&on!=1))return 0;
+    bool okay=m->tape.setRemote(on!=0,m->cpu.cycles);tapeInput(m);return okay?1:0;
+}
+static int tapePulses(Machine *m,const uint32_t *durations,const BYTE *levels,int count,bool append) {
+    if(!m||count<0||count>1024*1024||(count&&(!durations||!levels)))return 0;
+    try {
+        std::vector<CassettePulse> pulses;pulses.reserve(size_t(count));
+        for(int i=0;i<count;i++) {
+            if(!durations[i]||levels[i]>1)return 0;
+            pulses.push_back({durations[i],levels[i]!=0});
+        }
+        bool okay=append?m->tape.appendInput(pulses):m->tape.load(pulses);
+        tapeInput(m);return okay?1:0;
+    } catch(const std::bad_alloc&) {return 0;}
+}
+API int e500_tape_load(Machine *m,const uint32_t *durations,const BYTE *levels,int count) {
+    return tapePulses(m,durations,levels,count,false);
+}
+API int e500_tape_append(Machine *m,const uint32_t *durations,const BYTE *levels,int count) {
+    return tapePulses(m,durations,levels,count,true);
+}
+API int e500_tape_play(Machine *m) {
+    if(!m)return 0;
+    bool okay=m->tape.play(m->cpu.cycles);tapeInput(m);return okay?1:0;
+}
+API int e500_tape_record(Machine *m) {
+    if(!m)return 0;
+    tapeInput(m);
+    return m->tape.startRecording(m->cpu.cycles,m->toneLevel(m->soundMode()))?1:0;
+}
+API int e500_tape_stop(Machine *m) {
+    if(!m)return 0;
+    bool okay=m->tape.stopRecording(m->cpu.cycles);
+    okay=m->tape.stopPlayback(m->cpu.cycles)&&okay;tapeInput(m);return okay?1:0;
+}
+API int e500_tape_status(Machine *m) {
+    if(!m)return 0;
+    return (m->tape.connected()?1:0)|(m->tape.playing()?2:0)|(m->tape.recording()?4:0)|
+           (m->tape.pendingInput()?8:0)|(m->tape.overflow()?16:0)|(m->tape.captured()?32:0)|
+           (m->tape.remote()?64:0)|(m->tape.motor()?128:0);
+}
+API int e500_tape_read(Machine *m,uint32_t *durations,BYTE *levels,int count) {
+    if(!m||!durations||!levels||count<0)return 0;
+    int copied=0;CassettePulse pulse{};
+    while(copied<count&&m->tape.read(&pulse,1)) {
+        durations[copied]=pulse.cycles;levels[copied]=pulse.high?1:0;copied++;
+    }
+    return copied;
+}
 // CE-126P の1行の桁数（紙の幅を決める）。
 API int e500_printer_columns() {return Ce126p::Columns;}
 // 本体を破棄する。
@@ -296,7 +396,20 @@ API int e500_write(Machine *m,int address,const BYTE *data,int length) {
     // Each byte must land on its own: past the end of the RAM it would wrap round
     // the mirror and overwrite the start of the same write.
     // 1バイトずつ別の場所に入ること（RAM の大きさを超えると、ミラーで折り返して自分の先頭を上書きする）。
-    for(int i=0;i<length;i++)if(!m->isRam(m->mirror(address+i)) || m->mirror(address+i)!=m->mirror(address)+UINT32(i))return 0;
+    UINT32 previous=0;
+    for(int i=0;i<length;i++) {
+        UINT32 physical=m->mirror(address+i);
+        if(!m->isRam(physical))return 0;
+        if(i && physical!=previous+1) {
+            // A joined logical range may cross CE1 -> CE0 once. This is
+            // distinct RAM, not a card/internal mirror wrapping onto itself.
+            bool joinedBoundary=(m->cpu.imem[IMEM_AMC]&0x80) &&
+                UINT32(address+i)==m->amcBase() && previous>=0x40000 &&
+                previous<0x80000 && physical>=0x80000 && physical<0xc0000;
+            if(!joinedBoundary)return 0;
+        }
+        previous=physical;
+    }
     for(int i=0;i<length;i++)m->mem[m->mirror(address+i)]=data[i];
     return 1;
 }
@@ -376,10 +489,10 @@ API int e500_state_same(const BYTE *a,const BYTE *b,int size) {
 // printer, and the CE-140F's part in its codes, go into the snapshot, so the
 // printer never holds one off.
 // 状態保存してよいか（CPU のエラー中や CE-140F の転送中・ファイルを開いている間は不可）。
-API int e500_can_save(Machine *m) {return m && !m->cpu.fault && m->disk.canSnapshot();}
+API int e500_can_save(Machine *m) {return m && !m->cpu.fault && m->disk.canSnapshot() && m->serial.quiescent() && !m->tape.busy();}
 // Restoring cannot resume a CE-140F transfer or open file.
 // 状態を読み込んでよいか（CE-140F の転送中・ファイルを開いている間は不可）。
-API int e500_can_load(Machine *m) {return m && m->disk.canSnapshot();}
+API int e500_can_load(Machine *m) {return m && m->disk.canSnapshot() && m->serial.quiescent() && !m->tape.busy();}
 // 状態を out に保存する。size は e500_state_size と同じであること。保存できない状態なら 0。
 API int e500_save(Machine *m,BYTE *out,int size) {
     if(!out || size!=sizeof(SnapshotV5) || !e500_can_save(m))return 0;
@@ -432,12 +545,13 @@ API int e500_load(Machine *m,const BYTE *data,int size) {
     // 2つの機器は同じ線を見ているので、線の状態は一致していなければならない。
     if(!Ce126p::valid(s.printer,s.cycles) || !Ce140f::validCode(s.disk,s.cycles) ||
        s.printer.oldXout!=s.disk.oldXout || s.printer.oldBusy!=s.disk.oldBusy)return 0;
+    m->tape.resetTimeline(m->cpu.cycles,s.cycles);
     m->internalKB=s.internalKB;m->cardKB=s.cardKB;m->cpu.reg=s.reg;
     memcpy(m->cpu.imem,s.imem,256);memcpy(m->mem.data()+0x40000,s.memory,0x80000);
     m->lcd[0]=s.lcd[0];m->lcd[1]=s.lcd[1];m->cpu.pre_1=s.pre1;m->cpu.pre_2=s.pre2;m->cpu.prefixed=s.prefixed!=0;
     m->cpu.halt=s.halt;m->cpu.off=s.off;m->cpu.fault=false;
     m->cpu.cycles=s.cycles;m->cpu.ticks=s.ticks%MainTimerCycles;m->cpu.ticks2=s.ticks2%SubTimerCycles;m->keys.fill(0);
-    m->audio.clear();m->samplePhase=0;
+    m->audio.clear();m->samplePhase=0;m->serial.reset();
     // An older snapshot has no levels for the lines: the tone starts from its
     // beginning and they are taken from the loaded ports, so XOUT high in it is
     // not seen to rise on the first step. A current one has them, and the tone

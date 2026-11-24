@@ -1,6 +1,6 @@
 ; SPDX-License-Identifier: GPL-2.0-or-later
 ; The PC-E500 emulator's installer (Inno Setup 6). Built by package.ps1, which
-; passes the version: ISCC /DAppVersion=0.0.5 installer\PockeComE500.iss
+; passes the version: ISCC /DAppVersion=0.1.0 installer\PockeComE500.iss
 ;
 ; Installed for the current user (no administrator) by default, or for all
 ; users on request. Either way the program only goes here; ROMs, RAM, settings

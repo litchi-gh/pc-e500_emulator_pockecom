@@ -22,10 +22,10 @@ Built from source, double-click `Start-PC-E500.cmd`, or open `app/PC-E500.exe` d
 
 | Folder | Contents |
 |---|---|
-| `app/rom/` | Internal ROM images, loaded at start-up |
+| `app/rom/` | Internal ROM images, loaded at start-up (a ROM opened from elsewhere with Open ROM is opened again at the next start) |
 | `app/ram/` | RAM card image files (default location for creating and attaching) |
 | `app/drive-x/` | Default folder of the CE-140F (drive X:) |
-| `app/state/` | Settings, internal RAM contents, automatic snapshots, pre-reset backups |
+| `app/state/` | Settings, controller presets (`controller.json`), internal RAM contents, automatic snapshots, pre-reset backups |
 | `app/manual/` | The illustrated manual (`index.html` Japanese, `index_en.html` English) |
 
 - ROMs are read from `app/rom/`. "Open ROM" accepts 256KB and 384KB images; a dump straight from the machine with its 16-byte `SAVEM` header (256KB+16) opens as it is. Verified to work with ROMs of the PC-E500, PC-E550, PC-1480U, PC-1490UII, PC-E650 and PC-U6000.
@@ -57,11 +57,13 @@ To enter a program, **press BASIC again to switch to PRO**:
 
 Enter registers the line; press **BASIC** to return to **RUN**, then type `RUN` and Enter to see `123`. Numbered lines typed in RUN mode give a Syntax error.
 
+To print a string, type `PRINT "HELLO"` and Enter in RUN mode.
+
 ## Keys
 
 Click the on-screen keys or use the PC keyboard. Letters are sent as upper case. Input goes through the key matrix just like the real machine.
 
-The ROM scans the matrix at 64 Hz, so about 55 ms per key (18 keys a second) is the limit. A held key repeats through Windows key repeat (31 a second); repeats the machine cannot take are dropped so no backlog builds up. Keystrokes you actually made are never dropped.
+The ROM scans the matrix at 64 Hz, so about 55 ms per key (18 keys a second) is the limit. While a PC key is down, the machine's key is held down, and it comes up when you let go, as on the real keys. Whether a held key repeats is the ROM's business: BS, DEL and the left and right arrows repeat; letters and digits type once. Keystrokes you actually made are never dropped.
 
 | PC key | PC-E500 |
 |---|---|
@@ -80,11 +82,21 @@ Clicking **SHIFT** or **CTRL** on the screen holds it until the next key; click 
 
 ## Display and window
 
+### Status bar
+
+The status bar along the bottom of the window is split into fields.
+
+- **Left**: the machine's state (a green dot running, yellow paused, grey switched off). Click it to pause or resume.
+- **Next to it**: messages such as Load program's, for five seconds, in place of the fields at the right. A failed autosave stays on show beside the fields.
+- **Right**: the ROM version and family, internal RAM and the RAM card (`RAM 32KB+64KB` and the like), the machine-code area, the CE-140F, the CE-126P, sound, the controller (only while "Use a controller" is ticked; it is by default) and the speed (0.5x to 4x). Hover for the details (the ROM's size and file, the card's file name and so on). The memory field opens Settings, the ML field the window that sizes the machine-code area, the CE-140F and CE-126P fields open their windows, the sound field mutes or unmutes, the controller field opens the Controller window, and the speed field goes round 0.5x → 1x → 2x → 4x (use 1x when checking sound).
+
+When the window is narrow (or the display is scaled up), the fields at the right switch to short forms ("off", "1x" and the like) one by one, CE-140F, CE-126P, controller, speed, sound, ML, RAM and ROM in that order; the icon tells which field it is, and hovering shows the full text. Only if that is still too wide do the leftmost fields go. The case-only and screen-only views have no status bar.
+
 ### Right-click menu
 
 ![Right-click menu](app/manual/images-en/context-menu.png)
 
-Right-click anywhere on the case, the toolbar or the status line for a menu with the toolbar's commands, plus the speed, the window view, checking for a new version, opening the data folder, Minimize and Exit. In the views without a title bar and buttons, this menu is how you operate the emulator.
+Right-click anywhere on the case, the toolbar or the status line for a menu with the toolbar's commands, plus the speed, the window view, Always on top, Check for a new version..., Machine-code area..., Open the data folder, Minimize and Exit. In the views without a title bar and buttons, this menu is how you operate the emulator.
 
 ### Window views (double-click to switch)
 
@@ -109,13 +121,14 @@ Double-click the case away from the keys to step through **normal → case only 
 
 - **LCD**: Standard packs the dots together; Real leaves a little space between them, as on the real LCD.
 - **LCD contrast**: 0 to 100, 50 by default. As with the real unit's dial, the dots and the legends darken together: lower hides the legends that are off, higher shows the dots that are off, and 100 makes the whole glass black.
+- **Afterimage (frame interpolation)**: a dot turning on or off changes over a few frames instead of at once (most of the way in about 0.01 s on, 0.02 s off; a dot going off is gone in about two frames). It is close to the slow response of the real LCD and keeps a picture caught half redrawn from flickering. Something that moves a dot at a time (a game's ship, scrolling stars) is drawn sliding smoothly from its last place to the next. The lines between the dots in the Real look do not move. A moving picture shows up to one step late. On by default. The screen is drawn once per refresh of the display (60 times a second, say), so movement runs evenly with or without it.
 - Changes show at once and are saved in the settings.
 
 ## Copying and pasting screen text
 
 ![Text I/O](app/manual/images-en/text-transfer.png)
 
-"Text I/O" on the toolbar, or **Ctrl+C**, shows the current LCD as 40 columns × 4 rows of text, recognised (normal and inverse) from the 6×8 font in the ROM. Drag to select and press "Copy selection"; with no selection the whole screen is copied. "Refresh screen" rereads the LCD. Graphics, double-size and shapes not in the font may come out as `□`.
+"Text I/O" on the toolbar, or **Ctrl+C**, shows the current LCD as 40 columns × 4 rows of text, recognised (normal and inverse) from the 6×8 font in the ROM. Drag to select and press "Copy selection"; with no selection the whole screen is copied. "Refresh" rereads the LCD. Graphics, double-size and shapes not in the font may come out as `□`.
 
 "Paste from clipboard", or **Ctrl+V**, converts ASCII text to key presses: line breaks become ENTER and tabs four spaces. Lower-case letters are typed as upper case, characters not on the keyboard are skipped, up to 4096 characters at a time. Long BASIC listings are typed in order, so wait or raise the speed temporarily.
 
@@ -132,26 +145,49 @@ All Reset merely enters the ROM's reset routine with ON/BRK held; the decision a
 
 ![Toolbar](app/manual/images-en/toolbar.png)
 
-Settings, Display, CE-140F, CE-126P, Text I/O and Debug are modeless: keys and toolbar buttons of the main window keep working while they are open, so you can watch the transfer log or the registers while the machine runs. Pressing the same button again brings the existing window forward; closing the main window closes them all. "Apply" in Settings reports a rejected value and keeps the window open so you can fix it.
+Settings, Display, CE-140F, CE-126P, Text I/O, Controller, Machine-code area and Debug are modeless: keys and toolbar buttons of the main window keep working while they are open, so you can watch the transfer log or the registers while the machine runs. Pressing the same button again brings the existing window forward; closing the main window closes them all. "Apply" in Settings reports a rejected value and keeps the window open so you can fix it.
 
-The file choosers of Open ROM, Save, Load and BIN load/save are the standard Windows dialogs and therefore modal.
+The file choosers of Open ROM, Load program, Save state, Load state and BIN load/save are the standard Windows dialogs and therefore modal.
+
+Every sub-window is built the same way: the content on cards with headings, and the buttons such as Close in a footer at the bottom right (the one Enter presses, in the accent colour, to the left of Close). Checks such as Auto refresh and Connected, and result messages, sit at the left of the footer.
+
+The Settings, Controller, Text I/O and CE-126P windows cannot be made wider, as their content would not change; they can be made taller. Debug can be made narrower, but not wider than it opens.
+
+## Game controller
+
+![Controller window](app/manual/images-en/controller.png)
+
+"Controller" on the toolbar opens it. Map the machine's keys to the buttons of a gamepad to play games and the like. XInput (Xbox-style) pads and Windows game controllers (DirectInput) work.
+
+- **Use**: the pad to use. "Automatic (the first one found)" takes the first one found. After plugging a pad in, press "Search again" (a pad plugged in or out is also found on its own).
+- **The pad picture**: the buttons you press light up, and it shows where the sticks are and how far the triggers are pressed. The "Pressed: …" line below it shows the buttons and the machine's keys. Click a button on the picture to go to its row.
+- **Presets**: keep as many sets of mappings as you like. "Add..." copies the preset shown into a new one; "Rename..." and "Delete" are there too. Two come built in: "Number keys 2/4/6/8" (the default) and "Cursor keys".
+- **Buttons**: choose the machine key for each button. "With" presses SHIFT or CTRL along with it. While the pad button is down, the machine's key is held down.
+- **Match button places...**: on a DirectInput pad, the button numbers may not sit where the picture puts them. Then press the buttons at the places the picture shows, one by one ("Skip" and "Stop" are there too).
+- **Use a controller**: untick it and the pad is not used.
+
+"Apply" saves to `state/controller.json`. The pad works only while the main window is in front (when another window is in front, the keys it holds are let go).
 
 ## Debug (CPU registers, memory view and editing)
 
-"Debug" on the toolbar, or **Ctrl+D**, opens a window on the CPU state. It follows the running machine and refreshes every 250 ms (untick "Auto refresh" to update only with the button).
+"Debug" on the toolbar, or **Ctrl+D**, opens a window on the CPU state. It follows the running machine and refreshes every 250 ms (untick "Auto refresh" to update only when you press "Refresh").
 
 ![Debug window](app/manual/images-en/debugger.png)
 
-- **CPU registers**: A, B, BA, I, IL, IH, X, Y, U, S, PC, flags (C/Z), the running / HALT / power-off / fault state and the cycle count.
-- **Internal RAM**: the 256 bytes inside the SC62015. The BP, PX and PY pointers and the KOL–SSR I/O registers are listed by name and address.
-- **Memory**: `00000-FFFFF` as a hex dump with ASCII. Move with the scrollbar, a hex address in the box (`B8000`, `&HB8000` or `0xB8000` and Enter), the mouse wheel, the arrow keys, PageUp/PageDown, Ctrl+Home/End, or the PC, S, X, Y, U, Internal RAM, Card and ROM buttons. The bottom line names the region of the visible range and of the caret.
+- **Memory map** (top): the internal RAM as a coloured bar (variables, program, PF keys and AER, free space, stacks, work areas, machine-code area, system), with a second bar for the RAM card when one is in. Click a region to take the memory view to its start; the marker under the bar is where the view is. Hover for the region's name, range and size.
+- **CPU** (left): A, B, BA, I, IL, IH, X, Y, U, S, PC and F as tiles, the running / HALT / power-off / fault state as a coloured badge, the C and Z flags as lamps, and the cycle count. Below them, the 256 bytes of SC62015 internal RAM, with the BP, PX and PY pointers and the KOL–SSR I/O registers listed by name and address.
+- **Memory** (right): `00000-FFFFF` as a hex dump, 16 or 8 bytes a row (the "16 bytes/row" and "8 bytes/row" choice on the toolbar; 16 by default), each group of eight followed by ": XX", its checksum (below). Move with the scrollbar, a hex address in the box (`B8000`, `&HB8000` or `0xB8000` and Enter), the mouse wheel, the arrow keys, PageUp/PageDown, Ctrl+Home/End, or the PC, S, X, Y, U, Internal RAM, Card and ROM buttons. The bottom line names the region of the visible range and of the caret.
+
+```
+B8010  00 20 18 00 00 00 00 00 : 38  - FB 44 41 54 41 20 20 20 : 75
+```
 
 Bytes are coloured by region.
 
 | Colour | Region |
 |---|---|
 | Black | Internal RAM and RAM card with their mirrors (writable) |
-| Navy | Internal ROM (CE2), E650/U6000 extension ROM (CE3) |
+| Blue | Internal ROM (CE2), E650/U6000 extension ROM (CE3) |
 | Grey | Unmapped (card slot without a card, CE6, the internal area, …) |
 
 ![Boundary between internal RAM and ROM](app/manual/images-en/debugger-ram-rom.png)
@@ -160,11 +196,9 @@ Bytes are coloured by region.
 
 Click a byte to place the caret and type `0`–`9`, `A`–`F`. Digits go in high nibble first and the caret advances after two. Only internal RAM and the RAM card can be edited; typing over ROM or unmapped space changes nothing and the reason is shown at the bottom. Edits are autosaved like any other RAM change.
 
-### Checksum
+### Checksum of each eight bytes
 
-![Checksum](app/manual/images-en/checksum.png)
-
-The Checksum button shows the 8-, 16- and 32-bit sums, the XOR and the byte count of the range between a start and an end address (both inclusive), for checking a machine language program typed in from a listing. The start box is filled with the caret address.
+After each ":" in the memory view is the low byte of the sum of the eight bytes before it (in blue). Machine code listings in magazines print this value for every eight bytes, so a program typed in can be checked line by line. It changes as you edit.
 
 ### Load BIN / Save BIN
 
@@ -176,13 +210,25 @@ The Checksum button shows the 8-, 16- and 32-bit sums, the XOR and the byte coun
 
 Memory reads bypass the LCD controller, so looking at `2000-3FFF` does not disturb the display.
 
+### Machine-code area
+
+![Machine-code area](app/manual/images-en/machine-code.png)
+
+The ML field of the status bar (or Machine-code area... in the right-click menu) reserves RAM for machine code. The window shows the internal RAM as two bars, now and after applying, so you can see where the area goes and how much free space it takes. Set the size in hex bytes and press Apply: that many bytes below `BFBFF` are taken. 0 gives them back. The most you can take follows from the free RAM at the time.
+
+The machine's own ROM routine does it (`POKE &HBFE03,...:CALL &HFFFD8` is typed for you). The size given is the size the area ends up, not an amount added. The ROM moves the other work areas and stacks down and ends at the main menu, and the BASIC key is then pressed to come back. The BASIC program and variables stay. Use it at BASIC's RUN or PRO prompt. The field shows the size now; hover for the address range.
+
+Loading a BIN reserves nothing (as `LOAD M` on the machine). When Load program puts a BIN outside the machine-code area, you are asked whether to reserve it first (see "Loading a file" in the CE-140F chapter).
+
 ## Hardware settings and BEEP
 
-Settings covers the UI language, the appearance (PC-E500 / PC-E650), internal RAM size, RAM card creation/attach/detach, CE-140F connection, folder and write protection, volume and mute.
+Settings is split into Display, Machine, CE-140F, and Sound, power and more. It covers the UI language, the theme (as Windows, light or dark; a new language or theme restarts the emulator when applied), the appearance (PC-E500 / PC-E650), internal RAM size, RAM card creation/attach/detach, CE-140F connection, folder and write protection, volume and mute, the auto power off, and always on top. With "Always on top" ticked, the main window is never hidden under other windows (the right-click menu switches it too).
+
+With "Auto power off" cleared, the machine no longer switches itself off when left without a key (the real one does after about 10 minutes): once a second of the machine's time, the count the ROM runs down is put back to its start, as a key press does.
 
 Display covers the LCD look, its contrast and the window view. By default the LCD scales its dots without gaps (Standard); "Real" leaves a little space between them, as on the real LCD. The contrast works like the real unit's dial, on the dots and the legends together: lower hides the legends that are off, higher shows the dots and legends that are off, and at 100 the whole glass is black.
 
-Right-click the case for a menu with the toolbar's commands (plus the speed, the window view, Minimize and Exit). A double-click on the case away from the keys steps the window through Normal → Case only (no frame) → Screen only (the LCD alone) → Normal. Without the frame, drag the picture to move the window and its edge to resize it (keeping its proportions). The view, its size and its place are saved, and the next start opens in that view.
+Right-click the case for a menu with the toolbar's commands (plus the speed, the window view, Always on top, Minimize and Exit). A double-click on the case away from the keys steps the window through Normal → Case only (no frame) → Screen only (the LCD alone) → Normal. Without the frame, drag the picture to move the window and its edge to resize it (keeping its proportions). The view, its size and its place are saved, and the next start opens in that view.
 
 ![Settings window](app/manual/images-en/settings.png)
 
@@ -197,9 +243,9 @@ The E650/U6000 internal ROM is mapped as follows.
 | `00000-1FFFF` | `20000-3FFFF` | 128KB | CE3 |
 | `20000-5FFFF` | `C0000-FFFFF` | 256KB | CE2 |
 
-"Open ROM" tells 256KB PC-E500 images and 384KB PC-E650/U6000 images apart automatically; the status bar shows the size and family. The 384KB file has the low-address extension ROM first and the 256KB main ROM after it.
+"Open ROM" tells 256KB PC-E500 images and 384KB PC-E650/U6000 images apart automatically; the ROM field of the status bar shows the family, and its tip the size and the file. The 384KB file has the low-address extension ROM first and the 256KB main ROM after it.
 
-The status bar also shows `ROM Ver.x.y`, read from the major/minor version bytes in the ROM's 16-byte trailer (the ones the service screen uses), not from the file name.
+The status bar also shows `ROM Ver.x.y`, read from the major/minor version bytes in the ROM's 16-byte trailer (the ones the service screen uses), not from the file name. The PC-E500 ROM used for testing is Ver.7.2, the PC-E650 ROM Ver.8.5.
 
 ### Dumping the ROM and `tools/merge_savem_rom.py`
 
@@ -257,7 +303,7 @@ Each RAM card is an image file. The file size is the card capacity (**8 / 16 / 3
 The card contents are written to its image file every 5 seconds, at power off, at exit and on detach. Copying the file makes a duplicate card. Card changes never affect internal RAM.
 
 - In RUN mode, `BEEP 1` and Enter beeps. The CPU's XOUT waveform is sent to the Windows audio output. Check sound at 1x; audio is not in sync at other speeds.
-- Audio is written to winmm (waveOut) from a dedicated thread, because `waveOutWrite` blocks its caller when restarting a stalled stream (91 ms on average, 1.4 s at worst here). The device always holds 42 ms (256 samples × 8); less than about 32 ms runs dry between frames and the stream restarts with audible gaps.
+- Audio is written to winmm (waveOut) from a dedicated thread, because `waveOutWrite` blocks its caller when restarting a stalled stream (91 ms on average, 1.4 s at worst here). Called on the thread that runs the CPU, it would stop the whole machine, so the UI thread only hands over the samples. The device always holds 42 ms (256 samples × 8); less than about 32 ms runs dry between frames and the stream restarts with audible gaps.
 - Key click length and auto-repeat interval come from the SC62015 sub-timer (64 Hz), matched against a recording of a real PC-E500: 13.5 ms click, 62.5 ms repeat.
 - Toolbar buttons never take focus: a focused button would swallow Space and Enter, which are pocket computer keys.
 
@@ -265,13 +311,17 @@ The card contents are written to its image file every 5 seconds, at power off, a
 
 Following `Sharp_ce140f_emul`, the 11-pin protocol (device select, ACK/BUSY, 4-bit transfer, checksum) is implemented with a PC folder as the virtual disk, `app/drive-x/` by default. The "CE-140F" window shows the transfer log (refreshed every 0.5 s) and opens the folder.
 
+Enter a program in PRO mode, then save and load it like this.
+
 ```basic
 SAVE "X:TEST.BAS"
 SAVE "X:TEXT.BAS",A
 LOAD "X:TEST.BAS"
 ```
 
-Line 2 saves as ASCII. An ASCII file is saved without a closing 1Ah (EOF), as a hardware CE-140F emulator saves it; see [Exchanging files with a real machine](#exchanging-files-with-a-real-machine) before sending text to a real machine. Loading stops at a 1Ah if the file has one, so a file a PC or another tool ended with 1Ah loads too. Sequential file I/O in RUN mode:
+Line 2 saves as ASCII. An ASCII file is saved without a closing 1Ah (EOF), as a hardware CE-140F emulator saves it; see [Exchanging files with a real machine](#exchanging-files-with-a-real-machine) before sending text to a real machine. Loading stops at a 1Ah if the file has one, so a file a PC or another tool ended with 1Ah loads too. To run a program you loaded, press BASIC to return to RUN and type `RUN`.
+
+Sequential file I/O in RUN mode:
 
 ```basic
 OPEN "X:DATA.DAT" FOR OUTPUT AS #2
@@ -286,6 +336,17 @@ PRINT A$
 FILES, COPY, NAME, SET, KILL, INIT and EOF/LOF/LOC/DSKF are implemented. File names are 8.3 with letters, digits, `_` and `-`, up to 1MB each; no subfolders. **INIT deletes the disk files in the folder, so give the CE-140F a folder of its own.** Sector images and drive mechanics are not reproduced.
 
 ![CE-140F window](app/manual/images-en/disk-trace.png)
+
+### Loading a file (Load program, drag and drop)
+
+Load program on the toolbar, or a file dropped on the window, loads a PC file into the machine. With "Run after loading (RUN for a BAS)" ticked at the bottom of the file window, a BAS is loaded with `LOAD "X:name",R` and runs at once. The tick is remembered, and a dropped file follows it too. Files load one at a time: the next cannot load until the keys the last one types (a machine-code area reservation, a `LOAD`) are done. Nothing loads while the machine is paused.
+
+- **BAS (as the machine saves it)**: written straight into RAM. No `LOAD` is typed, and neither the CE-140F nor a BASIC mode is needed (not while a program runs). It replaces the program in memory and leaves the variables, as `LOAD` does. With "Run after loading", `RUN` is typed when BASIC's RUN or PRO prompt is up. A file with a password loads as a text one does, below.
+- **BAS (text)**: the file is put in the CE-140F folder and `LOAD "X:name"` is typed. Connect the CE-140F and be at BASIC's RUN or PRO prompt (not while a program runs). The name is cut down to the 8.3 form the CE-140F takes (`my prog.bas` becomes `MYPROG.BAS`); if the folder has another file of that name, you are asked before it is overwritten.
+- **BIN (with the 16-byte `SAVE M` header)**: written straight into memory at the address in the header. The whole range must lie in the internal RAM or the RAM card there now (an address with no RAM is a mirror of another place, so the file is not loaded).
+  - When the range lies only in free space outside the machine-code area (BASIC's free space), BASIC can overwrite it, so you are asked whether to reserve the machine-code area from its start up to `BFBFF` first. Yes reserves and writes once that is done, No writes without reserving, Cancel does nothing.
+  - When the range touches space in use (BASIC's program, variables, stacks, work areas, the system and so on), it is not written as it is. Only when that range can be reserved as the machine-code area first are you asked whether to reserve it and then load (No does nothing).
+  - Reserving works at BASIC's RUN or PRO prompt, when there is enough free space. For a BIN that could not be loaded, or one without the header, use Load BIN in the debugger and give the address.
 
 ### Exchanging files with a real machine
 
@@ -329,8 +390,8 @@ LLIST
 - RAM is saved every 5 seconds, at OFF and at exit, and survives power off. After a crash you may lose up to the last autosave.
 - The paths below are inside the data folder (`app/` for the zip and source builds, `%LocalAppData%\PockeComE500\` when installed).
 - Internal RAM goes to `state/memory/<ROM SHA256>/internal-<size>KB.ram`; the RAM card goes to its own image file.
-- A snapshot of the CPU, internal RAM, LCD, timers and where the printer and CE-140F are on the bus is saved automatically to `state/<ROM SHA256>.i<internal>-c<card>.e500state`. Settings are in `state/settings.json`.
-- "Save" and "Load" keep and restore snapshots of your choice; loading restores the internal RAM size of the snapshot. The RAM card is not part of a snapshot: after a load the card keeps what its image file holds, and a snapshot cannot be loaded with a card of a different capacity attached (one saved without a card is loaded without a card).
+- A snapshot of the CPU, internal RAM, LCD, timers and where the printer and CE-140F are on the bus is saved automatically to `state/<ROM SHA256>.i<internal>-c<card>.e500state`. Settings are in `state/settings.json`, and the controller presets and mappings in `state/controller.json`.
+- "Save state" and "Load state" keep and restore snapshots of your choice; loading restores the internal RAM size of the snapshot. The RAM card is not part of a snapshot: after a load the card keeps what its image file holds, and a snapshot cannot be loaded with a card of a different capacity attached (one saved without a card is loaded without a card).
 - Snapshots cannot be saved or loaded during a CE-140F transfer or with a file OPEN; `CLOSE` first. RAM autosave continues. Virtual disk files are not part of snapshots.
 - "All Reset" saves the previous state to `state/before-reset-<date>.e500state` first. The RAM card is kept.
 - Files are hash-checked and replaced atomically from a temporary file. The ROM itself is not stored.

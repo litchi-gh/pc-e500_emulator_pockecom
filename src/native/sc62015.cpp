@@ -2461,7 +2461,7 @@ void Csc62015::Step_sc62015_(void) {
 
 void Csc62015::Reset(void) {
 
-    imem[IMEM_ACM] &= 0x7F;
+    imem[IMEM_AMC] &= 0x7F;
     imem[IMEM_UCR] = 0;
     imem[IMEM_USR] &= 0xD8;
     imem[IMEM_IMR] = 0;

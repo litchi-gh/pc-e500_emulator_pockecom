@@ -31,6 +31,10 @@ internal static class MemoryMap
 
 // The memory pane of the debugger: a hex dump of the whole 1MB address space
 // with a scrollbar, colours by region, and a caret that edits bytes in place.
+// A row is 16 bytes (or 8), in groups of eight each followed by its checksum,
+// the low byte of the eight bytes' sum, as machine-code listings print them:
+//   XX XX XX XX XX XX XX XX : XX  - XX XX XX XX XX XX XX XX : XX
+// 1行は 16 バイト（または 8）。8 バイトごとに、その和の下位 8 ビット（機械語のリストのチェックサム）を付ける。
 // Owner-drawn rather than a TextBox so that each byte can carry its own colour
 // and a periodic refresh repaints without scrolling or flicker.
 /// <summary>
@@ -39,10 +43,23 @@ internal static class MemoryMap
 /// </summary>
 internal sealed class HexView : Control
 {
-    internal const int Columns=16;
-    const int TotalRows=0x100000/Columns;
-    const int HexStart=7,AsciiStart=HexStart+Columns*3+1,LineChars=AsciiStart+Columns;
-    static readonly Color RomColor=Color.FromArgb(0,0,140),UnmappedColor=Color.FromArgb(160,160,160),AddressColor=Color.FromArgb(90,90,90);
+    /// <summary>1行のバイト数（16 か 8）。</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal int Columns {get=>columns;set{if(value is not (8 or 16) || value==columns)return;columns=value;scroll.Maximum=TotalRows-1;int keep=cursor>=0?cursor:address;Goto(keep);Invalidate();}}
+    int columns=16;
+    int TotalRows=>0x100000/columns;
+    /// <summary>8 バイトの組の幅（文字）："XX ×8 : XX" の 28 文字と、次の組の前の "  - " の 4 文字。</summary>
+    const int HexStart=7,GroupChars=32,Group=8;
+    int LineChars=>HexStart+columns/Group*GroupChars-4;
+    /// <summary>i バイト目の HEX の桁の位置（文字）。</summary>
+    static int ByteColumn(int i)=>HexStart+i/Group*GroupChars+i%Group*3;
+    /// <summary>8 バイトのチェックサム（和の下位 8 ビット）。</summary>
+    internal static int GroupSum(ReadOnlySpan<byte> bytes){int sum=0;foreach(byte v in bytes)sum+=v;return sum&0xff;}
+    static Color SumColor=>Theme.NoteText;
+    // Light or dark with the theme.
+    static Color RomColor=>Theme.Dark?Color.FromArgb(130,170,255):Color.FromArgb(0,0,140);
+    static Color UnmappedColor=>Theme.Dark?Color.FromArgb(110,110,110):Color.FromArgb(160,160,160);
+    static Color AddressColor=>Theme.SubText;
     readonly Func<Core?> read;
     readonly VScrollBar scroll=new(){Dock=DockStyle.Right};
     readonly int charWidth,lineHeight;
@@ -67,10 +84,10 @@ internal sealed class HexView : Control
     {
         this.read=read;
         SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.Selectable|ControlStyles.ResizeRedraw,true);
-        Font=Fonts.Mono;BackColor=Color.White;Cursor=Cursors.IBeam;TabStop=true;
+        Font=Fonts.Mono;BackColor=Theme.Input;ForeColor=Theme.Text;Cursor=Cursors.IBeam;TabStop=true;
         var probe=TextRenderer.MeasureText(new string('0',40),Font,Size.Empty,TextFormatFlags.NoPadding);
         charWidth=Math.Max(6,probe.Width/40);lineHeight=Math.Max(12,probe.Height);
-        scroll.Minimum=0;scroll.Maximum=TotalRows-1;scroll.SmallChange=1;scroll.LargeChange=1;
+        scroll.Minimum=0;scroll.Maximum=0x100000/16-1;scroll.SmallChange=1;scroll.LargeChange=1;
         scroll.Scroll+=(_,e)=>{if(e.NewValue!=address/Columns)Goto(e.NewValue*Columns);};
         Controls.Add(scroll);
         Resize+=(_,_)=>{Goto(address);};
@@ -199,8 +216,7 @@ internal sealed class HexView : Control
         int row=(e.Y-2)/lineHeight,column=(e.X-4)/charWidth;
         if(row<0||column<0){base.OnMouseDown(e);return;}
         int index=-1,part=0;
-        if(column>=HexStart&&column<HexStart+Columns*3){int c=column-HexStart;if(c%3<2){index=c/3;part=c%3;}}
-        else if(column>=AsciiStart&&column<AsciiStart+Columns)index=column-AsciiStart;
+        if(column>=HexStart&&column<LineChars){int c=column-HexStart,group=c/GroupChars,within=c%GroupChars;if(within<Group*3-1 && within%3<2){index=group*Group+within/3;part=within%3;}}
         int offset=row*Columns+index;
         if(index>=0&&offset<data.Length){cursor=address+offset;nibble=part;pending=-1;Invalidate();Moved?.Invoke();}
         base.OnMouseDown(e);
@@ -217,7 +233,7 @@ internal sealed class HexView : Control
     internal void TestWheel(int delta)=>OnMouseWheel(new MouseEventArgs(MouseButtons.None,0,0,0,delta));
     protected override void OnGotFocus(EventArgs e){Invalidate();base.OnGotFocus(e);}
     protected override void OnLostFocus(EventArgs e){Invalidate();base.OnLostFocus(e);}
-    /// <summary>アドレス・HEX・文字を、領域の色で描く。</summary>
+    /// <summary>アドレス・HEX（領域の色）と、8 バイトごとのチェックサムを描く。</summary>
     protected override void OnPaint(PaintEventArgs e) {
         var g=e.Graphics;g.Clear(BackColor);
         if(shown is null||data.Length==0) {
@@ -225,6 +241,7 @@ internal sealed class HexView : Control
         }
         const TextFormatFlags flags=TextFormatFlags.NoPadding|TextFormatFlags.SingleLine;
         int rows=(data.Length+Columns-1)/Columns;
+        int X(int column)=>4+column*charWidth;
         for(int row=0;row<rows;row++) {
             int y=2+row*lineHeight;
             if(y>ClientSize.Height)break;
@@ -234,23 +251,39 @@ internal sealed class HexView : Control
                 int i=row*Columns+c;if(i>=data.Length)break;
                 int a=rowAddress+c;
                 Color color=kinds[i] switch{MemoryKind.Ram=>ForeColor,MemoryKind.Rom=>RomColor,_=>UnmappedColor};
-                int hx=4+(HexStart+c*3)*charWidth,ax=4+(AsciiStart+c)*charWidth;
+                int hx=X(ByteColumn(c));
                 if(a==cursor) {
-                    Color back=Focused?Color.FromArgb(200,222,255):Color.FromArgb(225,225,225);
+                    Color back=Theme.Dark?(Focused?Color.FromArgb(38,79,120):Color.FromArgb(60,60,60)):(Focused?Color.FromArgb(200,222,255):Color.FromArgb(225,225,225));
                     using var brush=new SolidBrush(back);
-                    g.FillRectangle(brush,hx,y,charWidth*2,lineHeight);g.FillRectangle(brush,ax,y,charWidth,lineHeight);
+                    g.FillRectangle(brush,hx,y,charWidth*2,lineHeight);
                     if(Focused) {
-                        using var pen=new Pen(Color.FromArgb(0,90,200),2);
+                        using var pen=new Pen(Theme.Dark?Color.FromArgb(120,180,255):Color.FromArgb(0,90,200),2);
                         int ux=hx+nibble*charWidth;g.DrawLine(pen,ux,y+lineHeight-1,ux+charWidth,y+lineHeight-1);
                     }
                 }
                 // The high digit typed and not yet written shows in its place.
                 string hex=a==cursor && pending>=0?$"{pending:X}{data[i]&15:X}":data[i].ToString("X2");
                 TextRenderer.DrawText(g,hex,Font,new Point(hx,y),color,flags);
-                byte v=data[i];string ch=v>=0x20&&v<0x7f?((char)v).ToString():".";
-                TextRenderer.DrawText(g,ch,Font,new Point(ax,y),color,flags);
+            }
+            // Each group of eight: ": sum", and "-" before the next group.
+            for(int group=0;group<Columns/Group;group++) {
+                int first=row*Columns+group*Group;if(first+Group>data.Length)break;
+                int at=HexStart+group*GroupChars;
+                TextRenderer.DrawText(g,":",Font,new Point(X(at+24),y),AddressColor,flags);
+                TextRenderer.DrawText(g,GroupSum(data.AsSpan(first,Group)).ToString("X2"),Font,new Point(X(at+26),y),SumColor,flags);
+                if(group+1<Columns/Group)TextRenderer.DrawText(g,"-",Font,new Point(X(at+30),y),AddressColor,flags);
             }
         }
+    }
+    /// <summary>テスト用：表示の row 行目を文字にしたもの（描いているのと同じ並び）。</summary>
+    internal string TestRowText(int row) {
+        var text=new System.Text.StringBuilder($"{address+row*Columns:X5}  ");
+        for(int group=0;group<Columns/Group;group++) {
+            var bytes=data.AsSpan(row*Columns+group*Group,Group);
+            if(group>0)text.Append("  - ");
+            text.Append(string.Join(" ",bytes.ToArray().Select(v=>v.ToString("X2")))).Append(" : ").Append(GroupSum(bytes).ToString("X2"));
+        }
+        return text.ToString();
     }
     internal void TestKey(Keys key)=>OnKeyDown(new KeyEventArgs(key));
     internal int TestScrollValue=>scroll.Value;

@@ -214,13 +214,13 @@ internal sealed class PaperView : Control
 
 // Modeless view of the paper, following the running machine like the CE-140F trace.
 /// <summary>CE-126P のウィンドウ。紙の表示と、接続・紙を切る・コピー・保存の操作。</summary>
-internal sealed class PrinterDialog : Form
+internal sealed class PrinterDialog : ThemedForm
 {
     readonly PrinterPaper paper;
     readonly PaperView view;
     readonly Func<byte[]> font;
-    readonly Label note=new(){Dock=DockStyle.Top,Height=30,Padding=new Padding(8,6,0,0)};
-    readonly Label result=new(){Dock=DockStyle.Bottom,Height=26,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(6,0,0,0)};
+    readonly Label note=new(){Dock=DockStyle.Top,Height=30,Font=Fonts.Small,ForeColor=Theme.SubText};
+    readonly Label result=new(){AutoSize=true,Font=Fonts.Small,ForeColor=Theme.SubText};
     readonly System.Windows.Forms.Timer timer=new(){Interval=250};
     int shown=-1;
     // The font the window was last drawn with: a ROM switched to or from one
@@ -237,14 +237,14 @@ internal sealed class PrinterDialog : Form
     internal PrinterDialog(PrinterPaper paper,Func<byte[]> font,Func<bool> connected,PrintOutput? output,Action<PrintTarget?> choose,Action<bool> connect)
     {
         this.paper=paper;this.font=font;view=new PaperView(paper,font){Dock=DockStyle.Fill};
-        Text="CE-126P";ClientSize=new Size(620,660);MinimumSize=new Size(560,340);
+        Text="CE-126P";ClientSize=new Size(640,720);MinimumSize=new Size(600,420);Load+=(_,_)=>LockWidth();
         StartPosition=FormStartPosition.CenterScreen;Font=Fonts.Ui;
-        var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=46,WrapContents=false,Padding=new Padding(6,4,0,0)};
-        var attach=new CheckBox{Text=L.T("接続","Connected"),Checked=connected(),AutoSize=true,Margin=new Padding(4,10,8,0)};
-        var clear=new Button{Text=L.T("紙を切る","Clear"),AutoSize=true};
-        var copy=new Button{Text=L.T("文字をコピー","Copy text"),AutoSize=true};
-        var saveText=new Button{Text=L.T("テキストで保存","Save text"),AutoSize=true};
-        var saveImage=new Button{Text=L.T("画像で保存","Save image"),AutoSize=true};
+        var bar=new FlowLayoutPanel{AutoSize=true,WrapContents=false,BackColor=Theme.Card,Margin=new Padding(0)};
+        var attach=new CheckBox{Text=L.T("接続","Connected"),Checked=connected(),AutoSize=true};
+        var clear=new FluentButton{Text=L.T("紙を切る","Clear"),AutoSize=true};
+        var copy=new FluentButton{Text=L.T("文字をコピー","Copy text"),AutoSize=true};
+        var saveText=new FluentButton{Text=L.T("テキストで保存","Save text"),AutoSize=true};
+        var saveImage=new FluentButton{Text=L.T("画像で保存","Save image"),AutoSize=true};
         attach.CheckedChanged+=(_,_)=>{connect(attach.Checked);result.Text=attach.Checked?L.T("接続しました。","Connected."):L.T("外しました。LPRINT は Printer error になります。","Disconnected. LPRINT now reports a printer error.");};
         clear.Click+=(_,_)=>{paper.Clear();Render();};
         copy.Click+=(_,_)=>{
@@ -257,15 +257,15 @@ internal sealed class PrinterDialog : Form
             if(font().Length==0){result.Text=NoFont;return;}
             Save("PNG (*.png)|*.png","png",path=>{using var b=paper.Render(font());b.Save(path,ImageFormat.Png);});
         };
-        bar.Controls.AddRange([attach,clear,copy,saveText,saveImage]);
+        bar.Controls.AddRange([clear,copy,saveText,saveImage]);
         // Where the lines go besides this window: none, a USB thermal printer, or a Windows printer.
         // 印字の送り先：なし、USB のサーマルプリンタ、Windows のプリンタ。
-        var send=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=40,WrapContents=false,Padding=new Padding(6,4,0,0)};
+        var send=new FlowLayoutPanel{AutoSize=true,WrapContents=false,BackColor=Theme.Card,Margin=new Padding(0,8,0,0)};
         if(output is not null) {
             this.output=output;
-            var label=new Label{Text=L.T("印刷先","Print to"),AutoSize=true,Margin=new Padding(4,8,6,0)};
-            var refresh=new Button{Text=L.T("更新","Refresh"),AutoSize=true};
-            var printAll=new Button{Text=L.T("紙を印刷","Print paper"),AutoSize=true};
+            var label=new Label{Text=L.T("印刷先","Print to"),AutoSize=true,Margin=new Padding(0,8,6,0)};
+            var refresh=new FluentButton{Text=L.T("更新","Refresh"),AutoSize=true};
+            var printAll=new FluentButton{Text=L.T("紙を印刷","Print paper"),AutoSize=true};
             // The list is gathered off the UI thread: with network printers it can
             // take seconds, and this thread runs the machine. A printer found again
             // under a new path (another USB port) becomes the target too.
@@ -299,7 +299,20 @@ internal sealed class PrinterDialog : Form
             targets.Items.Add(output.Target as object ?? NoTarget);targets.SelectedIndex=0;
             Shown+=(_,_)=>Fill();
         }
-        Controls.Add(view);Controls.Add(result);if(output is not null)Controls.Add(send);Controls.Add(bar);Controls.Add(note);
+        foreach(var b in bar.Controls.OfType<FluentButton>())b.Margin=new Padding(0,0,6,0);
+        var body=new Panel{Dock=DockStyle.Fill,Padding=new Padding(16,12,16,8)};
+        var paperCard=new CardPanel{Title=L.T("紙","Paper"),Dock=DockStyle.Fill};paperCard.Controls.Add(view);
+        var controls=new CardPanel{Title=L.T("操作","Controls"),Dock=DockStyle.Bottom};
+        var stack=new FlowLayoutPanel{FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoSize=true,BackColor=Theme.Card,Dock=DockStyle.Fill};
+        stack.Controls.Add(bar);if(output is not null)stack.Controls.Add(send);
+        controls.Controls.Add(stack);
+        Load+=(_,_)=>controls.Height=controls.Padding.Vertical+stack.PreferredSize.Height;
+        var gap=new Panel{Dock=DockStyle.Bottom,Height=10};
+        body.Controls.Add(paperCard);body.Controls.Add(gap);body.Controls.Add(controls);body.Controls.Add(note);
+        var footer=new FooterBar();
+        footer.Add(L.T("閉じる","Close"),(_,_)=>Close());
+        footer.AddLeft(attach);footer.AddLeft(result);TestAttach=attach;
+        Controls.Add(body);Controls.Add(footer);
         timer.Tick+=(_,_)=>Follow();
         Shown+=(_,_)=>{Render();timer.Start();};
         FormClosed+=(_,_)=>timer.Stop();
@@ -318,6 +331,8 @@ internal sealed class PrinterDialog : Form
     }
     protected override void Dispose(bool disposing){if(disposing)timer.Dispose();base.Dispose(disposing);}
     internal PaperView TestView=>view;
+    /// <summary>テスト用：「接続」のチェック。</summary>
+    internal CheckBox TestAttach {get;private set;}=new();
     internal string TestResult=>result.Text;
     // The line count goes in the title, so the label below keeps the last
     // save, copy or connect message while the machine goes on printing.
@@ -334,7 +349,7 @@ internal sealed class PrinterDialog : Form
     }
     readonly PrintOutput? output;
     string? shownStatus;
-    readonly ComboBox targets=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=260,Margin=new Padding(0,4,6,0)};
+    readonly ComboBox targets=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=260,Margin=new Padding(0,3,6,0)};
     bool filling;
     /// <summary>送り先の一覧の「なし」。</summary>
     static readonly string NoTarget=L.T("なし（このウィンドウだけ）","None (this window only)");

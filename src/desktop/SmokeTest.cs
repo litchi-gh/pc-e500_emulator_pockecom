@@ -236,6 +236,215 @@ internal static class SmokeTest
             // The keycaps' ¥ and ¦ type 5Ch and 7Ch, read back as \ and |.
             Key("ON/BRK");core.Run(1024000);form.TestPaste("¥¦\\|`");
             if(!core.ScreenText().Contains("\\|\\|`",StringComparison.Ordinal))throw new Exception("¥ and ¦ did not type 5Ch and 7Ch, or SHIFT+M not `: "+core.ScreenText());
+            // "Load program": a BASIC text through the CE-140F, under a name the drive takes;
+            // a BIN with the SAVE M header straight into memory; a bare BIN refused.
+            {
+                foreach(var (pc,drive) in new[]{("my prog.bas","MYPROG.BAS"),("長い名前.txt","LOAD.TXT"),("con.bas","_CON.BAS"),("abcdefghijk.basic","ABCDEFGH.BAS"),("game","GAME.BAS")})
+                    if(MainForm.DriveName(pc)!=drive)throw new Exception($"{pc} became {MainForm.DriveName(pc)} on the CE-140F, not {drive}");
+                string drivePath=Path.Combine(output,"load-drive");
+                // Emptied, not removed: OneDrive can hold the folder itself for a while.
+                Directory.CreateDirectory(drivePath);
+                foreach(var file in Directory.GetFiles(drivePath))File.Delete(file);
+                form.TestApplyHardware(form.TestSettings with{DiskEnabled=true,DiskReadOnly=false,DiskFolder=drivePath});
+                string source=Path.Combine(output,"my prog.bas");File.WriteAllText(source,"10 PRINT 4321*2\r\n");
+                Key("ON/BRK");core.Run(1024000);Type2("JUNK");
+                string said=form.TestLoadFile(source);core.Run(768000*3);
+                if(!File.Exists(Path.Combine(drivePath,"MYPROG.BAS")))throw new Exception("The BAS file was not put in the CE-140F folder: "+said);
+                Type("RUN");core.Run(768000);
+                if(!core.ScreenText().Contains("8642",StringComparison.Ordinal))throw new Exception("The loaded BASIC program did not run: "+said+" / "+core.ScreenText().Replace(Environment.NewLine," / "));
+                // The file window's check box: Windows' dialog takes it and gives it back as set.
+                if(!FileDialogs.TestPrepare(drivePath,true) || FileDialogs.TestPrepare(drivePath,false))throw new Exception("The file window's check box did not read back as it was set");
+                // "Run after loading" types LOAD ...,R: the program runs with no RUN typed.
+                string runSource=Path.Combine(output,"run me.bas");File.WriteAllText(runSource,"10 PRINT 1357*3\r\n");
+                said=form.TestLoadFile(runSource,true);core.Run(768000*4);
+                if(!said.Contains(",R",StringComparison.Ordinal) || !core.ScreenText().Contains("4071",StringComparison.Ordinal))
+                    throw new Exception("Load and run did not run the program: "+said+" / "+core.ScreenText().Replace(Environment.NewLine," / "));
+                // A program the machine saved goes straight into RAM: with the CE-140F
+                // taken away and the machine at its menu, nothing typed, it is the
+                // program RUN finds. The one in memory before (8642) is replaced.
+                Type("SAVE \"X:SAVED.BAS\"");core.Run(768000*4);
+                string saved=Path.Combine(drivePath,"SAVED.BAS");
+                if(!File.Exists(saved) || !BasicImage.IsSaved(File.ReadAllBytes(saved)))throw new Exception("SAVE did not give a file in the machine's own form");
+                form.TestLoadFile(source);core.Run(768000*3);
+                // Byte for byte what LOAD typed at the prompt gives: the blocks and the pointer in internal RAM.
+                {
+                    string pre=Path.Combine(output,"before-direct.e500state");core.Save(pre);
+                    Type("LOAD \"X:SAVED.BAS\"");core.Run(768000*4);
+                    byte[] viaRom=BasicImage.TestImage(core);
+                    core.Load(pre);
+                    if(!BasicImage.Load(core,File.ReadAllBytes(saved)))throw new Exception("The saved program was not put straight into RAM");
+                    if(!BasicImage.TestImage(core).AsSpan().SequenceEqual(viaRom))throw new Exception("Straight into RAM differs from LOAD in the blocks or the program pointer");
+                    core.Load(pre);
+                }
+                form.TestApplyHardware(form.TestSettings with{DiskEnabled=false});
+                Key("MENU");core.Run(1024000);
+                said=form.TestLoadFile(saved);
+                if(!said.Contains(L.T("直接","straight"),StringComparison.Ordinal))throw new Exception("A saved program did not go straight into RAM: "+said);
+                Key("BASIC");core.Run(1024000);Type("RUN");core.Run(768000);
+                if(!core.ScreenText().Contains("4071",StringComparison.Ordinal))throw new Exception("The program put straight into RAM did not run: "+core.ScreenText().Replace(Environment.NewLine," / "));
+                // Run after loading types RUN itself; a text file without the CE-140F is refused as before.
+                Type("CLS");said=form.TestLoadFile(saved,true);core.Run(768000*2);
+                if(!core.ScreenText().Contains("4071",StringComparison.Ordinal))throw new Exception("Loading straight into RAM with run did not run it: "+said+" / "+core.ScreenText().Replace(Environment.NewLine," / "));
+                try{form.TestLoadFile(source);throw new Exception("A text BAS loaded with no CE-140F");}catch(InvalidOperationException){}
+                form.TestApplyHardware(form.TestSettings with{DiskEnabled=true});
+                int ramTop=0xc0000-core.InternalKB*1024;
+                string bin=Path.Combine(output,"poke.bin");
+                void Bin(int to)=>File.WriteAllBytes(bin,[0xff,0x00,0x06,0x01,0x10,4,0,0,(byte)to,(byte)(to>>8),(byte)(to>>16),0xff,0xff,0xff,0x00,0x0f,0xde,0xad,0xbe,0xef]);
+                // Over the slot header and the variables (in use): refused, nothing written.
+                int used=ramTop+0x80;byte[] untouched=core.Dump(used,4);Bin(used);
+                try{form.TestLoadFile(bin);throw new Exception("A BIN over the BASIC blocks in use was written");}catch(InvalidDataException){}
+                if(!core.Dump(used,4).AsSpan().SequenceEqual(untouched))throw new Exception("A refused BIN changed the RAM");
+                // Below the RAM there is (a mirror of it): refused.
+                if(core.InternalKB<256){Bin(ramTop-0x100);try{form.TestLoadFile(bin);throw new Exception("A BIN below the RAM was written onto its mirror");}catch(InvalidDataException){}}
+                // Into the free space: written (the question answered "load as it is").
+                var gap=RamLayout.Internal(core).First(r=>r.Kind==RegionKind.Free && r.Size>=0x100);
+                int at=gap.Start+0x40;byte[] keep=core.Dump(at,4);Bin(at);
+                said=form.TestLoadFile(bin);
+                if(core.Dump(at,4) is not [0xde,0xad,0xbe,0xef])throw new Exception("A BIN with the SAVE M header was not written to its address: "+said);
+                core.Write(at,keep);
+                File.WriteAllBytes(bin,[1,2,3,4]);
+                try{form.TestLoadFile(bin);throw new Exception("A BIN without a header was written somewhere");}
+                catch(InvalidDataException){}
+                Key("ON/BRK");core.Run(1024000);
+            }
+            // With the auto power off held off, the machine left alone for longer than
+            // its ten minutes stays on; with it on (the default), it switches itself off.
+            {
+                bool Off()=>(Native.e500_status(core.Handle)&1)!=0;
+                int SecondsToOff(int limit) {
+                    for(int s=1;s<=limit;s++){form.TestRunCycles(768000);form.TestKeepPowerOn();if(Off())return s;}
+                    return -1;
+                }
+                form.TestApplyHardware(form.TestSettings with{AutoPowerOff=false});
+                Key("ON/BRK");core.Run(1024000);
+                if(SecondsToOff(700) is int held and >=0)throw new Exception($"The machine switched off after {held} s with the auto power off held off");
+                form.TestApplyHardware(form.TestSettings with{AutoPowerOff=true});
+                if(SecondsToOff(700) is int gone and <0)throw new Exception("The machine never switched itself off with the auto power off on");
+                Key("ON/BRK");core.Run(1024000);
+                if(Off())throw new Exception("ON did not wake the machine after its auto power off");
+                Key("ON/BRK");core.Run(1024000);
+            }
+            // The status bar: the state, then the machine's parts in fields; the state
+            // pauses and resumes, the CE-140F and CE-126P fields open their windows,
+            // and the bar is gone with the window's frame.
+            {
+                var bar=form.TestStatusBar;form.TestRefresh();
+                var fields=bar.TestParts.ToList();
+                string[] wanted=[L.T("実行中","Running"),"ROM Ver.","CE-140F","CE-126P"];
+                foreach(var w in wanted)if(!fields.Any(f=>f.Text.Contains(w,StringComparison.Ordinal)))throw new Exception($"The status bar has no field with {w}: "+bar.Text);
+                if(!fields.First(f=>f.Text.Contains("CE-140F",StringComparison.Ordinal)).Clickable)throw new Exception("The CE-140F field does nothing when clicked");
+                bar.TestClick(L.T("実行中","Running"));form.TestRefresh();
+                if(!form.TestPaused || !bar.Text.Contains(L.T("一時停止","Paused"),StringComparison.Ordinal))throw new Exception("Clicking the state did not pause: "+bar.Text);
+                bar.TestClick(L.T("一時停止","Paused"));form.TestRefresh();
+                if(form.TestPaused)throw new Exception("Clicking the paused state did not resume");
+                foreach(var (field,key) in new[]{("CE-140F","disk"),("CE-126P","printer")}) {
+                    bar.TestClick(field);
+                    if(!form.TestHasWindow(key))throw new Exception($"Clicking {field} in the status bar did not open its window");
+                    form.TestWindow(key).Close();
+                }
+                // The speed lives in the status bar now: clicked, it goes round 0.5x, 1x, 2x, 4x.
+                string Speed()=>bar.TestParts.Select(f=>f.Text).FirstOrDefault(t=>t.StartsWith(L.T("速度","Speed"),StringComparison.Ordinal))??"";
+                if(Speed()!=L.T("速度 1x","Speed 1x"))throw new Exception("The status bar does not show the speed: "+bar.Text);
+                if(form.TestToolbar.Any(t=>t.StartsWith(L.T("速度","Speed"),StringComparison.Ordinal)))throw new Exception("The speed is still on the toolbar");
+                bar.TestClick(L.T("速度","Speed"));
+                if(Speed()!=L.T("速度 2x","Speed 2x"))throw new Exception("Clicking the speed did not go to 2x: "+Speed());
+                bar.TestClick(L.T("速度","Speed"));bar.TestClick(L.T("速度","Speed"));bar.TestClick(L.T("速度","Speed"));
+                if(Speed()!=L.T("速度 1x","Speed 1x"))throw new Exception("Four clicks did not bring the speed back to 1x: "+Speed());
+                // Always on top follows the setting at once.
+                form.TestApplyHardware(form.TestSettings with{TopMost=true});
+                if(!form.TopMost)throw new Exception("Always on top was not applied");
+                form.TestApplyHardware(form.TestSettings with{TopMost=false});
+                if(form.TopMost)throw new Exception("Always on top stayed after it was cleared");
+                form.TestSetView(WindowView.Screen);
+                if(bar.Visible)throw new Exception("The status bar stayed in the screen-only view");
+                form.TestSetView(WindowView.Normal);
+                if(!bar.Visible)throw new Exception("The status bar did not come back with the normal view");
+            }
+            // The machine-code area: sized through the ROM's own routine, back at the
+            // BASIC prompt afterwards, shown in the status bar, given back with 0,
+            // and a size larger than the free RAM refused.
+            {
+                Key("ON/BRK");core.Run(1024000);
+                if((Native.e500_symbols(core.Handle,0)&6)==0){Key("BASIC");core.Run(1024000);}
+                if(MachineCodeArea.Read(core) is not {Size:0})throw new Exception("A machine-code area was reserved before the test");
+                // Its window shows the map and closes with Close (it once stayed open).
+                using(var mlWindow=new MachineCodeDialog(RamLayout.Internal(core),0,0x1000)){mlWindow.Show(form);Application.DoEvents();mlWindow.TestClose();Application.DoEvents();if(mlWindow.Visible)throw new Exception("The machine-code area window did not close with Close");}
+                string said=form.TestReserveMachineCode(0x1000);
+                if(MachineCodeArea.Read(core) is not {Start:0xbec00,Size:0x1000})throw new Exception("The machine-code area did not become 1000h bytes: "+said+" / "+core.ScreenText().Replace(Environment.NewLine," / "));
+                if((Native.e500_symbols(core.Handle,0)&6)==0)throw new Exception("Not back at BASIC after reserving the machine-code area: "+core.ScreenText().Replace(Environment.NewLine," / "));
+                form.TestRefresh();
+                if(!form.TestStatus.Contains(L.T("機械語 4KB","ML 4KB"),StringComparison.Ordinal))throw new Exception("The status bar does not show the machine-code area: "+form.TestStatus);
+                Type("1+2");ExpectThree(234,24);
+                form.TestReserveMachineCode(0);
+                if(MachineCodeArea.Read(core) is not {Size:0})throw new Exception("Size 0 did not give the machine-code area back");
+                try{form.TestReserveMachineCode(0x7ffff);throw new Exception("A machine-code area larger than the RAM was accepted");}catch(InvalidOperationException){}
+                // A machine-code BIN outside the area: asked; Yes reserves from its start
+                // up and writes it once that is done, No writes it as it is, Cancel writes
+                // nothing; inside the area, nothing is asked.
+                {
+                    const int at=0xbec00;
+                    byte[] payload=[0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88];
+                    string mlBin=Path.Combine(output,"ml-offer.bin");
+                    File.WriteAllBytes(mlBin,[0xff,0x00,0x06,0x01,0x10,8,0,0,at&0xff,(at>>8)&0xff,at>>16,0xff,0xff,0xff,0x00,0x0f,..payload]);
+                    string? asked=null;DialogResult answer=DialogResult.Cancel;
+                    form.AskMachineCode=q=>{asked=q;return answer;};
+                    core.Write(at,new byte[8]);
+                    try{form.TestLoadFile(mlBin);throw new Exception("Cancel still loaded the BIN");}catch(OperationCanceledException){}
+                    if(asked is null || core.Dump(at,8).Any(v=>v!=0))throw new Exception("A BIN outside the machine-code area was written without asking, or after Cancel");
+                    asked=null;answer=DialogResult.Yes;
+                    string said2=form.TestLoadFile(mlBin);
+                    if(asked is null || MachineCodeArea.Read(core) is not {Start:at,Size:0x1000} || !core.Dump(at,8).SequenceEqual(payload))
+                        throw new Exception("Yes did not reserve the area and then load the BIN: "+said2+" / "+form.TestStatus);
+                    if((Native.e500_symbols(core.Handle,0)&6)==0)throw new Exception("Not back at BASIC after reserving for a BIN");
+                    asked=null;core.Write(at,new byte[8]);form.TestLoadFile(mlBin);
+                    if(asked is not null || !core.Dump(at,8).SequenceEqual(payload))throw new Exception("A BIN inside the machine-code area asked, or was not written");
+                    form.TestReserveMachineCode(0);
+                    asked=null;answer=DialogResult.No;core.Write(at,new byte[8]);form.TestLoadFile(mlBin);
+                    if(asked is null || MachineCodeArea.Read(core) is not {Size:0} || !core.Dump(at,8).SequenceEqual(payload))throw new Exception("No did not load the BIN as it is");
+                    core.Write(at,new byte[8]);form.AskMachineCode=null;
+                }
+                Key("ON/BRK");core.Run(1024000);
+            }
+            // The afterimage: a dot that goes off fades over a few frames, then is off.
+            {
+                var lcd=form.TestSurface;
+                string blankState=Path.Combine(output,"afterimage.e500state");
+                Key("ON/BRK");core.Run(1024000);core.Save(blankState);
+                Type2("8888");core.Refresh();
+                lcd.SetAfterimage(true);lcd.UpdateLcd(1000);
+                core.Load(blankState);core.Refresh();
+                lcd.UpdateLcd(1000.016);
+                int fading=-1;
+                for(int i=0;i<240*32;i++)if(core.Pixels[i]==0 && lcd.TestShade(i) is > 0 and < 255){fading=i;break;}
+                if(fading<0)throw new Exception("No dot was on its way off one frame after it went off");
+                lcd.UpdateLcd(1001);
+                for(int i=0;i<240*32;i++)if(lcd.TestShade(i)!=(core.Pixels[i]!=0?255:0))throw new Exception($"Dot {i} still between on and off a second later");
+                // Motion: a dot stepping left beside letters that stay put, and a band
+                // of every other dot stepping a dot, slide over as long as the last step took.
+                var dots=core.Pixels;
+                void Picture(int star,int band){
+                    Array.Clear(dots);
+                    for(int y=8;y<16;y++)dots[y*240+96]=1;
+                    dots[12*240+star]=1;
+                    for(int x=0;x<160;x++)if((x+band)%2==0)dots[28*240+x]=1;
+                }
+                Picture(100,0);lcd.UpdateLcd(2000);lcd.UpdateLcd(2001);
+                Picture(99,1);lcd.UpdateLcd(2001.2);
+                if(lcd.TestSliding!=0)throw new Exception($"{lcd.TestSliding} dots slid on the first step after a still");
+                Picture(98,0);
+                if(!lcd.UpdateLcd(2001.4))throw new Exception("Nothing on its way after a step");
+                int sliding=lcd.TestSliding;
+                if(sliding<80)throw new Exception($"Only {sliding} dots slid on the second step (star and band of 80)");
+                lcd.UpdateLcd(2001.5);
+                if(lcd.TestSliding!=sliding)throw new Exception("Dots stopped sliding half way through the step");
+                lcd.UpdateLcd(2001.61);
+                if(lcd.TestSliding!=0)throw new Exception($"{lcd.TestSliding} dots still sliding after the step's time");
+                // A whole line of text at once is not a move.
+                Array.Clear(dots);for(int x=0;x<60;x++)dots[2*240+x]=1;lcd.UpdateLcd(2001.7);
+                if(lcd.TestSliding!=0)throw new Exception("Text slid");
+                core.Refresh();lcd.UpdateLcd(2002);
+                lcd.SetAfterimage(false);form.TestRefresh();
+            }
             // Text a face has no ink for outlines to nothing, which cannot be stretched
             // to a span; it goes to GDI's own text drawing instead of an endless scale.
             using(var blank=new Bitmap(40,20))using(var g=Graphics.FromImage(blank))PocketSurface.Lettering(g,"​",2,30,5,12,Color.Black);
@@ -265,15 +474,17 @@ internal static class SmokeTest
             }
             string Joined()=>core.ScreenText().Replace(Environment.NewLine,"").TrimEnd('_');
             Key("ON/BRK");core.Run(1024000);
+            // A held PC key holds the machine's key, and Windows' repeats change
+            // nothing: the ROM itself decides what repeats. A letter does not (one A
+            // for two seconds held, as on the machine); LEFT does, driven by the ROM
+            // alone from one press, which is how a held key is told from taps.
             HoldFor(2000,()=>form.TestRepeat(MainForm.TestKey,'A'),()=>form.TestRelease(MainForm.TestKey));
             int letters=Joined().Length-Joined().TrimEnd('A').Length;
-            // Eighteen a second is all the machine can take; the point is that the key
-            // repeats at all, and that releasing it stops the typing then and there.
-            if(letters<10)throw new Exception($"A held for 2 s only typed {letters} letters; a held key must repeat");
-            if(Joined().Length>typed+1)throw new Exception($"Typing carried on after the key came up: {typed} characters at release, {Joined().Length} after");
+            if(letters!=1)throw new Exception($"A held for 2 s typed {letters} letters; the machine's own keys type one");
             Key("ON/BRK");core.Run(1024000);
             Type2("ABCDEFGH");
-            HoldFor(2000,()=>form.TestRepeatKey(Keys.Left),()=>form.TestRelease(Keys.Left));
+            bool pressed=false;
+            HoldFor(2000,()=>{if(!pressed){form.TestRepeatKey(Keys.Left);pressed=true;}},()=>form.TestRelease(Keys.Left));
             Type2("Z");
             // The cell the cursor sits on reads back as neither letter, so check the
             // two ends: Z landed where A was, and CDEFGH never moved.
@@ -285,6 +496,86 @@ internal static class SmokeTest
             // constant - the old queue passed 1400 ms by the end of the same hold.
             if(worst>90)throw new Exception($"Held keys queued {worst} ms of backlog; the cap is one keystroke behind one in hand (78 ms)");
             Key("ON/BRK");core.Run(1024000);
+            // A controller button holds its key as a PC key does, read again on every
+            // tick without pressing it again. The D-pad and the stick on one key hold
+            // it once: letting go of one leaves it down until the other is up too.
+            var pads=PadConfig.Defaults();
+            foreach(var preset in pads.Presets)foreach(var (control,binding) in preset.Map)
+                if(!PadConfig.Parse(binding,out _,out _))throw new Exception($"Preset {preset.Name} binds {control} to an unknown key {binding}");
+            if(!PadConfig.Parse("SHIFT+A",out int padCode,out int padModifier) || padCode!=Keyboard.Codes["A"] || padModifier!=Keyboard.Codes["SHIFT"])throw new Exception("SHIFT+A did not parse to A with SHIFT");
+            if(pads.Current.Map["Up"]!="8")throw new Exception("The default preset is not the number keys 2/4/6/8");
+            // The hold is checked on LEFT, which repeats: the cursor-key preset.
+            pads.Active=pads.Presets[1].Name;
+            form.TestSetPadConfig(pads);
+            Type2("ABCDEFGH");
+            int padTicks=0;
+            HoldFor(2000,()=>{form.TestPad(padTicks++<30?["Left","LStickLeft"]:["LStickLeft"]);if(form.TestPadHeld!=1)throw new Exception($"The D-pad and the stick on LEFT held {form.TestPadHeld} keys; one was expected");},()=>form.TestPad());
+            if(form.TestPadHeld!=0)throw new Exception("A controller key stayed held after every button was let go");
+            Type2("Z");
+            tail=Joined().Length>=8?Joined()[^8..]:Joined();
+            if(tail.Length!=8 || tail[0]!='Z' || tail[2..]!="CDEFGH")
+                throw new Exception($"LEFT held on the controller for 2 s did not repeat to the start of the line: [{Joined()}]");
+            Key("ON/BRK");core.Run(1024000);
+            // Settings read back: a broken binding and a second preset of one name are dropped.
+            var stored=System.Text.Json.JsonSerializer.Deserialize<PadConfig>(pads.Json)!.Repair();
+            if(stored.Presets.Count!=pads.Presets.Count || stored.Current.Map.Count!=pads.Current.Map.Count)throw new Exception("The controller settings did not read back as written");
+            var badPads=new PadConfig{Active="none",Presets=[new(){Name="P",Map=new(){["A"]="NOKEY",["B"]="ENTER"}},new(){Name="P"}]}.Repair();
+            if(badPads.Presets.Count!=1 || badPads.Active!="P" || badPads.Current.Map.Count!=1)throw new Exception("Repair kept a broken binding or a second preset of one name");
+            // The window lists the controls a DirectInput pad has, lights a pressed one and stores a binding.
+            // What this PC has plugged in, written down only (the tests pass with none).
+            var padLines=new List<string>();var padNow=new HashSet<string>();
+            var scanClock=System.Diagnostics.Stopwatch.StartNew();var scanned=GamePad.Scan();padLines.Add($"scan {scanClock.ElapsedMilliseconds} ms");
+            foreach(var d in scanned)padLines.Add($"{d.Id}\t{d.Name}\tbuttons={d.Buttons} pov={d.Pov}\tread={GamePad.Read(d,padNow)} pressed=[{string.Join(",",padNow)}]\tcontrols={string.Join(",",GamePad.Controls(d))}");
+            File.WriteAllLines(Path.Combine(output,"controllers.txt"),padLines.Count>0?padLines:["(none)"]);
+            // Timings of what runs on the window's thread, written down with the scan.
+            var padTime=System.Diagnostics.Stopwatch.StartNew();
+            var padWindow=form.TestShowPad();
+            padLines.Add($"open window {padTime.ElapsedMilliseconds} ms");
+            if(scanned.Count>0) {
+                padTime.Restart();padWindow.TestShow(scanned[0]);padLines.Add($"show {scanned[0].Id} rows {padTime.ElapsedMilliseconds} ms");
+                padTime.Restart();padWindow.TestShow(null);padLines.Add($"show Xbox rows {padTime.ElapsedMilliseconds} ms");
+                padTime.Restart();for(int i=0;i<100;i++)GamePad.Read(scanned[0],padNow,new PadAxes());padLines.Add($"read x100 {padTime.ElapsedMilliseconds} ms");
+            }
+            File.WriteAllLines(Path.Combine(output,"controllers.txt"),padLines);
+            try {
+                var testPad=new PadDevice("joy:1234:5678","Test pad",PadKind.DirectInput,15,Buttons:4,Pov:true,Axes:[(0,65535),(0,65535),null,(0,65535),null,null]);
+                padWindow.TestShow(testPad);
+                // Every control the pad has is somewhere in the picture, and nothing it has not.
+                var drawn=padWindow.TestView.Drawn.ToHashSet();
+                if(!drawn.SetEquals(GamePad.Controls(testPad)))throw new Exception($"The controller picture for a DirectInput pad drew [{string.Join(",",drawn)}], not its controls");
+                // The window cannot be widened: there is nothing more to show.
+                int padWidth=padWindow.Width;padWindow.Width=padWidth+300;
+                if(padWindow.Width!=padWidth)throw new Exception($"The controller window widened from {padWidth} to {padWindow.Width}");
+                // ELECOM numbers the face buttons X, Y, A, B: 1 left, 2 top, 3 bottom, 4 right.
+                var elecom=PadConfig.Defaults().LayoutFor(new PadDevice("joy:056E:2010","ELECOM",PadKind.DirectInput,0,Buttons:13));
+                if(elecom["Left"]!=1 || elecom["Top"]!=2 || elecom["Bottom"]!=3 || elecom["Right"]!=4 || elecom["LB"]!=5)throw new Exception("The ELECOM face-button places are not X Y A B");
+                // Matching places: asked top, right, bottom, left, then the rest (skipped here).
+                padWindow.TestLearn([2,4,3,1,..Enumerable.Repeat(0,PadView.Positions.Length-4)]);
+                var learned=padWindow.TestConfig.Layouts.GetValueOrDefault("1234:5678");
+                if(padWindow.TestLearning || learned is null || learned["Top"]!=2 || learned["Right"]!=4 || learned["Bottom"]!=3 || learned["Left"]!=1 || learned.Count!=4)
+                    throw new Exception($"Matching button places kept [{(learned is null?"nothing":string.Join(",",learned))}]");
+                if(padWindow.TestView.LabelAt("Top")!="2" || padWindow.TestView.LabelAt("Right")!="4")throw new Exception("The picture did not move the numbers to the matched places");
+                if(!padWindow.TestView.Drawn.ToHashSet().SetEquals(GamePad.Controls(testPad)))throw new Exception("After matching, the picture lost or doubled a button");
+                string[] padRows=padWindow.TestRows;
+                foreach(var want in new[]{"Up","LStickLeft","AxisR-","Button4"})if(!padRows.Contains(want))throw new Exception($"The controller window did not list {want} for a DirectInput pad: {string.Join(",",padRows)}");
+                if(padRows.Contains("A") || padRows.Contains("Button5") || padRows.Contains("AxisZ+"))throw new Exception("The controller window listed a control the pad has not");
+                padWindow.TestPress("Button2");
+                if(!padWindow.TestLit("Button2") || padWindow.TestLit("Button1"))throw new Exception("A pressed button did not light its row alone");
+                padWindow.TestPress(new PadAxes{RX=0.7f,RY=-0.7f},"Button2","Up","AxisR-");
+                using(var diShot=new Bitmap(padWindow.Width,padWindow.Height)){padWindow.DrawToBitmap(diShot,new Rectangle(0,0,padWindow.Width,padWindow.Height));diShot.Save(Path.Combine(output,"controller-di.png"));}
+                padWindow.TestSet("Button3","SHIFT","A");
+                if(padWindow.TestConfig.Current.Map.GetValueOrDefault("Button3")!="SHIFT+A")throw new Exception("The controller window did not store SHIFT+A for Button 3");
+                padWindow.TestShow(null);
+                if(!padWindow.TestRows.SequenceEqual(GamePad.XInputControls))throw new Exception("With no controller the window did not show the Xbox layout");
+                if(!padWindow.TestView.Drawn.ToHashSet().SetEquals(GamePad.XInputControls))throw new Exception("The Xbox picture does not draw every Xbox control once");
+                // What is pressed, in words, with the key each holds, in the order of the list.
+                padWindow.TestShow(new PadDevice("xinput:0","Xbox",PadKind.XInput,0));
+                padWindow.TestPress(new PadAxes{LX=-0.9f,LY=0.1f,RT=0.6f},"LStickLeft","A");
+                var shownMap=padWindow.TestConfig.Current.Map;
+                if(padWindow.TestPressedLine!=L.T("押しているボタン: ","Pressed: ")+string.Join(L.T("、",", "),$"A → {shownMap["A"]}",$"{GamePad.ControlName("LStickLeft")} → {shownMap["LStickLeft"]}"))
+                    throw new Exception($"The pressed line read [{padWindow.TestPressedLine}]");
+                using var padShot=new Bitmap(padWindow.Width,padWindow.Height);padWindow.DrawToBitmap(padShot,new Rectangle(0,0,padWindow.Width,padWindow.Height));padShot.Save(Path.Combine(output,"controller.png"));
+            } finally {padWindow.Close();}
             // The case and keys cost 3.9 ms to draw and the LCD repaints 62 times a
             // second, so a frame that changes nothing but the dots must not redraw
             // them. WM_PAINT outranks the WM_TIMER that runs the machine, and a
@@ -431,8 +722,14 @@ internal static class SmokeTest
                 diskCore.MountDisk(settings.DiskFolder,false);
                 if((Native.e500_disk_status(diskCore.Handle)&1)==0)throw new Exception("Workspace/OneDrive disk mount failed");
             }
-            string config=Path.Combine(output,"settings-test.json");settings.Save(config);
+            string config=Path.Combine(output,"settings-test.json");settings=settings with{RomFile=rom};settings.Save(config);
             if(HardwareSettings.Load(config)!=settings)throw new Exception("Hardware settings roundtrip failed");
+            // The ROM last opened starts again, even from outside the rom folder (an
+            // installed copy's is empty); one gone falls back to the rom folder.
+            string emptyData=Path.Combine(output,"no-rom-data");Directory.CreateDirectory(Path.Combine(emptyData,"rom"));
+            if(MainForm.StartRom(emptyData,settings)!=rom)throw new Exception("The ROM last opened was not opened at the start");
+            if(MainForm.StartRom(emptyData,settings with{RomFile=Path.Combine(output,"gone.rom")})!=null)throw new Exception("A ROM that is gone was opened at the start");
+            if(MainForm.StartRom(emptyData,HardwareSettings.Defaults)!=null)throw new Exception("An empty rom folder gave a ROM to start");
             // A settings file from before the contrast setting reads with the default contrast.
             File.WriteAllText(config,File.ReadAllText(config).Replace("\"LcdContrast\": 50,","").Replace(",\n  \"LcdContrast\": 50","").Replace(",\r\n  \"LcdContrast\": 50",""));
             if(File.ReadAllText(config).Contains("LcdContrast",StringComparison.Ordinal) || HardwareSettings.Load(config).LcdContrast!=PocketSurface.DefaultContrast)throw new Exception("Settings without a contrast do not read the default");
@@ -692,7 +989,7 @@ internal static class SmokeTest
             printer.TestView.ScrollTo(int.MaxValue);form.TestPaper.Feed("FOLLOW\n"u8);printer.Render();
             if(!printer.TestView.AtBottom)throw new Exception("CE-126P view stopped following the newest line");
             // A message under the paper stays while more lines come in.
-            var attach=printer.Controls.OfType<FlowLayoutPanel>().SelectMany(p=>p.Controls.OfType<CheckBox>()).Single();
+            var attach=printer.TestAttach;
             attach.Checked=false;string message=printer.TestResult;
             form.TestPaper.Feed("MORE\n"u8);printer.Render();
             if(printer.TestResult!=message || form.TestCore.PrinterConnected)throw new Exception("CE-126P message was overwritten, or disconnecting did not reach the core: "+printer.TestResult);
@@ -777,6 +1074,16 @@ internal static class SmokeTest
                 var hex=debugger.Memory;
                 hex.Jump(ramTop+2);
                 if(hex.Caret!=ramTop+2 || hex.Address>ramTop+2 || hex.TestScrollValue!=hex.Address/16)throw new Exception("Hex view caret/scrollbar did not follow a jump");
+                // A row: two groups of eight bytes, each with its checksum (the sum's low byte).
+                {
+                    var row=new System.Text.RegularExpressions.Regex("^[0-9A-F]{5}  (([0-9A-F]{2} ){8}: [0-9A-F]{2})(  - ([0-9A-F]{2} ){8}: [0-9A-F]{2})?$");
+                    core.Write(ramTop,[0xff,0xff,0x01,0x10,0,0,0,0,1,2,3,4,5,6,7,8]);hex.Jump(ramTop);hex.Reload();
+                    string line=hex.TestRowText(0);
+                    if(!row.IsMatch(line) || !line.Contains(" : 0F  - ",StringComparison.Ordinal) || !line.EndsWith(" : 24",StringComparison.Ordinal))throw new Exception("A 16-byte row is not two groups with their checksums: "+line);
+                    debugger.TestRowWidth(1);hex.Reload();line=hex.TestRowText(1);
+                    if(hex.Columns!=8 || !row.IsMatch(line) || line.Contains(" - ",StringComparison.Ordinal) || !line.EndsWith(" : 24",StringComparison.Ordinal) || hex.TestScrollValue!=hex.Address/8)throw new Exception("An 8-byte row is wrong: "+line);
+                    debugger.TestRowWidth(0);core.Write(ramTop,keep[..16]);hex.Jump(ramTop+2);
+                }
                 byte unedited=core.Dump(ramTop+2,1)[0];
                 debugger.TestType(Keys.D5);
                 if(core.Dump(ramTop+2,1)[0]!=unedited || hex.Pending!=5)throw new Exception("The high digit was written before the low one");
@@ -792,20 +1099,6 @@ internal static class SmokeTest
                 if(Native.e500_peek(core.Handle,0xc0000)!=romBytes[0])throw new Exception("Typing over ROM changed it");
                 hex.Jump(0xfffff);
                 if(hex.Address+hex.VisibleRows()*16!=0x100000 || hex.TestScrollValue!=hex.TestScrollMax)throw new Exception("Hex view cannot scroll to the end of memory");
-                // Checksums: the sums of a known range, both ends inclusive, and a
-                // refused range that leaves the dialog with a message rather than a sum.
-                core.Write(ramTop,[0xff,0xff,0x01,0x10]);
-                var sums=Checksum.Of(core,ramTop,ramTop+3);
-                if(sums.Length!=4 || sums.Sum8!=0x0f || sums.Sum16!=0x020f || sums.Sum32!=0x020f || sums.Xor8!=0x11)throw new Exception("Checksum arithmetic is wrong");
-                if(Checksum.Of(new byte[0x10000].Select(_=>(byte)0xff).ToArray()).Sum32!=0xff0000L)throw new Exception("32-bit checksum overflowed");
-                using(var dialog=new ChecksumDialog(()=>core,ramTop)) {
-                    dialog.TestSet(ramTop.ToString("X5"),(ramTop+3).ToString("X5"));dialog.Compute();
-                    if(dialog.Last!=sums || !dialog.TestResult.Contains("020F"))throw new Exception("Checksum dialog did not show the sums");
-                    dialog.TestSet("C0000","BFFFF");dialog.Compute();
-                    if(dialog.Last is not null)throw new Exception("Checksum dialog accepted an end below the start");
-                    dialog.TestSet("zz","0");dialog.Compute();
-                    if(dialog.Last is not null)throw new Exception("Checksum dialog accepted a non-hex address");
-                }
                 core.Write(ramTop,keep);
                 // BIN transfer: a headerless file goes to the typed address, a SAVE M
                 // file back to its own, and a dump comes out with the header it needs.
@@ -866,7 +1159,7 @@ internal static class SmokeTest
                 } finally {try{Directory.Delete(folder,true);}catch{}}
             }
             // Dispose without FormClosing: tests must not create or overwrite the user's automatic save.
-            File.WriteAllText(Path.Combine(output,"smoke-result.txt"),"PASS: ROM boot and trailer version display, BASIC calculation/program, CE-126P LPRINT paper, symbols, full-roll view and mid-line snapshot, snapshot restore, UI shifted input and fast multiline paste, LCD ROM-font text recognition, all physical key mappings/bounds, all appearances, all six internal RAM files and card image roundtrips, card image attach/detach/snapshot rules, settings/dialog, Windows waveOut and its bounded backlog, focus-free toolbar, key input budget, modeless sub-windows, debug register/memory window with in-place hex editing, range checksums and BIN load/save, and UI renders.\n");
+            File.WriteAllText(Path.Combine(output,"smoke-result.txt"),"PASS: ROM boot and trailer version display, BASIC calculation/program, CE-126P LPRINT paper, symbols, full-roll view and mid-line snapshot, snapshot restore, UI shifted input and fast multiline paste, LCD ROM-font text recognition, all physical key mappings/bounds, all appearances, all six internal RAM files and card image roundtrips, card image attach/detach/snapshot rules, settings/dialog, Windows waveOut and its bounded backlog, focus-free toolbar, key input budget, modeless sub-windows, debug register/memory window with in-place hex editing, 8- and 16-byte rows with per-8-byte checksums, BIN load/save, and UI renders.\n");
         } catch(Exception ex) {File.WriteAllText(Path.Combine(output,"smoke-result.txt"),ex.ToString());Environment.ExitCode=1;}
     }
 }

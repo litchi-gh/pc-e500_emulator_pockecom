@@ -24,7 +24,7 @@ internal static class ManualShots
             form.CreateControl();form.Show();Application.DoEvents();
             var core=form.TestCore;
             void Key(string key){int code=Keyboard.Codes[key];core.Key(code,true);core.Run(100000);core.Key(code,false);core.Run(100000);}
-            void Settle(){form.TestRefresh();Application.DoEvents();}
+            void Settle(){form.TestClearNotice();form.TestRefresh();Application.DoEvents();}
             void Shot(Control window,string name) {
                 Application.DoEvents();
                 using var bitmap=new Bitmap(window.Width,window.Height);
@@ -58,9 +58,9 @@ internal static class ManualShots
             form.TestText("1+2");Settle();
             Crop(form,Client(form.TestSurface.LcdArea(),form.TestSurface),"lcd-run");
             Shot(form,"main-e500");
-            // The toolbar row alone: title bar plus the buttons under it.
-            int chrome=form.Height-form.ClientSize.Height;
-            Crop(form,new Rectangle(0,0,form.Width,chrome+52),"toolbar");
+            // The toolbar alone: title bar plus every row of buttons under it (it wraps to two).
+            var bar=form.TestToolbarPanel;
+            Crop(form,new Rectangle(0,0,form.Width,Client(bar.ClientRectangle,bar).Bottom+4),"toolbar");
             Key("BASIC");core.Run(1024000);Settle();
             form.TestText("10 PRINT 123");Settle();
             Crop(form,Client(form.TestSurface.LcdArea(),form.TestSurface),"lcd-pro");
@@ -73,7 +73,7 @@ internal static class ManualShots
             // The right-click menu, opened over the case.
             var menu=form.TestMenu;menu.Show(form.TestSurface,new Point(40,40));Shot(menu,"context-menu");menu.Close();
             // The display window, and the window with only the case, then only the screen, left.
-            using(var display=new DisplayDialog(false,PocketSurface.DefaultContrast,WindowView.Normal)){display.Show(form);Shot(display,"display");display.Close();}
+            using(var display=new DisplayDialog(false,PocketSurface.DefaultContrast,WindowView.Normal,true)){display.Show(form);Shot(display,"display");display.Close();}
             form.TestSetView(WindowView.Body);Settle();Shot(form,"window-body");
             form.TestSetView(WindowView.Screen);Settle();Shot(form,"window-screen");
             form.TestSetView(WindowView.Normal);Settle();
@@ -131,10 +131,15 @@ internal static class ManualShots
                     save.StartPosition=FormStartPosition.CenterScreen;save.Show(form);save.TestSet(dump,(0xc0000-core.InternalKB*1024).ToString("X5"),true,"100");Shot(save,"bin-save");save.Close();
                 }
             } finally {if(sampleBin)File.Delete(savem);}
-            using(var sums=new ChecksumDialog(()=>core,0xc0000-core.InternalKB*1024)) {
-                sums.StartPosition=FormStartPosition.CenterScreen;sums.Show(form);sums.Compute();Shot(sums,"checksum");sums.Close();
-            }
             debugger.Close();
+            // The machine-code area window, with a size set so the map shows the change.
+            using(var ml=new MachineCodeDialog(RamLayout.Internal(core),0,0x6000)){ml.StartPosition=FormStartPosition.CenterScreen;ml.Show(form);ml.TestSet(0x1000);Shot(ml,"machine-code");ml.Close();}
+
+            // The controller window: an Xbox pad drawn as if plugged in, with A held,
+            // so the picture, the pressed line and the table's row all light.
+            var pad=form.TestShowPad();
+            pad.TestShow(new PadDevice("xinput:0",L.T("Xbox コントローラー","Xbox controller"),PadKind.XInput,0));pad.TestPress(new PadAxes(),"A");
+            Shot(pad,"controller");pad.Close();
 
             form.TestAllReset();Settle();
             Crop(form,Client(form.TestSurface.LcdArea(),form.TestSurface),"lcd-all-reset");

@@ -5,10 +5,10 @@ namespace PokeCom;
 // Modeless, so the trace has to follow the running machine instead of showing
 // the snapshot that happened to exist when the window was opened.
 /// <summary>CE-140F のトレース（コマンドとエラーの記録）を表示するウィンドウ。</summary>
-internal sealed class DiskTraceDialog : Form
+internal sealed class DiskTraceDialog : ThemedForm
 {
-    readonly TextBox text=new(){Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,Font=Fonts.Mono,BackColor=Color.White};
-    readonly CheckBox live=new(){Text=L.T("自動更新","Auto refresh"),Checked=true,AutoSize=true,Margin=new Padding(12,10,0,0)};
+    readonly TextBox text=new(){Dock=DockStyle.Fill,Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,Font=Fonts.Mono,BorderStyle=BorderStyle.None};
+    readonly CheckBox live=new(){Text=L.T("自動更新","Auto refresh"),Checked=true,AutoSize=true};
     readonly System.Windows.Forms.Timer timer=new(){Interval=500};
     readonly Func<Core?> read;
     readonly Func<string> folder;
@@ -19,15 +19,17 @@ internal sealed class DiskTraceDialog : Form
     internal DiskTraceDialog(Func<Core?> read,Func<string> folder,Action<Action> guard)
     {
         this.read=read;this.folder=folder;
-        Text="CE-140F / X:";ClientSize=new Size(760,470);MinimumSize=new Size(420,260);
+        Text="CE-140F / X:";ClientSize=new Size(760,500);MinimumSize=new Size(460,300);
         StartPosition=FormStartPosition.CenterScreen;Font=Fonts.Ui;
-        var bar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=46,WrapContents=false,Padding=new Padding(6,4,0,0)};
-        var open=new Button{Text=L.T("保存フォルダを開く","Open folder"),AutoSize=true};
-        var refresh=new Button{Text=L.T("更新","Refresh"),AutoSize=true,Margin=new Padding(6,0,0,0)};
-        open.Click+=(_,_)=>guard(()=>{Directory.CreateDirectory(folder());Process.Start(new ProcessStartInfo(folder()){UseShellExecute=true});});
-        refresh.Click+=(_,_)=>Render();
-        bar.Controls.Add(open);bar.Controls.Add(refresh);bar.Controls.Add(live);
-        Controls.Add(text);Controls.Add(bar);
+        var body=new Panel{Dock=DockStyle.Fill,Padding=new Padding(16,16,16,8)};
+        var card=new CardPanel{Title=L.T("通信の記録","Exchange log"),Dock=DockStyle.Fill};
+        card.Controls.Add(text);body.Controls.Add(card);
+        var footer=new FooterBar();
+        footer.Add(L.T("閉じる","Close"),(_,_)=>Close());
+        footer.Add(L.T("更新","Refresh"),(_,_)=>Render());
+        footer.Add(L.T("保存フォルダを開く","Open folder"),(_,_)=>guard(()=>{Directory.CreateDirectory(folder());Process.Start(new ProcessStartInfo(folder()){UseShellExecute=true});}));
+        footer.AddLeft(live);
+        Controls.Add(body);Controls.Add(footer);
         timer.Tick+=(_,_)=>{if(live.Checked)Render();};
         Shown+=(_,_)=>{Render();timer.Start();};
         FormClosed+=(_,_)=>timer.Stop();

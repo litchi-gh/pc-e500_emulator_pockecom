@@ -182,8 +182,43 @@ internal sealed class Core : IDisposable
         if(Native.e500_write(Handle,address,data,data.Length)==0)
             throw new InvalidOperationException(L.T($"{address:X5}-{(long)address+data.Length-1:X5} はRAM以外の領域を含むか、RAMの大きさを超えて折り返すため書き込めません。内蔵RAM・RAMカードの範囲に収まるように指定してください。",$"{address:X5}-{(long)address+data.Length-1:X5} includes non-RAM space, or is longer than the RAM and would wrap round it, and cannot be written. Stay within internal RAM or the RAM card."));
     }
+    // The ROM counts down to its auto power off: at every slow-timer tick (about
+    // 0.5 s) it takes one from the word at +06h of the IOCS work area, whose
+    // address is in internal RAM E6h-E8h, and switches off at 0; a key puts the
+    // word back to the start value kept at BFCBCh (04B0h, about 10 minutes, after
+    // a reset). Putting it back here holds the power on as a key would, the way the
+    // ESP32 build does (pocket.cpp, hold_power). Nothing is written unless the
+    // count is in RAM and not above the start value, so a ROM laid out otherwise
+    // is left alone.
+    // 自動電源 OFF の残り時間（IOCS の作業域 +06h。番地は内部 RAM の E6h〜E8h）を、初めの値（BFCBCh）に戻す
+    //（キーを押したのと同じ。ESP32 版の hold_power と同じ）。RAM でない・初めの値より大きいときは書かない。
+    /// <summary>自動電源 OFF の残り時間を初めの値に戻す（戻したら true）。</summary>
+    internal bool HoldPower() {
+        var imem=InternalMemory();
+        int at=((imem[0xe6]|imem[0xe7]<<8|imem[0xe8]<<16)&0xfffff)+6;
+        if(at+1>0xfffff)return false;
+        var start=Dump(0xbfcbc,2);var left=Dump(at,2);
+        int init=start[0]|start[1]<<8,count=left[0]|left[1]<<8;
+        if(init<2 || count>init || count==init)return false;
+        return Native.e500_write(Handle,at,start,2)!=0;
+    }
     /// <summary>CPU の内部メモリ（256バイト）を読む。</summary>
     internal byte[] InternalMemory() {var data=new byte[256];Native.e500_imem(Handle,data);return data;}
+    // The core has no call that writes internal RAM, so the bytes go through a
+    // snapshot: taken, patched where the 256 bytes of internal RAM are found in
+    // it (found, not assumed, so the layout stays the native code's own), and
+    // restored. Nothing else in the snapshot changes, so the machine goes on as it was.
+    // ネイティブに内部 RAM へ書く関数がないので、状態を取り出し、その中の内部 RAM（中身で探す）を直して読み戻す。
+    /// <summary>CPU の内部メモリの at から data を書く（状態の取り出しと読み戻しで行う）。</summary>
+    /// <exception cref="InvalidOperationException">今は状態を取り出せない、または内部メモリが状態の中に見つからない</exception>
+    internal void WriteInternalMemory(int at,byte[] data) {
+        if(at<0 || at+data.Length>256)throw new ArgumentOutOfRangeException(nameof(at));
+        byte[] state=Snapshot(),imem=InternalMemory();
+        int found=state.AsSpan().IndexOf(imem);
+        if(found<0 || state.AsSpan(found+1).IndexOf(imem)>=0)throw new InvalidOperationException("Internal RAM not found in the snapshot");
+        data.CopyTo(state,found+at);
+        if(Native.e500_load(Handle,state,state.Length)==0)throw new InvalidOperationException(CannotSave);
+    }
     /// <summary>起動からの CPU のサイクル数。</summary>
     internal ulong Cycles=>Native.e500_cycles(Handle);
     /// <summary>CPU のレジスタの値（id はネイティブの REGNAME）。</summary>
