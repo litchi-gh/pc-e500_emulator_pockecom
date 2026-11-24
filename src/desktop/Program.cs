@@ -70,23 +70,14 @@ internal sealed class MainForm : Form
     /// <summary>自動保存の番が来たのに、前の書き込みが終わっておらず始められなかったか（次の回にすぐ試す）。</summary>
     bool saveOwed;
     readonly Stopwatch clock=Stopwatch.StartNew();
-    /// <summary>キー入力の待ち行列：キーコード、押すか離すか、その状態を保つサイクル数。</summary>
-    readonly Queue<(int Code,bool Down,int Cycles)> inputQueue=new();
-    
-    /// <summary>画面でクリックして押したままの SHIFT・CTRL。</summary>
-    readonly HashSet<int> held=new();
+    /// <summary>キー入力の待ち行列。</summary>
+    readonly KeyInput<HoldBy> input;
     // PC keys physically down. A KEYDOWN for one already in here is Windows
     // repeating the key, not a second keystroke.
     readonly HashSet<Keys> downKeys=new();
     bool charRepeats;
     /// <summary>最後に押された PC のキー（続く文字をこのキーの長押しとして扱う）。</summary>
     Keys lastDown;
-    // A PC key held down holds the machine's key down until it comes up, as a
-    // finger on the real keys would: the ROM's own repeat (BS, DEL, the cursor
-    // keys) and games that read a held key then work as on the machine.
-    // Windows' repeats are not used; they only ever were taps.
-    /// <summary>PC のキーごとに、押したままにしている本体のキーと、一緒に押している SHIFT・CTRL（なければ -1）。</summary>
-    readonly Dictionary<HoldBy,(int Code,int Modifier)> holding=new();
     // A key held by the controller is held under its binding ("UP", "SHIFT+A"),
     // so two buttons on one key (the D-pad and the stick) hold it once, until both are up.
     /// <summary>キーを押したままにしている元：PC のキーか、コントローラーの割り当て（Binding）。</summary>
@@ -110,8 +101,6 @@ internal sealed class MainForm : Form
     /// <summary>データを置くフォルダ（rom・ram・drive-x・state がある）と、プログラムのフォルダ（manual がある）。
     /// zip 版では同じ、インストール版では別（AppFolders を参照）。</summary>
     readonly string root,programRoot;
-    /// <summary>今のキーの状態を保つ残りのサイクル数（0 なら次のキーへ）。</summary>
-    int inputWait;
     double previous;
     bool paused;
     /// <summary>ツールバー・本体の絵・案内・ステータスバーを並べる表（通常の表示のときだけ見せる）。</summary>
@@ -142,6 +131,7 @@ internal sealed class MainForm : Form
     internal MainForm(string? romPath=null, bool testing=false)
     {
         programRoot=AppFolders.Program();root=AppFolders.Data(programRoot);
+        input=new(()=>core,()=>paused,surface.SetPressed);
         this.testing=testing;
         if(!testing && AppFolders.IsInstalled(programRoot))AppFolders.Prepare(root);
         if(!testing) {
@@ -199,17 +189,7 @@ internal sealed class MainForm : Form
         surface.KeyClicked+=name=>{
             if(core is null||paused)return;
             if(name=="RESET") {TryAction(ResetPin);return;}
-            int code=Keyboard.Codes[name];
-            // A clicked SHIFT or CTRL joins the queue, so it reaches the key after the
-            // ones still waiting, not those too; it stays down for the next key.
-            // 画面の SHIFT・CTRL は待ち行列に入れる（待っている前のキーには効かせず、次のキーまで押したまま）。
-            if(name is "SHIFT" or "CTRL") {
-                bool down=held.Add(code);if(!down)held.Remove(code);
-                inputQueue.Enqueue((code,down,down?ShiftLeadCycles:ModifierCycles));NextKey();surface.SetPressed(name,down);
-            }
-            // The PC's Ctrl held while a key is clicked adds CTRL to it.
-            else if((ModifierKeys&Keys.Control)!=0)QueueWith(Keyboard.Codes["CTRL"],code);
-            else QueueKey(code);
+            input.Click(name,(ModifierKeys&Keys.Control)!=0);
         };
         // Focus leaving lets go of the PC's keys only; typing still queued (a paste) goes on.
         Deactivate+=(_,_)=>ReleaseKeys(true);
@@ -582,76 +562,13 @@ internal sealed class MainForm : Form
         var b=new ToolButton{Text=text,AutoSize=true,Glyph=glyph,Margin=new Padding(0,0,2,0)};
         b.Click+=(_,_)=>TryAction(action);parent.Controls.Add(b);
     }
-    // The ROM scans the key matrix from its 64 Hz sub-timer, and only counts a key
-    // whose press and release land in different scans with one scan between them.
-    // 18000 down plus 24000 up (one and a half scans, then two) is the shortest pair that never drops a key; the
-    // 120000/100000 at 1.024 MHz that this replaces spent 215 ms per key, so anything faster than
-    // five keys a second piled up into a backlog that felt like input lag.
-    // A shifted character only comes out shifted when SHIFT is already down for a
-    // whole scan before the key joins it, and stays down for a whole scan after the
-    // key leaves. The 8000 that both used to be is half a scan, so whichever
-    // keystroke the scan phase fell on lost its SHIFT: pasting LOAD M "X:TETRIS.BIN"
-    // dropped the closing quote to a bare W, and typing quotes gave one W in four.
-    const int CpuHz=768000,KeyDownCycles=18000,KeyUpCycles=24000,ModeSettleCycles=200000,ModifierCycles=7500,
-        ShiftLeadCycles=18000,ShiftTailCycles=18000;
-    /// <summary>キーを1回押して離す操作を待ち行列に入れ、すぐに始める。</summary>
-    /// <param name="code">キーコード</param>
-    void QueueKey(int code) {
-        if(core is null || paused)return;
-        inputQueue.Enqueue((code,true,KeyDownCycles));inputQueue.Enqueue((code,false,KeyUpCycles));
-        if(code==Keyboard.Codes["BASIC"] || code==Keyboard.Codes["MENU"] || code==Keyboard.Codes["F1"])
-            inputQueue.Enqueue((code,false,ModeSettleCycles));
-        // Keep a clicked modifier held until the character's matrix scan completes.
-        foreach(var modifier in held.ToArray()) {inputQueue.Enqueue((modifier,false,ModifierCycles));held.Remove(modifier);}
-        // Press now instead of on the next frame: the 16 ms timer would otherwise
-        // add its own wait in front of the ROM scan on every keystroke.
-        NextKey();
-    }
-    /// <summary>SHIFT を押したまま code のキーを押す操作を待ち行列に入れる。</summary>
-    void QueueShifted(int code)=>QueueWith(Keyboard.Codes["SHIFT"],code);
-    // The PC's Ctrl is no longer held down in the machine while it is held on the
-    // PC: with a key it goes into the queue around that key, the way SHIFT does.
-    // Held down, it reached the first key of a Ctrl+V paste, and stayed down
-    // after a Ctrl+letter that sent nothing.
-    /// <summary>modifier（SHIFT・CTRL）を押したまま code のキーを押す操作を待ち行列に入れる。</summary>
-    void QueueWith(int modifier,int code) {
-        inputQueue.Enqueue((modifier,true,ShiftLeadCycles));
-        QueueKey(code);
-        inputQueue.Enqueue((modifier,false,ShiftTailCycles));
-    }
-    /// <summary>前のキーの時間が過ぎていれば、待ち行列の次の操作を本体へ送る。</summary>
-    /// <returns>送ったか</returns>
-    bool NextKey() {
-        if(core is null || inputWait!=0 || !inputQueue.TryDequeue(out var key))return false;
-        core.Key(key.Code,key.Down);inputWait=key.Cycles;
-        surface.SetPressed(Keyboard.Matrix[key.Code/8][key.Code%8],key.Down);
-        return true;
-    }
-    // Windows repeats a held key thirty-one times a second. Those repeats used to
-    // be sent as taps (and thinned so they never piled up); now the key is simply
-    // held, and the repeats are ignored, so nothing can pile up behind a held key.
-    /// <summary>本体のキーを押し、PC のキー pcKey が離されるまで押したままにする（modifier は一緒に押す SHIFT・CTRL、なければ -1）。</summary>
-    void Hold(Keys pcKey,int code,int modifier)=>Hold(new HoldBy(pcKey),code,modifier);
-    void Hold(HoldBy pcKey,int code,int modifier) {
-        if(core is null || paused || holding.ContainsKey(pcKey))return;
-        if(modifier>=0)inputQueue.Enqueue((modifier,true,ShiftLeadCycles));
-        // The press stays at least one key time, so a quick tap still reaches a scan.
-        inputQueue.Enqueue((code,true,KeyDownCycles));
-        holding[pcKey]=(code,modifier);NextKey();
-    }
-    /// <summary>PC のキー pcKey で押したままにしていた本体のキーを離す。</summary>
-    void Unhold(Keys pcKey)=>Unhold(new HoldBy(pcKey));
-    void Unhold(HoldBy pcKey) {
-        if(!holding.Remove(pcKey,out var h))return;
-        inputQueue.Enqueue((h.Code,false,KeyUpCycles));
-        if(h.Code==Keyboard.Codes["BASIC"] || h.Code==Keyboard.Codes["MENU"] || h.Code==Keyboard.Codes["F1"])inputQueue.Enqueue((h.Code,false,ModeSettleCycles));
-        if(h.Modifier>=0)inputQueue.Enqueue((h.Modifier,false,ShiftTailCycles));
-        // A SHIFT or CTRL clicked on the case goes with this key, as with a tap.
-        foreach(var modifier in held.ToArray()){inputQueue.Enqueue((modifier,false,ModifierCycles));held.Remove(modifier);surface.SetPressed(Keyboard.Matrix[modifier/8][modifier%8],false);}
-        NextKey();
-    }
-    /// <summary>押したままの本体のキーをすべて離す（ウィンドウからフォーカスが離れたとき）。</summary>
-    void UnholdAll(){foreach(var pcKey in holding.Keys.ToArray())Unhold(pcKey);}
+    const int CpuHz=KeyInput<HoldBy>.CpuHz;
+    void QueueKey(int code)=>input.Tap(code);
+    void QueueWith(int modifier,int code)=>input.TapWith(modifier,code);
+    void Hold(Keys pcKey,int code,int modifier)=>input.Hold(new HoldBy(pcKey),code,modifier);
+    void Hold(HoldBy pcKey,int code,int modifier)=>input.Hold(pcKey,code,modifier);
+    void Unhold(Keys pcKey)=>input.Unhold(new HoldBy(pcKey));
+    void Unhold(HoldBy pcKey)=>input.Unhold(pcKey);
     // The keys with no character (Enter, the arrows, F1...) arrive in
     // ProcessCmdKey; here only the repeat of a character key is told apart, and
     // Ctrl is taken without pressing anything (it goes with the next key).
@@ -704,7 +621,7 @@ internal sealed class MainForm : Form
         }
         if(char.IsControl(e.KeyChar))return;
         if(!charRepeats) {
-            if(!CharacterKey(e.KeyChar,out int code,out int modifier))
+            if(!KeyInput<HoldBy>.CharacterKey(e.KeyChar,out int code,out int modifier))
                 Notify(L.T($"未対応のPC文字: {e.KeyChar}（画面のSHIFTとポケコンのキーで入力してください）",$"Unsupported PC character: {e.KeyChar} (use the on-screen SHIFT and pocket computer keys)"));
             else if(hold)Hold(lastDown,code,modifier);
             else if(modifier>=0)QueueWith(modifier,code);else QueueKey(code);
@@ -712,40 +629,8 @@ internal sealed class MainForm : Form
         // Consumed: a WM_CHAR that arrives without its WM_KEYDOWN is a fresh keystroke.
         charRepeats=false;e.Handled=true;
     }
-    /// <summary>1文字を本体のキー操作に変えて待ち行列に入れる。</summary>
-    /// <param name="character">文字</param>
-    /// <returns>対応するキーがあったか</returns>
-    bool QueueCharacter(char character) {
-        if(!CharacterKey(character,out int code,out int modifier))return false;
-        if(modifier>=0)QueueWith(modifier,code);else QueueKey(code);
-        return true;
-    }
-    /// <summary>1文字に当たる本体のキーと、一緒に押す SHIFT（なければ -1）。</summary>
-    /// <returns>対応するキーがあったか</returns>
-    static bool CharacterKey(char character,out int code,out int modifier) {
-        modifier=-1;
-        string text=character==' '?"SPACE":char.ToUpperInvariant(character).ToString();
-        if(Keyboard.Codes.TryGetValue(text,out code))return true;
-        if(Keyboard.Shifted.TryGetValue(character,out string? baseKey)){code=Keyboard.Codes[baseKey];modifier=Keyboard.Codes["SHIFT"];return true;}
-        return false;
-    }
-    /// <summary>文字列をキー入力として送る（改行は ENTER、タブは空白4つ、対応しない文字は省く）。</summary>
-    /// <param name="value">貼り付ける文字列（4096文字まで）</param>
-    /// <returns>結果のメッセージ</returns>
-    string PasteText(string value) {
-        if(core is null)return L.T("ROMが読み込まれていません。","No ROM is loaded.");
-        if(paused)return L.T("一時停止を解除してから貼り付けてください。","Resume the machine before pasting.");
-        if(value.Length>4096)return L.T("貼り付けは一度に4096文字までです。","Paste up to 4096 characters at a time.");
-        value=value.Replace("\r\n","\n").Replace('\r','\n');int queued=0,skipped=0;
-        foreach(char character in value) {
-            if(character=='\n'){QueueKey(Keyboard.Codes["ENTER"]);queued++;continue;}
-            if(character=='\t'){for(int i=0;i<4;i++)QueueCharacter(' ');queued+=4;continue;}
-            if(QueueCharacter(character))queued++;else skipped++;
-        }
-        string message=L.T($"{queued}文字をキー入力へ送信しました。",$"Sent {queued} characters as key input.");
-        if(skipped>0)message+=L.T($" 未対応の{skipped}文字は省略しました。",$" Skipped {skipped} unsupported characters.");
-        return message;
-    }
+    /// <summary>文字列をキー入力として送る（KeyInput.Paste）。</summary>
+    string PasteText(string value)=>input.Paste(value);
     // A paste can take minutes to type. Moving to another window or using the
     // toolbar lets go of the PC's keys only; what stops the machine (a ROM
     // switch, a pause, a reset) drops the rest too, and says so.
@@ -753,10 +638,10 @@ internal sealed class MainForm : Form
     /// そうでなければ本体のキーもすべて離して待ち行列を空にし、残っていれば知らせる。</summary>
     void ReleaseKeys(bool keepQueue=false) {
         // Keys held come up in the queue, behind what is still to be typed.
-        if(keepQueue){UnholdAll();downKeys.Clear();charRepeats=false;return;}
-        downKeys.Clear();charRepeats=false;holding.Clear();
-        if(inputQueue.Count>0)Notify(L.T("入力の残り（貼り付けの途中など）を取り消しました。","The keys still to be typed (a paste) were dropped."));
-        core?.Release();held.Clear();inputQueue.Clear();inputWait=0;
+        if(keepQueue){input.UnholdAll();downKeys.Clear();charRepeats=false;return;}
+        downKeys.Clear();charRepeats=false;
+        if(input.Queue.Count>0)Notify(L.T("入力の残り（貼り付けの途中など）を取り消しました。","The keys still to be typed (a paste) were dropped."));
+        input.Clear();
         // A BIN waiting for its reservation is dropped with the typing: the machine it
         // was meant for may be gone (a state loaded, a ROM switched, a reset).
         // 確保を待っている BIN も一緒にやめる（状態の読み込み・ROM の切り替え・リセットで、別の本体になっていることがある）。
@@ -819,11 +704,7 @@ internal sealed class MainForm : Form
     /// <param name="cycles">実行するサイクル数</param>
     void RunCycles(int cycles) {
         if(core is null)return;
-        while(cycles>0) {
-            NextKey();
-            int batch=inputWait>0?Math.Min(cycles,inputWait):cycles;
-            core.Run(batch);cycles-=batch;if(inputWait>0)inputWait-=batch;
-        }
+        input.Run(cycles);
         if(pendingBin is not null)FinishPendingBin();
     }
     /// <summary>LCD を読み直して絵を更新し、ステータスバーに状態を表示する。</summary>
@@ -953,7 +834,7 @@ internal sealed class MainForm : Form
     // goes in if the area came out as asked; otherwise nothing is written.
     /// <summary>確保を待っている BIN があれば、確保が終わったところで書き込む。</summary>
     void FinishPendingBin() {
-        if(pendingBin is not {} job || core is null || inputQueue.Count>0 || inputWait>0)return;
+        if(pendingBin is not {} job || core is null || !input.Idle)return;
         pendingBin=null;
         if(MachineCodeArea.Read(core) is not {Size:var got} || got<job.Size){Notify(L.T($"機械語エリアを確保できなかったため、{job.Name} は読み込みませんでした。",$"The machine-code area was not reserved, so {job.Name} was not loaded."));return;}
         try {
@@ -975,7 +856,7 @@ internal sealed class MainForm : Form
         QueueKey(Keyboard.Codes["C-CE"]);
         PasteText(MachineCodeArea.Command(size)+"\n");
         // The ROM ends at the main menu; a second later, BASIC brings the prompt back.
-        inputQueue.Enqueue((Keyboard.Codes["BASIC"],false,CpuHz));
+        input.Queue.Enqueue((Keyboard.Codes["BASIC"],false,CpuHz));
         QueueKey(Keyboard.Codes["BASIC"]);
         return size==0?L.T("機械語エリアを返しています。","Giving the machine-code area back.")
             :L.T($"機械語エリアを {size:X}h バイト（{size} バイト）にしています。",$"Making the machine-code area {size:X}h bytes ({size} bytes).");
@@ -1208,11 +1089,11 @@ internal sealed class MainForm : Form
         padWanted.Clear();
         var map=padConfig.Current.Map;
         foreach(var c in controls)if(map.TryGetValue(c,out string? b))padWanted.Add(b);
-        foreach(var by in holding.Keys.Where(h=>h.Binding is not null && !padWanted.Contains(h.Binding)).ToArray())Unhold(by);
+        foreach(var by in input.Holding.Keys.Where(h=>h.Binding is not null && !padWanted.Contains(h.Binding)).ToArray())Unhold(by);
         foreach(var b in padWanted)if(PadConfig.Parse(b,out int code,out int modifier))Hold(new HoldBy(Keys.None,b),code,modifier);
     }
     /// <summary>コントローラーで押したままのキーをすべて離す。</summary>
-    void ReleasePad(){foreach(var by in holding.Keys.Where(h=>h.Binding is not null).ToArray())Unhold(by);}
+    void ReleasePad(){foreach(var by in input.Holding.Keys.Where(h=>h.Binding is not null).ToArray())Unhold(by);}
     /// <summary>ROM ファイルを選んで開く。</summary>
     void OpenRom() {
         using var d=new OpenFileDialog{Filter=L.T("PC-E500シリーズの ROM (*.rom;*.bin)|*.rom;*.bin|すべてのファイル|*.*","PC-E500 series ROM (*.rom;*.bin)|*.rom;*.bin|All files|*.*"),InitialDirectory=Path.Combine(root,"rom")};
@@ -1249,7 +1130,7 @@ internal sealed class MainForm : Form
         if(paused)throw new InvalidOperationException(L.T("一時停止を解除してから読み込んでください。","Resume the machine before loading."));
         // One load at a time: the last one may still be typing (a reservation, a LOAD).
         // 読み込みは1つずつ（前の読み込みが、確保や LOAD をまだ打っていることがある）。
-        if(pendingBin is not null || inputQueue.Count>0)throw new InvalidOperationException(L.T("前の読み込み（キー入力）が終わってから読み込んでください。","Wait for the last load (keys still being typed) to finish."));
+        if(pendingBin is not null || input.Queue.Count>0)throw new InvalidOperationException(L.T("前の読み込み（キー入力）が終わってから読み込んでください。","Wait for the last load (keys still being typed) to finish."));
         var info=new FileInfo(path);
         if(!info.Exists)throw new FileNotFoundException(L.T("ファイルが見つかりません。","The file was not found."),path);
         if(info.Length>0x100000+BinaryTransfer.HeaderLength)throw new InvalidDataException(L.T("1MBを超えるファイルは読み込めません。","Files larger than 1MB cannot be loaded."));
@@ -1427,7 +1308,7 @@ internal sealed class MainForm : Form
     }
     internal int TestKeyCycles(string key) {
         ReleaseKeys();QueueKey(Keyboard.Codes[key]);
-        int total=inputWait+inputQueue.Sum(x=>x.Cycles);
+        int total=input.Backlog;
         ReleaseKeys();return total;
     }
     internal string TestReserveMachineCode(int size){string said=ReserveMachineCode(size);TestSettle();return said;}
@@ -1448,9 +1329,9 @@ internal sealed class MainForm : Form
     internal void TestRepeatKey(Keys key){Message m=new();ProcessCmdKey(ref m,key);}
     internal void TestRelease(Keys key)=>OnKeyUp(this,new KeyEventArgs(key));    internal void TestPad(params string[] controls)=>PressPad(controls);
     internal void TestSetPadConfig(PadConfig c)=>padConfig=c;
-    internal int TestPadHeld=>holding.Keys.Count(h=>h.Binding is not null);
+    internal int TestPadHeld=>input.Holding.Keys.Count(h=>h.Binding is not null);
     internal PadDialog TestShowPad()=>(PadDialog)ShowWindow("controller",()=>new PadDialog(padConfig));
-    internal int TestBacklogCycles=>inputWait+inputQueue.Sum(x=>x.Cycles);
+    internal int TestBacklogCycles=>input.Backlog;
     // One keystroke the way Windows delivers it: KEYDOWN, CHAR, then KEYUP. The
     // stand-in has to be a real virtual key, because KeyEventArgs.KeyCode answers
     // Keys.None for anything that is not a defined Keys member; every tap is released
@@ -1466,7 +1347,7 @@ internal sealed class MainForm : Form
         OnKeyUp(this,new KeyEventArgs(key));
     }
     void TestSettle() {
-        while(inputQueue.Count>0 || inputWait>0)RunCycles(1024000);
+        while(!input.Idle)RunCycles(1024000);
         core!.Run(1024000);UpdateDisplay();
     }
     internal void TestTypeOnly(string text) {

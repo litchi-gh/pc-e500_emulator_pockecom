@@ -9,16 +9,8 @@ namespace PokeCom;
 // Where the CE-126P's lines go besides the paper in its window: a USB thermal
 // printer written to directly in ESC/POS (the MPT-II needs no driver and has
 // no print queue), or any Windows printer through its queue.
-/// <summary>CE-126P の印字の送り先：USB のサーマルプリンタ（ESC/POS で直接）か、Windows のプリンタ。</summary>
-/// <param name="Kind">種類（Usb か Windows）</param>
-/// <param name="Id">USB なら機器のパス、Windows ならプリンタの名前</param>
-/// <param name="Name">表示する名前</param>
-internal sealed record PrintTarget(string Kind,string Id,string Name)
+internal sealed partial record PrintTarget
 {
-    internal const string Usb="usb",Windows="windows";
-    /// <summary>一覧に出す名前。</summary>
-    internal string Label=>Kind==Usb?L.T($"USB サーマルプリンタ: {Name}",$"USB thermal printer: {Name}"):L.T($"プリンタ: {Name}",$"Printer: {Name}");
-    public override string ToString()=>Label;
     // The USB printer class's device interface (GUID_DEVINTERFACE_USBPRINT).
     static readonly Guid UsbPrint=new("28d78fad-5a12-11d1-ae5b-0000f803a8c2");
     [StructLayout(LayoutKind.Sequential)] struct InterfaceData {public int Size;public Guid Class;public int Flags;public IntPtr Reserved;}

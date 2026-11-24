@@ -15,7 +15,7 @@ namespace PokeCom;
 internal static class Theme
 {
     /// <summary>設定の値：Windows に合わせる・ライト・ダーク。</summary>
-    internal static readonly string[] Choices=["System","Light","Dark"];
+    internal static string[] Choices=>HardwareSettings.Themes;
     /// <summary>ダークで描くか。</summary>
     internal static bool Dark {get;private set;}
     /// <summary>テーマを決める（最初のウィンドウを作る前に呼ぶ）。</summary>
