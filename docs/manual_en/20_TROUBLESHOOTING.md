@@ -5,7 +5,8 @@
 | Symptom | What to do |
 |---|---|
 | It asks for a ROM, or says none was found | No ROM is included. Put one in the `rom` folder ([chapter 4](04_ROM.md)), or choose it with "Open ROM" |
-| The ROM does not open | Its size must be 256 KB (or 256 KB + 16) or 384 KB. For the PC-E500S, PC-E650 and PC-U6000, [merge](04_ROM.md#dumping-the-rom-and-toolsmerge_savem_rompy) the two files first |
+| You have nothing to dump the ROM with | [ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md) does it by sound ([chapter 4](04_ROM.md#romdump-by-sound)) |
+| The ROM does not open | Its size must be 256 KB (or 256 KB + 16) or 384 KB. Dumped with `SAVEM` from a PC-E500S, PC-E650 or PC-U6000, the two files must be [merged](04_ROM.md#with-savem-toolsmerge_savem_rompy) first |
 | `S1(MAIN): NEW CARD` | Normal at the first start. PF1 (F1) initialises the memory ([chapter 5](05_FIRST_STEPS.md)) |
 | `./PC-E500` does not start on Ubuntu | Start it from a terminal and read the message. The tar.gz brings no missing libraries: install the `.deb`, or try `sudo apt install libx11-6 libice6 libsm6 libfontconfig1 libasound2t64` |
 | Japanese shows as boxes on Ubuntu | `sudo apt install fonts-noto-cjk` |

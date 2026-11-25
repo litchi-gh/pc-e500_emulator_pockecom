@@ -14,7 +14,7 @@ An emulator that runs the SHARP **PC-E500 series** pocket computers on a PC, str
 | PC-E500S | 384KB (the main S3A merged with the S3B extension) | PC-E500 |
 | PC-E650, PC-U6000 | 384KB (the main S3A merged with the S3B extension) | PC-E650 |
 
-**ROM images are not included.** Dump the ROM from your own machine ([how](docs/manual_en/04_ROM.md#dumping-the-rom-and-toolsmerge_savem_rompy)). Verified to work with ROMs of the PC-E500, PC-E500S, PC-E550, PC-1480U, PC-1490UII, PC-E650 and PC-U6000.
+**ROM images are not included.** Dump the ROM from your own machine ([how](docs/manual_en/04_ROM.md#dumping-the-rom-from-your-machine)); with no peripherals, [PC-E500 BEEP ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md) does it by recording the buzzer with a phone. Verified to work with ROMs of the PC-E500, PC-E500S, PC-E550, PC-1480U, PC-1490UII, PC-E650 and PC-U6000.
 
 ## System requirements
 
@@ -125,7 +125,7 @@ PRINT 12*34
 For Ubuntu see [chapter 2](docs/manual_en/02_LINUX.md), for the Mac [chapter 3](docs/manual_en/03_MACOS.md).
 
 1. Get the installer (`-setup.exe`) or the zip from [Releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases). It is for Windows x64 and needs no separate .NET install. From the release after 0.0.4 on, the release notes list each file’s SHA-256: compare it with what PowerShell’s `Get-FileHash <file>` prints to check a download.
-2. Put the ROM dumped from your machine in the data folder's `rom`. "Open the data folder" in the right-click menu opens it.
+2. Put the ROM dumped from your machine (with [ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md), for one) in the data folder's `rom`. "Open the data folder" in the right-click menu opens it.
 3. Start it, press **PF1** (F1 on the PC) to initialise memory, then **BASIC** (F7).
 
 ## What is new in 0.1.0 (since 0.0.5)

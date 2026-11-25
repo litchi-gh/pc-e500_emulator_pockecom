@@ -10,7 +10,7 @@
 - **コマンドライン `pokecom`** を追加しました。BASIC の1行やプログラムの実行、キー入力、液晶の読み取り、メモリの読み書きなど37の操作を、端末やスクリプトから使えます。Windows・Linux・Mac で動きます（[16章](manual/16_CLI.md)）。
 - **MCP サーバー**（`pokecom mcp`）を追加しました。AI のツールからエミュレータを操作できます（[18章](manual/18_MCP.md)）。
 - **Mac** で `pokecom` が使えるようになりました（Apple シリコンと Intel。[3章](manual/03_MACOS.md)）。
-- マニュアルを章に分けて `docs/` に移し、Ubuntu・Mac・コマンドライン・MCP・困ったときの章を足しました。
+- マニュアルを章に分けて `docs/` に移し、Ubuntu・Mac・コマンドライン・MCP・困ったときの章を足しました。ROM の吸い出しには、周辺機器の要らない [PC-E500 BEEP ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper) を案内しています。
 - PC-E500S の 384KB ROM に対応しました。384KB の ROM のうち、本体 ROM の機種コード（版の下の桁）が 3 のものを PC-E500S として扱い、内蔵 RAM を PC-E500 と同じ 32KB（選べる容量も同じ）にします。ステータスバーの ROM の欄には「E500S」と出ます。
 
 ### 修正

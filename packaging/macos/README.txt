@@ -17,5 +17,7 @@ ROMイメージは含まれていません。お手持ちの実機から吸い�
 置くか、--rom で指定してください。
 No ROM image is included: dump one from your own machine, and put it in rom/ or
 name it with --rom.
+音で吸い出すツール / A tool to dump it by sound:
+  https://github.com/litchi-gh/pc-e500_beep_romdumper
 
 ライセンス / License: GPL-2.0-or-later (LICENSE, THIRD_PARTY_NOTICES.md)

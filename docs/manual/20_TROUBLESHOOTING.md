@@ -5,7 +5,8 @@
 | 症状 | 対処 |
 |---|---|
 | ROM を選ぶように出る、「ROM が見つかりません」と出る | ROM は含まれていません。[4章](04_ROM.md)のとおり `rom` フォルダに置くか、「ROMを開く」で選びます |
-| ROM を開けない | 大きさが 256KB（256KB+16 も可）か 384KB かを確かめます。PC-E500S・PC-E650・PC-U6000 は、2つのファイルを[結合](04_ROM.md#実機からのrom吸い出しと-toolsmerge_savem_rompy)してから開きます |
+| ROM を吸い出す機器がない | 音で吸い出す [ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper) が使えます（[4章](04_ROM.md#romdump音で吸い出す)） |
+| ROM を開けない | 大きさが 256KB（256KB+16 も可）か 384KB かを確かめます。PC-E500S・PC-E650・PC-U6000 で `SAVEM` を使ったときは、2つのファイルを[結合](04_ROM.md#savem-で吸い出すtoolsmerge_savem_rompy)してから開きます |
 | `S1(MAIN): NEW CARD`（アタラシイ カードデス）と出る | 初めての起動では正常です。PF1（F1）で初期化します（[5章](05_FIRST_STEPS.md)） |
 | Ubuntu で `./PC-E500` が起動しない | 端末から起動して、出るメッセージを見ます。tar.gz では足りないライブラリが自動では入らないので、`.deb` で入れるか、`sudo apt install libx11-6 libice6 libsm6 libfontconfig1 libasound2t64` を試します |
 | Ubuntu で日本語が □ になる | `sudo apt install fonts-noto-cjk` |

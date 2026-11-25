@@ -78,6 +78,7 @@
     <li><a href="#save">11. 保存と復元</a></li>
     <li><a href="#faq">12. こんなときは</a></li>
     <li><a href="#romdump">13. 実機からROMを吸い出す</a></li>
+    <li class="sub"><a href="#romdump-beep">ROMDumpで吸い出す（音）</a></li>
     <li class="sub"><a href="#romdump-savem">SAVEMで吸い出す</a></li>
     <li class="sub"><a href="#romdump-header">ヘッダーと修正方法</a></li>
     <li class="sub"><a href="#romdump-tool">結合ツールの使い方</a></li>
@@ -425,9 +426,20 @@ PRINT=LPRINT             ' PRINT の出力をプリンタへ（PRINT=PRINT で�
 
 <section id="romdump">
 <h2>13. 実機からROMを吸い出す</h2>
-<p>このエミュレータには内蔵ROMは含まれません。お手持ちの実機からROMイメージを取り出して <code>app\rom\</code> に置いてください。取り出しには実機側の <code>SAVEM</code> コマンド（メモリをファイルに書き出す命令）を使います。</p>
+<p>このエミュレータには内蔵ROMは含まれません。お手持ちの実機からROMイメージを取り出して <code>app\rom\</code> に置いてください。方法は2つあります。周辺機器がなければ、ブザーの音を録音する <a href="https://github.com/litchi-gh/pc-e500_beep_romdumper">ROMDump</a> を使います。CE-140F などファイルを保存できる機器があれば、<code>SAVEM</code> コマンド（メモリをファイルに書き出す命令）が使えます。</p>
 
-<h3>必要なもの</h3>
+<h3 id="romdump-beep">ROMDumpで吸い出す（音）</h3>
+<p><a href="https://github.com/litchi-gh/pc-e500_beep_romdumper">PC-E500 BEEP ROMDump</a> は、ポケコンのブザーで ROM を鳴らし、スマホで録音して、PC のアプリ（BeepDump）で ROM ファイルに戻すツールです。周辺機器は要りません。</p>
+<ol class="steps">
+<li><a href="https://github.com/litchi-gh/pc-e500_beep_romdumper/releases">リリース</a>から <code>BeepDump.exe</code> を入手します。</li>
+<li>録音を始めてから、実機の BASIC の <b>RUN</b> 表示で次の命令を打ちます（本体ROM 256KB。約22分）。
+<pre>CSAVE M &amp;HC0000,&amp;HFFFFF</pre>読み違いを見つけるため、2回録音します。PC-E650 / PC-U6000 は拡張ROMも録音します。</li>
+<li>録音ファイルを BeepDump に読み込ませ、そろったら「ROM を保存」で保存します。PC-E650 / PC-U6000 は結合した384KBのファイルになるので、下の結合は要りません。</li>
+<li>できたファイルを <code>PC-E500(7.2).ROM</code> のような名前にして、<code>rom</code> フォルダに置きます。</li>
+</ol>
+<div class="box tip">ROMDump は実験的なツールです。対応機種、短い時間で読める機械語版、くわしい手順は <a href="https://github.com/litchi-gh/pc-e500_beep_romdumper">ROMDump の説明</a>を見てください。</div>
+
+<h3>SAVEMで吸い出すのに必要なもの</h3>
 <table>
 <tr><th>実機</th><td>PC-E500 / PC-E550 / PC-1480U / PC-1490U / PC-1490UII（256KB ROM）、または PC-E650 / PC-U6000（384KB ROM）</td></tr>
 <tr><th>保存先の機器</th><td>CE-140F（フロッピー）など、実機の11ピン端子につないでファイルを保存できる機器。PC上でCE-140Fを模擬するソフトを11ピンケーブルで接続する方法もあります。PCで読めるファイルとして取り出せれば何でも構いません</td></tr>

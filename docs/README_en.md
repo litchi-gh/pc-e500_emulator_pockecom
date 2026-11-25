@@ -18,7 +18,7 @@
 | [1. On Windows](manual_en/01_WINDOWS.md) | Installer and zip, folders, updating |
 | [2. On Ubuntu (Linux)](manual_en/02_LINUX.md) | Installing on Ubuntu, what differs from Windows |
 | [3. On a Mac (command line)](manual_en/03_MACOS.md) | Installing on a Mac |
-| [4. Getting the ROM](manual_en/04_ROM.md) | Where the ROM goes, dumping and merging |
+| [4. Getting the ROM](manual_en/04_ROM.md) | Where the ROM goes, dumping it (ROMDump, SAVEM) |
 
 ## Using it
 

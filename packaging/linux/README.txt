@@ -10,6 +10,8 @@ https://github.com/litchi-gh/pc-e500_emulator_pockecom
 ROMイメージは含まれていません。お手持ちの実機から吸い出した ROM を
 rom/ フォルダに置いてから起動してください。
 No ROM image is included: dump one from your own machine and put it in rom/.
+音で吸い出すツール / A tool to dump it by sound:
+  https://github.com/litchi-gh/pc-e500_beep_romdumper
 
   rom/      内蔵ROMイメージ / ROM images
   ram/      RAMカードのイメージファイル / RAM card images

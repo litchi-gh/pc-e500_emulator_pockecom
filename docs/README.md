@@ -18,7 +18,7 @@
 | [1. Windows で使う](manual/01_WINDOWS.md) | インストーラーと zip、フォルダの構成、更新 |
 | [2. Ubuntu（Linux）で使う](manual/02_LINUX.md) | Ubuntu での入れかた、Windows 版との違い |
 | [3. Mac で使う（コマンドライン）](manual/03_MACOS.md) | Mac での入れかた |
-| [4. ROM を用意する](manual/04_ROM.md) | ROM の置き場所、実機からの吸い出し、結合 |
+| [4. ROM を用意する](manual/04_ROM.md) | ROM の置き場所、実機からの吸い出し（ROMDump・SAVEM） |
 
 ## 使い方
 

@@ -78,6 +78,7 @@
     <li><a href="#save">11. Saving and restoring</a></li>
     <li><a href="#faq">12. Troubleshooting</a></li>
     <li><a href="#romdump">13. Dumping the ROM from a real machine</a></li>
+    <li class="sub"><a href="#romdump-beep">With ROMDump (by sound)</a></li>
     <li class="sub"><a href="#romdump-savem">Dumping with SAVEM</a></li>
     <li class="sub"><a href="#romdump-header">The header and how to fix files</a></li>
     <li class="sub"><a href="#romdump-tool">Using the merge tool</a></li>
@@ -425,9 +426,20 @@ PRINT=LPRINT             ' send PRINT to the printer (PRINT=PRINT undoes it)</pr
 
 <section id="romdump">
 <h2>13. Dumping the ROM from a real machine</h2>
-<p>The emulator ships without the internal ROM. Take the ROM image from your own machine and put it in <code>app\rom\</code>. The machine's <code>SAVEM</code> command (write memory to a file) does the dumping.</p>
+<p>The emulator ships without the internal ROM. Take the ROM image from your own machine and put it in <code>app\rom\</code>. There are two ways. With no peripherals, use <a href="https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md">ROMDump</a>, which records the buzzer. With a CE-140F or another device that saves files, the machine's <code>SAVEM</code> command (write memory to a file) does it.</p>
 
-<h3>What you need</h3>
+<h3 id="romdump-beep">With ROMDump (by sound)</h3>
+<p><a href="https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md">PC-E500 BEEP ROMDump</a> plays the ROM through the machine's buzzer; you record it with a phone, and an application on the PC (BeepDump) turns the recording back into a ROM file. No peripherals are needed.</p>
+<ol class="steps">
+<li>Get <code>BeepDump.exe</code> from its <a href="https://github.com/litchi-gh/pc-e500_beep_romdumper/releases">releases</a>.</li>
+<li>Start recording, then type this at BASIC's <b>RUN</b> prompt (the 256KB main ROM; about 22 minutes).
+<pre>CSAVE M &amp;HC0000,&amp;HFFFFF</pre>Record it twice, so that a misreading is found. A PC-E650 / PC-U6000 needs its extension ROM recorded too.</li>
+<li>Give the recordings to BeepDump and, when everything has been read, save the ROM. For a PC-E650 / PC-U6000 it is the merged 384KB file, so the merging below is not needed.</li>
+<li>Name the file for its model and version, as <code>PC-E500(7.2).ROM</code>, and put it in the <code>rom</code> folder.</li>
+</ol>
+<div class="box tip">ROMDump is an experimental tool. <a href="https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md">Its own page</a> has the models it takes, a faster machine-code version and the steps in full.</div>
+
+<h3>What SAVEM needs</h3>
 <table>
 <tr><th>The machine</th><td>PC-E500 / PC-E550 / PC-1480U / PC-1490U / PC-1490UII (256KB ROM), or PC-E650 / PC-U6000 (384KB ROM)</td></tr>
 <tr><th>Somewhere to save</th><td>A CE-140F floppy drive or any other device on the 11-pin connector that can save files. A PC running CE-140F emulation software over an 11-pin cable works too. Anything that ends up as a file the PC can read is fine</td></tr>

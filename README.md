@@ -14,7 +14,7 @@
 | PC-E500S | 384KB（本体の S3A と拡張の S3B を結合） | PC-E500 |
 | PC-E650・PC-U6000 | 384KB（本体の S3A と拡張の S3B を結合） | PC-E650 |
 
-**ROM は含まれていません。** お手持ちの実機から吸い出してください（[吸い出しの手順](docs/manual/04_ROM.md#実機からのrom吸い出しと-toolsmerge_savem_rompy)）。PC-E500・PC-E500S・PC-E550・PC-1480U・PC-1490UII・PC-E650・PC-U6000 の ROM で動作確認済みです。
+**ROM は含まれていません。** お手持ちの実機から吸い出してください。周辺機器がなくても、ブザーの音をスマホで録音して吸い出せる [PC-E500 BEEP ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper) があります（[吸い出しの手順](docs/manual/04_ROM.md#実機からromを吸い出す)）。PC-E500・PC-E500S・PC-E550・PC-1480U・PC-1490UII・PC-E650・PC-U6000 の ROM で動作確認済みです。
 
 ## 動作環境
 
@@ -125,7 +125,7 @@ PRINT 12*34
 Ubuntu は [2章](docs/manual/02_LINUX.md)、Mac は [3章](docs/manual/03_MACOS.md)を見てください。
 
 1. [リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)から、インストーラー（`-setup.exe`）か zip を入手します。Windows x64 用で、.NET などを別に入れる必要はありません。0.0.4 より後のリリースでは、本文に各ファイルの SHA-256 を載せています。ダウンロードしたファイルが本物かは、PowerShell の `Get-FileHash <ファイル名>` で出る値と比べて確かめられます。
-2. 実機から吸い出した ROM を、データフォルダの `rom` に置きます。右クリックのメニューの「データフォルダを開く」で開けます。
+2. 実機から吸い出した ROM（[ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper) などで）を、データフォルダの `rom` に置きます。右クリックのメニューの「データフォルダを開く」で開けます。
 3. 起動して **PF1**（PC の F1）でメモリを初期化し、**BASIC**（F7）を押せば使えます。
 
 ## 0.1.0 の主な変更（0.0.5 から）

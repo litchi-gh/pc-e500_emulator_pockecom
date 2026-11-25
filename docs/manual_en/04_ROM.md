@@ -10,20 +10,33 @@ ROM images are not included. Put the one dumped from your own machine in the dat
 | Ubuntu (tar.gz) | `rom/` in the unpacked folder |
 | Mac | `~/Library/Application Support/PockeComE500/rom/`, or `rom/` in the folder of `pokecom` |
 
-## The 384KB PC-E500S / PC-E650 / PC-U6000 ROM
+## Dumping the ROM from your machine
 
-The E500S/E650/U6000 internal ROM is mapped as follows.
+There are two ways.
 
-| In the file | CPU address | Size | Chip select |
-|---|---:|---:|---|
-| `00000-1FFFF` | `20000-3FFFF` | 128KB | CE3 |
-| `20000-5FFFF` | `C0000-FFFFF` | 256KB | CE2 |
+| Way | What it takes | Good when |
+|---|---|---|
+| [ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md) (by sound) | Something to record with, such as a phone, and a PC; no peripherals | You have nothing that saves files |
+| `SAVEM` | A CE-140F or another device on the machine that saves files | You have one |
 
-"Open ROM" tells 256KB PC-E500 images and 384KB PC-E500S/E650/U6000 images apart automatically; a 384KB image whose main ROM has model code 3 (the version's lower digit) is taken as a PC-E500S. The ROM field of the status bar shows the family (E500, E500S or E650), and its tip the size and the file. The 384KB file has the low-address extension ROM first and the 256KB main ROM after it.
+### ROMDump (by sound)
 
-The status bar also shows `ROM Ver.x.y`, read from the major/minor version bytes in the ROM's 16-byte trailer (the ones the service screen uses), not from the file name. The PC-E500 ROM used for testing is Ver.7.2, the PC-E650 ROM Ver.8.5.
+[PC-E500 BEEP ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md) plays the ROM through the machine's buzzer; you record it with a phone, and an application on the PC (BeepDump) turns the recording back into a ROM file. No peripherals are needed.
 
-## Dumping the ROM and `tools/merge_savem_rom.py`
+1. Get `BeepDump.exe` (Windows) from its [releases](https://github.com/litchi-gh/pc-e500_beep_romdumper/releases). On Linux and the Mac, build and use its command line.
+2. Start recording, then type the command at BASIC's RUN prompt. The 256 KB main ROM takes this one line (about 22 minutes; no program):
+
+   ```basic
+   CSAVE M &HC0000,&HFFFFF
+   ```
+
+   Record it twice this way (CSAVE M), so that a misreading is found. A PC-E650 or PC-U6000 needs its extension ROM recorded too. There is also a faster machine-code version (about 15 minutes).
+3. Give the recordings to BeepDump and, when everything has been read, save the ROM. For a PC-E650 or PC-U6000 it is the merged 384 KB file.
+4. Name the file for its model and version, as `PC-E500(7.2).ROM`, and put it in the `rom` folder. Nothing needs merging or stripping.
+
+It takes the PC-E500, PC-E500PJ, PC-1480U, PC-1490UII, PC-E550, PC-E650 and PC-U6000. **It is an experimental tool**: [its own page](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md) has the steps in full, what has been confirmed, and how to record what is missing.
+
+### With SAVEM (`tools/merge_savem_rom.py`)
 
 On the real machine, `SAVEM "d:filename",start,end` writes memory to a file (`d:` is the device name of whatever is connected).
 
@@ -45,6 +58,19 @@ python tools/merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o
 Coverage below 100% means the dump is incomplete. Chapter 13 of the [illustrated manual](../../app/manual/index_en.html) (Help on the toolbar) walks through the whole procedure.
 
 Run `tools/merge_savem_rom.py` with `python` on Windows and `python3` on Ubuntu and the Mac.
+
+## The 384KB PC-E500S / PC-E650 / PC-U6000 ROM
+
+The E500S/E650/U6000 internal ROM is mapped as follows.
+
+| In the file | CPU address | Size | Chip select |
+|---|---:|---:|---|
+| `00000-1FFFF` | `20000-3FFFF` | 128KB | CE3 |
+| `20000-5FFFF` | `C0000-FFFFF` | 256KB | CE2 |
+
+"Open ROM" tells 256KB PC-E500 images and 384KB PC-E500S/E650/U6000 images apart automatically; a 384KB image whose main ROM has model code 3 (the version's lower digit) is taken as a PC-E500S. The ROM field of the status bar shows the family (E500, E500S or E650), and its tip the size and the file. The 384KB file has the low-address extension ROM first and the 256KB main ROM after it.
+
+The status bar also shows `ROM Ver.x.y`, read from the major/minor version bytes in the ROM's 16-byte trailer (the ones the service screen uses), not from the file name. The PC-E500 ROM used for testing is Ver.7.2, the PC-E650 ROM Ver.8.5.
 
 Stock internal RAM on the E650/U6000 is 64KB at `B0000-BFFFF`, and on the E500S 32KB at `B8000-BFFFF`, as on the E500; the RAM card sits at `40000` according to its size.
 
