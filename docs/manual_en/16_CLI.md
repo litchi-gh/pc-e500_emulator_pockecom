@@ -19,8 +19,8 @@ PRINT 12*34
 | System | Where `pokecom` is |
 |---|---|
 | Windows | `pokecom.exe` in the folder `pokecom-<version>-win-x64.zip` unpacks to |
-| Ubuntu | `pokecom`, once the `.deb` is installed with the commands of [chapter 2](02_LINUX.md#installing); `~/pockecom/Emulator/pokecom` with the tar.gz |
-| Mac | `pokecom`, once installed with the commands of [chapter 3](03_MACOS.md#installing) |
+| Ubuntu | `pokecom`, once installed with the line of [chapter 2](02_LINUX.md#installing) |
+| Mac | `pokecom`, once installed with the line of [chapter 3](03_MACOS.md#installing) |
 
 ### Where the ROM is looked for
 

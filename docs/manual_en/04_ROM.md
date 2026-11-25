@@ -6,9 +6,9 @@ ROM images are not included. Put the one dumped from your own machine in the dat
 |---|---|
 | Windows (zip, source build) | `app\rom\` (`rom` beside `PC-E500.exe`) |
 | Windows (installer) | `%LocalAppData%\PockeComE500\rom\` |
-| Ubuntu (.deb) | `~/.local/share/PockeComE500/rom/` |
-| Ubuntu (tar.gz) | `rom/` in the unpacked folder |
-| Mac | `~/Library/Application Support/PockeComE500/rom/`, or `rom/` in the folder of `pokecom` |
+| Ubuntu (`--deb`) | `~/.local/share/PockeComE500/rom/` |
+| Ubuntu (without `--deb`) | `~/pockecom/Emulator/rom/` |
+| Mac | `~/Library/Application Support/PockeComE500/rom/`, or `~/pockecom/Emulator/rom/` |
 
 ## Dumping the ROM from your machine
 
@@ -57,12 +57,20 @@ python tools/merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o
 
 Coverage below 100% means the dump is incomplete. Chapter 13 of the [illustrated manual](../../app/manual/index_en.html) (Help on the toolbar) walks through the whole procedure.
 
-Run `tools/merge_savem_rom.py` with `python` on Windows and `python3` on Ubuntu and the Mac. There, these make a folder, download it, and look at the headers of two files in the current folder:
+Run `tools/merge_savem_rom.py` with `python` on Windows and `python3` on Ubuntu and the Mac. There, these take it into the current folder and look at the headers of the two files there:
+
+Ubuntu:
 
 ```sh
-mkdir -p ~/pockecom/download
-curl -fL -o ~/pockecom/download/merge_savem_rom.py https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/tools/merge_savem_rom.py
-python3 ~/pockecom/download/merge_savem_rom.py S3A.ROM S3B.ROM --info
+wget -qO merge_savem_rom.py https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/tools/merge_savem_rom.py
+python3 merge_savem_rom.py S3A.ROM S3B.ROM --info
+```
+
+Mac:
+
+```sh
+curl -fsSL -o merge_savem_rom.py https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/tools/merge_savem_rom.py
+python3 merge_savem_rom.py S3A.ROM S3B.ROM --info
 ```
 
 ## The 384KB PC-E500S / PC-E650 / PC-U6000 ROM

@@ -12,65 +12,75 @@ On a Mac there is no emulator with a window; the command line, `pokecom`, runs i
 
 ## Installing
 
-Type (or paste) these in Terminal (Applications, Utilities): they download and install. The `get` line is long, so copy and paste it.
+Open Terminal (Applications, Utilities) and paste this line. It takes the newest version from GitHub and installs it. To update, run the same line again (ROMs stay).
 
 ```sh
-mkdir -p ~/pockecom/download
-get() { curl -fL -o "$3" "$(curl -fsSL "https://api.github.com/repos/litchi-gh/$1/releases/latest" | grep -o "\"browser_download_url\": *\"[^\"]*$2\"" | cut -d'"' -f4)"; }
+curl -fsSL https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh
+```
+
+`curl -fsSL address` takes the script `install.sh` from GitHub, and `| sh` runs it. Options go after `| sh -s --`. To put a ROM of yours (here `~/PC-E500(7.2).ROM`) in place too:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh -s -- --rom ~/'PC-E500(7.2).ROM'
+```
+
+To see what it does first, split it.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh > install.sh
+less install.sh
+sh install.sh
 ```
 
 | Command | What it does |
 |---|---|
-| `mkdir -p folder` | Makes the folder for what is downloaded, if it is not there |
-| `get() { … }` | Makes a command of your own, `get`, that takes the file whose name ends as asked from the newest release on GitHub, with no version to look up. It lasts until this terminal closes; paste the line again in a new one |
+| `curl -fsSL address > install.sh` | Takes the script and saves it in the current folder |
+| `less install.sh` | Shows it (`q` ends) |
+| `sh install.sh` | Runs it |
 
-`curl: (2)` or `curl: option : blank argument` says the newest release has no file of that name: see the [releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) page.
-
-```sh
-mkdir -p ~/pockecom/Emulator
-ARCH=$(uname -m | sed 's/x86_64/x64/')
-get pc-e500_emulator_pockecom "osx-$ARCH.tar.gz" ~/pockecom/download/emulator.tar.gz
-tar xzf ~/pockecom/download/emulator.tar.gz -C ~/pockecom/Emulator --strip-components=1
-~/pockecom/Emulator/pokecom version
-```
-
-| Command | What it does |
+| Option | |
 |---|---|
-| `mkdir -p folder` | Makes the folder for it |
-| `ARCH=…` | Finds the kind of Mac: `arm64` for Apple silicon, `x64` for Intel |
-| `get …` | Takes the newest one for that kind of Mac |
-| `tar xzf file -C folder` | Unpacks the `.tar.gz`: `x` takes out, `z` is for gzip, `f` says the file name follows. `-C` is where to, and `--strip-components=1` leaves out the one folder inside, named for the version |
-| `~/pockecom/Emulator/pokecom version` | Shows the version: it is installed |
+| `--rom file` | Copies a ROM of yours into the `rom` folder. `( )` mean something to the shell, so the name goes in `'…'` |
+| `--emulator file` | Uses a `.tar.gz` you have instead of downloading |
 
-The folders and `get` are those of the [PC-E500 development tools](https://github.com/litchi-gh/pc-e500_tools). If you use both, installing by either one's steps is enough.
+### What is installed
 
-Files taken with `curl` do not carry macOS's block on running them. For one downloaded with a browser, lift it after unpacking with `xattr -dr com.apple.quarantine ~/pockecom/Emulator` (these are not notarized by Apple).
+| What | Where |
+|---|---|
+| `pokecom` and `libe500core.dylib` (keep them in the same folder) | `~/pockecom/Emulator` |
+| The file that makes `pokecom` a command | `~/.local/bin/pokecom` |
+| ROMs | `~/pockecom/Emulator/rom` |
 
-### From anywhere
+- Run it without `sudo`: it installs into your own folder and needs no administrator. The script finds whether the Mac is Apple silicon or Intel.
+- If `~/.local/bin` is not on the PATH (where commands are looked for), a line is added to `~/.zshrc`. **Open a new Terminal** and `pokecom` works.
+- For another folder than `~/pockecom`, write `POCKECOM_HOME=folder sh install.sh`.
+- The folders are those of the [PC-E500 development tools](https://github.com/litchi-gh/pc-e500_tools)' `install.sh`; an emulator installed by that one is used as it is.
+- A file taken with a browser carries macOS's block on running it (these are not notarized by Apple). Installed with `--emulator`, the script lifts it.
+
+See that it is installed:
 
 ```sh
-echo 'export PATH="$PATH:$HOME/pockecom/Emulator"' >> ~/.zshrc
-source ~/.zshrc
 pokecom version
+pokecom roms
 ```
 
-| Command | What it does |
-|---|---|
-| `echo '…' >> ~/.zshrc` | Adds a line to the end of `~/.zshrc`, read when a terminal opens: here, `pokecom`'s folder to the PATH (where commands are looked for). **Typed again, it adds the line again** |
-| `source ~/.zshrc` | Reads `~/.zshrc` again in this terminal; new terminals need not |
-| `pokecom version` | Sees that it works from anywhere |
+| Command | What it does | When all is well |
+|---|---|---|
+| `pokecom version` | Shows the version | `0.1.0` or the like |
+| `pokecom roms` | Lists the ROMs found | Yours is there |
 
-### Updating and uninstalling
+### Uninstalling
 
-To update, paste the `get` line and type `get …` and `tar …` again. ROMs in `rom` stay.
+```sh
+rm -r ~/pockecom/Emulator
+rm ~/.local/bin/pokecom
+```
 
-To take it out, delete `~/pockecom/Emulator` and the line added to `~/.zshrc`. ROMs in `rom` go too, so move them first.
-
-Keep `pokecom` and `libe500core.dylib` in the same folder.
+`rm -r folder` deletes a folder with what is in it, `rm file` a file. ROMs in `rom` go too, so move them first.
 
 ## Putting the ROM in place
 
-Put [a ROM dumped from your own machine](04_ROM.md) in one of these.
+Installed with `--rom`, it is there already. To put one later, put [a ROM dumped from your own machine](04_ROM.md) in one of these.
 
 - `rom` in the folder of `pokecom` (`~/pockecom/Emulator/rom`)
 - `~/Library/Application Support/PockeComE500/rom`

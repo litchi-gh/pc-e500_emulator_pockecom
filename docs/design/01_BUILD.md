@@ -68,6 +68,12 @@ CXX=clang++ sh tools/test-native.sh
 
 Windows の `pokecom` は `package.ps1` が zip にします（`tools/package-pokecom.ps1` だけでも作れます）。単独でビルドするなら、`build.ps1` のあとに `dotnet build src/cli -c Release` です。
 
+## install.sh（Ubuntu・Mac）
+
+- ルートの `install.sh` は、最新のリリースから、名前の終わりが `linux-x64.tar.gz`・`amd64.deb`・`osx-arm64.tar.gz`・`osx-x64.tar.gz` のファイルを取ります。リリースには、それぞれ1つだけ付けます。[pc-e500_tools](https://github.com/litchi-gh/pc-e500_tools) の `install.sh` も同じ名前で取ります。
+- 手順書は `main` の `install.sh` を実行するので、`main` に置きます。
+- 手元のファイルで試すには `sh install.sh --emulator dist/…` です。`POCKECOM_HOME` と `HOME` を別のフォルダにすれば、自分の環境を変えずに試せます。
+
 ## マニュアルのコマンド一覧
 
 `docs/manual/17_CLI_REFERENCE.md` と `docs/manual_en/17_CLI_REFERENCE.md` には、すべてのコマンドと引数を載せます。`Ops.cs` に足したら、両方に足してください。`tests/test_cli.py` が漏れを調べます。

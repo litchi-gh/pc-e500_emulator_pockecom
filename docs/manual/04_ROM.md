@@ -6,9 +6,9 @@ ROM は含まれていません。お手持ちの実機から吸い出したも�
 |---|---|
 | Windows（zip・ソースからのビルド） | `app\rom\`（`PC-E500.exe` の横の `rom`） |
 | Windows（インストーラー） | `%LocalAppData%\PockeComE500\rom\` |
-| Ubuntu（.deb） | `~/.local/share/PockeComE500/rom/` |
-| Ubuntu（tar.gz） | 展開したフォルダの `rom/` |
-| Mac | `~/Library/Application Support/PockeComE500/rom/`、または `pokecom` のあるフォルダの `rom/` |
+| Ubuntu（`--deb`） | `~/.local/share/PockeComE500/rom/` |
+| Ubuntu（`--deb` なし） | `~/pockecom/Emulator/rom/` |
+| Mac | `~/Library/Application Support/PockeComE500/rom/`、または `~/pockecom/Emulator/rom/` |
 
 ## 実機からROMを吸い出す
 
@@ -57,12 +57,20 @@ python tools/merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o
 
 カバー率が100%でない場合は吸い出しが欠けています。手順の詳細と確認方法は、[画像付きの取扱説明書](../../app/manual/index.html)（ツールバーの「使い方」）の13章にあります。
 
-`tools/merge_savem_rom.py` は、Windows では `python`、Ubuntu と Mac では `python3` で動かします。Ubuntu と Mac では、次のように取ってきて使えます（1行目で置き場所を作り、2行目で取り、3行目で、いまいるフォルダの2つのファイルのヘッダーを確かめます）。
+`tools/merge_savem_rom.py` は、Windows では `python`、Ubuntu と Mac では `python3` で動かします。Ubuntu と Mac では、次のように取ってきて使えます（1行目でいまいるフォルダに取り、2行目で、そこにある2つのファイルのヘッダーを確かめます）。
+
+Ubuntu：
 
 ```sh
-mkdir -p ~/pockecom/download
-curl -fL -o ~/pockecom/download/merge_savem_rom.py https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/tools/merge_savem_rom.py
-python3 ~/pockecom/download/merge_savem_rom.py S3A.ROM S3B.ROM --info
+wget -qO merge_savem_rom.py https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/tools/merge_savem_rom.py
+python3 merge_savem_rom.py S3A.ROM S3B.ROM --info
+```
+
+Mac：
+
+```sh
+curl -fsSL -o merge_savem_rom.py https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/tools/merge_savem_rom.py
+python3 merge_savem_rom.py S3A.ROM S3B.ROM --info
 ```
 
 ## PC-E500S / PC-E650 / PC-U6000 の384KB ROM

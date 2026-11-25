@@ -8,10 +8,11 @@
 | You have nothing to dump the ROM with | [ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md) does it by sound ([chapter 4](04_ROM.md#romdump-by-sound)) |
 | The ROM does not open | Its size must be 256 KB (or 256 KB + 16) or 384 KB. Dumped with `SAVEM` from a PC-E500S, PC-E650 or PC-U6000, the two files must be [merged](04_ROM.md#with-savem-toolsmerge_savem_rompy) first |
 | `S1(MAIN): NEW CARD` | Normal at the first start. PF1 (F1) initialises the memory ([chapter 5](05_FIRST_STEPS.md)) |
-| `./PC-E500` does not start on Ubuntu | Start it from a terminal and read the message. The tar.gz brings no missing libraries: install the `.deb`, or try `sudo apt install libx11-6 libice6 libsm6 libfontconfig1 libasound2t64` |
+| `pc-e500` does not start on Ubuntu | Start it from a terminal and read the message. If libraries are missing, install again with `--deb` ([chapter 2](02_LINUX.md#installing)), or try `sudo apt install libx11-6 libice6 libsm6 libfontconfig1 libasound2t64` |
 | Japanese shows as boxes on Ubuntu | `sudo apt install fonts-noto-cjk` |
-| A Mac says the developer cannot be verified | It was downloaded with a browser. Install it with the commands of [chapter 3](03_MACOS.md#installing), or run `xattr -dr com.apple.quarantine ~/pockecom/Emulator` |
-| Installing stops with `curl: (2)` or `curl: option : blank argument` | The newest [release](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) has no file of that name |
+| A Mac says the developer cannot be verified | It was downloaded with a browser. Install it with the line of [chapter 3](03_MACOS.md#installing), or run `xattr -dr com.apple.quarantine ~/pockecom/Emulator` |
+| Installing stops with "The latest release has no file that ends in ..." | The newest [release](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) has no file for that system |
+| `pokecom` or `pc-e500` is not found after installing | Open a new terminal: the PATH is read when one opens |
 
 ## In use
 

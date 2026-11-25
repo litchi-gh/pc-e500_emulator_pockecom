@@ -17,8 +17,8 @@
 | Windows: installer | `%LocalAppData%\PockeComE500\` |
 | Windows: zip | The folder of `PC-E500.exe` |
 | Windows: source build | `app\` |
-| Ubuntu: .deb | `~/.local/share/PockeComE500/` |
-| Ubuntu: tar.gz | The unpacked folder |
+| Ubuntu: `--deb` | `~/.local/share/PockeComE500/` |
+| Ubuntu: without `--deb` | `~/pockecom/Emulator/` |
 
 "Open the data folder" in the right-click menu opens it.
 

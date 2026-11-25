@@ -8,10 +8,11 @@
 | ROM を吸い出す機器がない | 音で吸い出す [ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper) が使えます（[4章](04_ROM.md#romdump音で吸い出す)） |
 | ROM を開けない | 大きさが 256KB（256KB+16 も可）か 384KB かを確かめます。PC-E500S・PC-E650・PC-U6000 で `SAVEM` を使ったときは、2つのファイルを[結合](04_ROM.md#savem-で吸い出すtoolsmerge_savem_rompy)してから開きます |
 | `S1(MAIN): NEW CARD`（アタラシイ カードデス）と出る | 初めての起動では正常です。PF1（F1）で初期化します（[5章](05_FIRST_STEPS.md)） |
-| Ubuntu で `./PC-E500` が起動しない | 端末から起動して、出るメッセージを見ます。tar.gz では足りないライブラリが自動では入らないので、`.deb` で入れるか、`sudo apt install libx11-6 libice6 libsm6 libfontconfig1 libasound2t64` を試します |
+| Ubuntu で `pc-e500` が起動しない | 端末から起動して、出るメッセージを見ます。足りないライブラリがあるときは、[2章](02_LINUX.md#入れかた)の1行に `--deb` を付けて入れ直すか、`sudo apt install libx11-6 libice6 libsm6 libfontconfig1 libasound2t64` を試します |
 | Ubuntu で日本語が □ になる | `sudo apt install fonts-noto-cjk` |
-| Mac で「開発元を確認できない」と出る | ブラウザでダウンロードしたものです。[3章](03_MACOS.md#入れかた)のコマンドで入れ直すか、`xattr -dr com.apple.quarantine ~/pockecom/Emulator` を実行します |
-| 入れるときに `curl: (2)` か `curl: option : blank argument` と出る | 名前の合うファイルが最新の[リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)にありません |
+| Mac で「開発元を確認できない」と出る | ブラウザでダウンロードしたものです。[3章](03_MACOS.md#入れかた)の1行で入れ直すか、`xattr -dr com.apple.quarantine ~/pockecom/Emulator` を実行します |
+| 入れるときに「最新のリリースに、名前が … で終わるファイルがありません」と出る | その環境のファイルが、最新の[リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)に載っていません |
+| 入れたのに `pokecom` や `pc-e500` が「見つかりません」になる | 新しい端末（ターミナル）を開きます。PATH は、開いたときに読まれます |
 
 ## 使っているとき
 

@@ -68,6 +68,12 @@ CXX=clang++ sh tools/test-native.sh
 
 On Windows `package.ps1` makes `pokecom`'s zip (`tools/package-pokecom.ps1` makes it alone). To build it alone, run `dotnet build src/cli -c Release` after `build.ps1`.
 
+## install.sh (Ubuntu, Mac)
+
+- `install.sh` at the root takes from the newest release the files whose names end in `linux-x64.tar.gz`, `amd64.deb`, `osx-arm64.tar.gz` and `osx-x64.tar.gz`: a release carries one of each. [pc-e500_tools](https://github.com/litchi-gh/pc-e500_tools)' `install.sh` takes them by the same names.
+- The manual runs `install.sh` of `main`, so it belongs there.
+- Try it on files of your own with `sh install.sh --emulator dist/...`; with `POCKECOM_HOME` and `HOME` set to other folders your own set-up is left alone.
+
 ## The command reference in the manual
 
 `docs/manual/17_CLI_REFERENCE.md` and `docs/manual_en/17_CLI_REFERENCE.md` hold every command and argument. What is added to `Ops.cs` goes into both; `tests/test_cli.py` checks.

@@ -15,93 +15,83 @@ The emulator runs on the Ubuntu desktop and is used just like the Windows progra
 
 ## Installing
 
-Type (or paste) these in a terminal: they download and install. The `get` line is long, so copy and paste it.
+Open a terminal and paste this line. It takes the newest version from GitHub and installs it. To update, run the same line again (ROMs, RAM and settings stay).
 
 ```sh
-sudo apt update
-sudo apt install -y curl
-mkdir -p ~/pockecom/download
-get() { curl -fL -o "$3" "$(curl -fsSL "https://api.github.com/repos/litchi-gh/$1/releases/latest" | grep -o "\"browser_download_url\": *\"[^\"]*$2\"" | cut -d'"' -f4)"; }
+wget -qO- https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh
+```
+
+`wget -qO- address` takes the script `install.sh` from GitHub, and `| sh` runs it. Options go after `| sh -s --`. To put a ROM of yours (here `~/PC-E500(7.2).ROM`) in place too:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh -s -- --rom ~/'PC-E500(7.2).ROM'
+```
+
+To see what it does first, split it.
+
+```sh
+wget -qO- https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh > install.sh
+less install.sh
+sh install.sh
 ```
 
 | Command | What it does |
 |---|---|
-| `sudo apt update` | Renews the list of what can be installed; installs nothing yet |
-| `sudo apt install -y curl` | Installs `curl`, which downloads files. `-y` answers yes to the question |
-| `mkdir -p folder` | Makes the folder for what is downloaded, if it is not there |
-| `get() { … }` | Makes a command of your own, `get`, that takes the file whose name ends as asked from the newest release on GitHub, with no version to look up. It lasts until this terminal closes; paste the line again in a new one |
+| `wget -qO- address > install.sh` | Takes the script and saves it in the current folder |
+| `less install.sh` | Shows it (`q` ends) |
+| `sh install.sh` | Runs it |
 
-Then install in **one** of these two ways. `curl: (2)` or `curl: option : blank argument` says the newest release has no file of that name: see the [releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) page.
+| Option | |
+|---|---|
+| `--rom file` | Copies a ROM of yours into the `rom` folder. `( )` mean something to the shell, so the name goes in `'…'` |
+| `--deb` | Installs the `.deb` (asks for the administrator's password) |
+| `--emulator file` | Uses a `.tar.gz` you have (a `.deb`, with `--deb`) instead of downloading |
 
-The folders and `get` are those of the [PC-E500 development tools](https://github.com/litchi-gh/pc-e500_tools). If you use both, installing by either one's steps is enough.
+### What is installed
 
-### A. Installed (.deb)
+| What | Without `--deb` | With `--deb` |
+|---|---|---|
+| The program | `~/pockecom/Emulator` | `/opt/pc-e500` |
+| Terminal commands (`pc-e500`, [`pokecom`](16_CLI.md)) | `~/.local/bin` | `/usr/bin` |
+| ROMs, RAM cards, the X: folder, settings | In `~/pockecom/Emulator` | `~/.local/share/PockeComE500`, per user |
+| The app list | "PC-E500 Emulator" | "PC-E500 Emulator" |
+| Administrator | Not needed | Needed |
+| Libraries missing (X11, fonts, ALSA...) | Not installed (their names show at the end) | Installed too |
+
+- Run it without `sudo`. Only with `--deb` does the script use `sudo apt-get`.
+- If `~/.local/bin` is not on the PATH (where commands are looked for), a line is added to `~/.bashrc`. **Open a new terminal** and `pc-e500` and `pokecom` work.
+- For another folder than `~/pockecom`, write `POCKECOM_HOME=folder sh install.sh`.
+- The folders are those of the [PC-E500 development tools](https://github.com/litchi-gh/pc-e500_tools)' `install.sh`; an emulator installed by that one is used as it is.
+
+See that it is installed:
 
 ```sh
-get pc-e500_emulator_pockecom amd64.deb ~/pockecom/download/emulator.deb
-sudo apt install ~/pockecom/download/emulator.deb
+pokecom version
+pokecom roms
+pc-e500
 ```
 
-| Command | What it does |
-|---|---|
-| `get …` | Takes the newest package of the emulator |
-| `sudo apt install file.deb` | Installs from the package file, with any libraries missing (X11, fonts, ALSA...) |
-
-"PC-E500 Emulator" joins the app list; in a terminal it is `pc-e500`. The command line, [`pokecom`](16_CLI.md), comes with it.
-
-| What | Where |
-|---|---|
-| The program | `/opt/pc-e500/` |
-| Data (ROMs, RAM cards, the X: folder, settings) | `~/.local/share/PockeComE500/`, per user |
-
-### B. Unpacked (tar.gz)
-
-```sh
-mkdir -p ~/pockecom/Emulator
-get pc-e500_emulator_pockecom linux-x64.tar.gz ~/pockecom/download/emulator.tar.gz
-tar xzf ~/pockecom/download/emulator.tar.gz -C ~/pockecom/Emulator --strip-components=1
-~/pockecom/Emulator/PC-E500
-```
-
-| Command | What it does |
-|---|---|
-| `mkdir -p folder` | Makes the folder for it |
-| `get …` | Takes the newest emulator |
-| `tar xzf file -C folder` | Unpacks the `.tar.gz`: `x` takes out, `z` is for gzip, `f` says the file name follows. `-C` is where to, and `--strip-components=1` leaves out the one folder inside, named for the version |
-| `~/pockecom/Emulator/PC-E500` | Starts the emulator |
-
-This needs no administrator. If libraries are missing, see [chapter 20](20_TROUBLESHOOTING.md). The data lives in the folder too, as with the Windows zip.
-
-To have `pokecom` from anywhere, type these two lines and log in again.
-
-```sh
-mkdir -p ~/.local/bin
-ln -sf ~/pockecom/Emulator/pokecom ~/.local/bin/pokecom
-```
-
-| Command | What it does |
-|---|---|
-| `mkdir -p ~/.local/bin` | Makes the folder for commands of your own. Ubuntu puts it on the PATH (where commands are looked for) from the next login |
-| `ln -sf from to` | Puts a link to the file. `-f` replaces one already there |
+| Command | What it does | When all is well |
+|---|---|---|
+| `pokecom version` | Shows the version | `0.1.0` or the like |
+| `pokecom roms` | Lists the ROMs found | Yours is there |
+| `pc-e500` | Starts the emulator | Its window opens |
 
 ## Putting the ROM in place
 
-No ROM is included. Put [one dumped from your own machine](04_ROM.md) in the data's `rom` folder and start the program. Here your ROM is `~/PC-E500(7.2).ROM`, in your home folder.
-
-Installed from the `.deb`:
-
-```sh
-mkdir -p ~/.local/share/PockeComE500/rom
-cp ~/'PC-E500(7.2).ROM' ~/.local/share/PockeComE500/rom/
-```
-
-From the tar.gz:
+No ROM is included. Put [one dumped from your own machine](04_ROM.md) in the `rom` folder and start the program. Installed with `--rom`, it is there already. To put one later:
 
 ```sh
 cp ~/'PC-E500(7.2).ROM' ~/pockecom/Emulator/rom/
 ```
 
-`cp from to` copies a file. `( )` mean something to the shell, so the name goes in `'…'`.
+Installed with `--deb`:
+
+```sh
+cp ~/'PC-E500(7.2).ROM' ~/.local/share/PockeComE500/rom/
+```
+
+`cp from to` copies a file.
 
 "Open the data folder" in the right-click menu opens the folder. "Open ROM" chooses a ROM anywhere else.
 
@@ -125,9 +115,26 @@ The case-only and screen-only views, moving by dragging, sizing by the edges and
 
 ## Updating and uninstalling
 
-When a new version is out, a "New version" button appears on the toolbar. Quit the emulator and type the lines of [Installing](#installing) again, from `get`. The `.deb` replaces the old one; the tar.gz unpacks over the folder. ROMs, RAM and settings stay.
+When a new version is out, a "New version" button appears on the toolbar. Quit the emulator and run the line of [Installing](#installing) again (with `--deb`, if that is how it was installed). ROMs, RAM and settings stay.
 
-To take it out: for the `.deb`, `sudo apt remove pc-e500-emulator` (the data stays); for the tar.gz, delete `~/pockecom/Emulator` and `~/.local/bin/pokecom` (the data goes too).
+To take it out, installed without `--deb` (the data goes too, so move ROMs and the like first):
+
+```sh
+rm -r ~/pockecom/Emulator
+rm ~/.local/bin/pc-e500 ~/.local/bin/pokecom ~/.local/share/applications/pc-e500.desktop
+```
+
+Installed with `--deb` (the data stays):
+
+```sh
+sudo apt remove pc-e500-emulator
+```
+
+| Command | What it does |
+|---|---|
+| `rm -r folder` | Deletes a folder with what is in it |
+| `rm file…` | Deletes files: here the terminal commands and the entry in the app list |
+| `sudo apt remove name` | Takes a package out |
 
 ## Moving data to and from Windows
 

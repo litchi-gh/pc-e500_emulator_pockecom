@@ -19,8 +19,8 @@ PRINT 12*34
 | システム | `pokecom` の場所 |
 |---|---|
 | Windows | `pokecom-<版>-win-x64.zip` を展開したフォルダの `pokecom.exe` |
-| Ubuntu | [2章](02_LINUX.md#入れかた)のコマンドで `.deb` を入れれば `pokecom`。tar.gz なら `~/pockecom/Emulator/pokecom` |
-| Mac | [3章](03_MACOS.md#入れかた)のコマンドで入れれば `pokecom` |
+| Ubuntu | [2章](02_LINUX.md#入れかた)の1行で入れれば `pokecom` |
+| Mac | [3章](03_MACOS.md#入れかた)の1行で入れれば `pokecom` |
 
 ### ROM の探し方
 
