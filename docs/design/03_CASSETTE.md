@@ -1,62 +1,65 @@
-# Cassette signal endpoint
+# 3. カセットの信号
 
-The native core transports physical CI/CO levels. It does not translate tape
-bytes, filenames, blocks or checksums. A pulse is a positive duration in CPU
-cycles (768,000 cycles/second) and a level0/1. Adjacent pulses may have the same
-level, for example when splitting a silence longer than UINT32_MAX cycles.
+コアは、カセットの CI（入力）と CO（出力）の信号のレベルをそのまま扱います。テープのバイト・ファイル名・ブロック・検査値は解釈しません（それは ROM の仕事です）。
 
-CI is visible in SSR bit1 only while SCR BZ2 is enabled. SCR modes6/7 mirror
-CI onto CO and the actual48kHz audio stream. Playback and capture advance at
-individual cycles inside peripheral steps, including during HALT/OFF; an
-external recorder does not use the UART's clock. Recording observes the same
-CO source as the11-pin bus and audio oscillator.
+この機能はコアの API だけにあり、アプリにテープを操作する画面はありません。
 
-All functions use the existing C ABI and a Machine pointer:
+## 信号の表しかた
 
-| Function | Result |
+信号は、長さ（CPU のサイクル数。1秒は 768,000 サイクル）と、レベル（0 か 1）の組（パルス）の並びです。隣り合うパルスのレベルが同じでもかまいません（UINT32_MAX サイクルより長い無音を分けるときなど）。
+
+- CI は、SCR の BZ2 が有効なときだけ、SSR の bit1 に見えます。
+- SCR のモード 6・7 では、CI が CO と、実際の 48kHz の音声に出ます。
+- 再生と録音は、周辺機器の処理の中で1サイクルずつ進みます。HALT や OFF の間も進み、外のレコーダーは UART のクロックを使いません。
+- 録音は、11 ピンのバスや音の発振器と同じ CO を見ます。
+
+## API
+
+どの関数も、既存の C ABI と同じく Machine のポインタを受け取ります。
+
+| 関数 | 結果 |
 |---|---|
-| `e500_tape_connect(m,on)` |1 on success,0 for invalid input |
-| `e500_tape_remote(m,on)` | Select manual0(default) or CE-126P remote1;0 rejects invalid values or an active/armed transfer |
-| `e500_tape_load(m,uint32_t *cycles,uint8_t *levels,int count)` |1 if the entire waveform was accepted;0 retains existing input |
-| `e500_tape_append(m,uint32_t *cycles,uint8_t *levels,int count)` |1 appends a complete pulse chunk, including during playback;0 retains input |
-| `e500_tape_play(m)` |1 starts/resumes loaded pulses;0 while offline, empty, already playing or recording |
-| `e500_tape_record(m)` |1 starts CO capture;0 while offline, playing or already recording |
-| `e500_tape_stop(m)` |1 stops playback/capture, retaining pending input and captured output |
-| `e500_tape_read(m,uint32_t *cycles,uint8_t *levels,int count)` | Number of completed captured pulses drained into the two arrays |
-| `e500_tape_status(m)` | Bit0 connected,1 playing,2 recording,3 input pending,4 capture overflow,5 output pending,6 remote cable enabled,7 external motor running |
+| `e500_tape_connect(m,on)` | 成功なら 1、引数が誤りなら 0 |
+| `e500_tape_remote(m,on)` | 0 は手動（既定）、1 は CE-126P のリモート。引数が誤りか、転送中・待機中なら 0 |
+| `e500_tape_load(m,uint32_t *cycles,uint8_t *levels,int count)` | 波形を全部受け付けたら 1。0 のとき、前の入力は残る |
+| `e500_tape_append(m,uint32_t *cycles,uint8_t *levels,int count)` | 続きを足せたら 1（再生中でもよい）。0 のとき、前の入力は残る |
+| `e500_tape_play(m)` | 再生を始めた・再開したら 1。接続なし・空・再生中・録音中なら 0 |
+| `e500_tape_record(m)` | CO の録音を始めたら 1。接続なし・再生中・録音中なら 0 |
+| `e500_tape_stop(m)` | 再生か録音を止めたら 1。残りの入力と録音したものは残る |
+| `e500_tape_read(m,uint32_t *cycles,uint8_t *levels,int count)` | 2つの配列に取り出した、録音済みのパルスの数 |
+| `e500_tape_status(m)` | bit0 接続、1 再生中、2 録音中、3 入力の残りあり、4 録音のあふれ、5 録音の取り出し待ち、6 リモート有効、7 外のモーターが回転中 |
 
-Playback resumes the remaining duration of a partially played pulse. Loading
-zero pulses after stopping unloads the input. Load rejects zero durations,
-levels other than0/1 and more than1,048,576 pulses before changing input.
-Append has the same validation and queue bound. It retains the remaining
-duration of the current pulse, allowing long tapes to be supplied in chunks
-without an artificial silence. Queue the next chunk before input is exhausted.
-Recording and playback are mutually exclusive. Capture buffers at most
-1,048,576 completed pulses; drain output during long recordings. Overflow
-stops capture, retains its complete prefix and sets the status bit.
+- 途中で止めた再生は、そのパルスの残りから再開します。止めたあとに 0 個のパルスを読み込むと、入力を外します。
+- `load` は、長さ 0、0 と 1 以外のレベル、1,048,576 個を超えるパルスを、入力を変える前に断ります。`append` も同じ検査と上限です。今のパルスの残りは保つので、長いテープを、間に無音を入れずに分けて渡せます。入力がなくなる前に次を渡してください。
+- 再生と録音は同時にはできません。
+- 録音は 1,048,576 個のパルスまでためます。長い録音では、途中で取り出してください。あふれると録音を止め、そこまでの分を残し、bit4 を立てます。
 
-In remote mode, play/record arms the deck and a stopped motor freezes tape
-position. CE-126P device code10h starts the motor and00h stops it, after all
-eight LSB-first bits and the end of the device selection. Partial codes,
-tones, and other device codes do not change the motor. Input is quiet while
-stopped; recording ignores changes made while tape is stationary and counts
-only moving time. A restart retains a partly consumed pulse and continuous
-recorded levels. Manual mode advances independently of the motor.
+## リモート（CE-126P）
 
-Disconnecting CE-126P stops the motor immediately. CPU reset and state load
-preserve the powered external motor and the user's remote-cable preference;
-neither is rewound with CPU snapshots. No snapshot format change is needed.
-An armed remote transfer still rejects snapshots, including when stopped.
+リモートのときは、`play` と `record` は待機の状態にするだけで、モーターが止まっている間はテープの位置が進みません。
 
-Snapshots are refused while input remains queued or tape I/O is active. A
-CPU reset stops tape I/O and unloads input; it preserves connection and already
-captured external output. Loading an idle CPU snapshot also preserves captured
-output. External recording history is never rewound by machine snapshots.
+- CE-126P の機器コード 10h でモーターが回り、00h で止まります。8 ビット（下位から）がそろい、機器の選択が終わったところで切り替わります。途中のコード・音・ほかの機器コードでは変わりません。
+- 止まっている間、入力は無音です。録音は、止まっている間の変化を無視し、動いている時間だけを数えます。
+- 動き出すと、使いかけのパルスと、録音のレベルの続きから再開します。
+- 手動のときは、モーターに関係なく進みます。
+- CE-126P を外すと、モーターはすぐ止まります。
 
-Run `Emulator/tools/test-cassette.cmd` for the signal model and
-`Emulator/tools/test-native.cmd` for the real Machine/API, CI gate,48kHz audio,
-exact oscillator edges and reset/snapshot behavior. Neither uses a stock ROM.
-This endpoint does not yet provide desktop WAV controls. CustomROM implements
-physical CAS blocks/headers, remote commands/start-stop waits and the
-CAS special-file/FCS layer on this endpoint; see
-the ROM driver and its native/C validation (not in this repository).
+## リセットと状態の保存
+
+| 操作 | カセットの扱い |
+|---|---|
+| CPU のリセット | テープの動作を止め、入力を外す。接続と、録音済みのものは残る |
+| 状態の保存・読み込み | 入力が残っているか、テープが動作中・待機中なら断る（モーターが止まっていても） |
+| 状態の読み込み | 録音済みのものは残る。外の録音は、状態と一緒には巻き戻らない |
+| リセットと状態の読み込み | 外のモーターと、リモートの設定は変わらない |
+
+状態ファイルの形式は変わりません。
+
+## 検証
+
+どちらも ROM は要りません。
+
+| スクリプト | 内容 |
+|---|---|
+| `tools/test-cassette.cmd` | 信号の扱い |
+| `tools/test-native.cmd`（Linux と Mac では `sh tools/test-native.sh`） | 実際の Machine と API、CI の有効・無効、48kHz の音声、発振器の切り替わりの位置、リセットと状態の保存 |

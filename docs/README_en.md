@@ -55,9 +55,9 @@
 
 | Document | |
 |---|---|
-| [Building and testing](design/01_BUILD_en.md) | How the code is laid out, building, testing, packaging |
-| [AMC](design/02_AMC.md) | The CPU's address conversion |
-| [Cassette](design/03_CASSETTE.md) | Cassette signals |
+| [Building and testing](design/01_BUILD.md) | How the code is laid out, building, testing, packaging (Japanese) |
+| [AMC](design/02_AMC.md) | The CPU's address conversion (Japanese) |
+| [Cassette](design/03_CASSETTE.md) | Cassette signals (Japanese) |
 | [Change history](CHANGELOG.md) | By version (Japanese) |
 | [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) | Provenance and licences |
 | [The illustrated manual](../app/manual/index_en.html) | What the Help button opens |

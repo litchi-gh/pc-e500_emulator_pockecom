@@ -1,59 +1,50 @@
-# AMC address translation
+# 2. AMC（番地変換）
 
-The native core implements the SC62015 AMC register at internal EFh.
-Its source is the Sharp ESR-L Instruction Manual, printed8-9
-([original scan](https://github.com/Robert-van-Engelen/Forth500/blob/main/resources/ESR%20L%20CPU%20technical%20manual.pdf)).
-No manufacturer ROM code, font or conversion table is used.
+コアは、SC62015 の内部 RAM EFh にある AMC レジスタを実装しています。もとにした資料は、シャープの ESR-L 命令説明書の印刷ページ 8〜9（[スキャン](https://github.com/Robert-van-Engelen/Forth500/blob/main/resources/ESR%20L%20CPU%20technical%20manual.pdf)）です。メーカーの ROM のコード・フォント・変換表は使っていません。
 
-With AME (bit7) clear, ordinary internal/card mirroring is unchanged. With
-AME set, AM5..0 describes CE0 capacity in2KB units, with zero meaning2KB.
-Bit6 is reserved. The populated CE0 boundary is:
+## 変換のしかた
 
-    boundary = C0000h - ((AMC & 3Fh) + 1) * 2048
+AMC の AME（bit7）が 0 のときは、内蔵 RAM と RAM カードのミラーはふだんどおりです。
 
-Addresses in the PC-E500 CE0 decode region80000h..BFFFFh below that boundary
-select CE1 instead. Their offset before the boundary wraps within the CE1
-decode width, then the inserted card's ordinary physical mirroring applies.
-The CPU has no register describing the inserted CE1 card's capacity. Thus
-the translated region includes aliases below the populated card window.
-Direct40000h..7FFFFh accesses remain physical card accesses.
+AME が 1 のときは、AM5〜AM0 が CE0（内蔵 RAM）の容量を 2KB 単位で表します（0 は 2KB）。bit6 は予約です。CE0 の先頭は次の番地になります。
 
-For32KB CE0 and64KB CE1, AMC8Fh maps virtual A8000h..B7FFFh to the physical
-card and leaves B8000h..BFFFFh as internal RAM. The core keeps physical card
-images at40000h, independently of this CPU-visible window. Snapshot formats
-are unchanged: existing internal-register storage retains AMC.
+```
+境目 = C0000h - ((AMC & 3Fh) + 1) * 2048
+```
 
-Hardware CPU reset clears AME while retaining the size bits. The original
-generated CPU used the manual reset table's ACM/FEh typo and instead cleared
-LCC bit7. The generator now selects AMC/EFh; generation changes exactly that
-reset reference. The desktop e500_reset API intentionally initializes the
-entire CPU/LCD and is broader than the pin-level Csc62015::Reset.
+- CE0 の範囲 80000h〜BFFFFh のうち、境目より下の番地は、CE1（RAM カード）を選びます。境目からの隔たりは CE1 の範囲の中で折り返し、そのあとは、入っているカードのふだんのミラーに従います。
+- CPU には、入っているカードの容量を表すレジスタがありません。そのため、変換した範囲には、カードの本体の窓より下の写しも含まれます。
+- 40000h〜7FFFFh を直接読み書きしたときは、今までどおりカードそのものです。
 
-CPU reads, writes, instruction fetches, debugger reads and debugger writes
-share translation. Debugger writes accept a valid joined CE1-to-CE0 boundary
-within one logical range. They still preflight the whole range, reject a
-card/internal mirror wrapping over itself, and leave memory unchanged on
-ROM/unmapped/overflow failure. Physical card import/export remains physical.
+例：内蔵 RAM 32KB、カード 64KB で AMC が 8Fh なら、A8000h〜B7FFFh がカード、B8000h〜BFFFFh が内蔵 RAM になります。
 
-The16-bit program counter and its page segment remain separate. The own-code
-instruction/operand test crosses the RAM bank boundary at B7FFFh/B8000h,
-within one program page; it does not assume carry into the page segment.
+コアの中では、カードの中身は CPU から見える窓とは別に、いつも 40000h に置いています。AMC は内部レジスタとして元から保存しているので、状態ファイルの形式は変わりません。
 
-## Verification
+## リセット
 
-Emulator/tools/test-native.cmd runs ROM-free native tests. AMC cases include
-the published example, every documented capacity code, reserved bit6,
-2..256KB card mirroring, absent cards, actual cross-bank instruction fetch,
-atomic debugger failures, snapshot restoration and reset/LCC preservation.
+CPU のハードウェアリセットは、容量のビットを残して AME を 0 にします。
 
-CustomROM/tools/check_desktop_core.py verifies the actual published DLL on
-64/128/256KB configurations. Its synthetic own ROM enables AMC and fetches
-an instruction across the bank boundary through the normal public APIs;
-no coverage or test-entry export is used. The report includes source, native
-DLL, own-fixture and independent-DOS-ROM hashes.
+移植元から作った CPU のコードは、説明書のリセットの表の誤植（ACM／FEh）のとおりで、代わりに LCC の bit7 を 0 にしていました。生成のスクリプトは AMC／EFh を選ぶように直してあり、生成で変わるのはこのリセットの参照だけです。
 
-Actual pairing through the independent ROM's device6/3F remains separate
-work. AMC alone does not implement its memory allocator or protect the DOS
-working areas. The CPU control encodes CE0 sizes only through128KB; do not
-infer a valid arbitrary combined mapping for modified256KB internal RAM or
-a combined range outside the CE0 decode window.
+API の `e500_reset` は CPU と液晶の全体を初期化するもので、端子のリセット `Csc62015::Reset` より範囲が広くなっています。
+
+## 読み書きの範囲
+
+- CPU の読み出し・書き込み・命令の取り出し、デバッガの読み書きは、同じ変換を通ります。
+- デバッガの書き込みは、1つの範囲がカードから内蔵 RAM へまたがっていても受け付けます。先に範囲の全体を調べ、ミラーが自分自身に重なるときや、ROM・未定義・範囲の外にかかるときは、何も書きません。
+- RAM カードのイメージの読み書きは、変換を通さず、カードそのものに対して行います。
+- 16 ビットのプログラムカウンタと、ページのセグメントは別のままです。命令と引数の取り出しの試験は、1つのプログラムページの中で B7FFFh／B8000h の境目をまたぎます。ページのセグメントへの桁上がりは仮定していません。
+
+## 検証
+
+`tools/test-native.cmd`（Linux と Mac では `sh tools/test-native.sh`）が、ROM なしで次を試します。
+
+- 説明書の例、説明書にある容量の値すべて、予約の bit6
+- 2〜256KB のカードのミラー、カードなし
+- バンクをまたぐ命令の取り出し
+- デバッガの書き込みが失敗したとき、何も変わらないこと
+- 状態の復元、リセットと LCC の保持
+
+## 範囲の限り
+
+AMC だけでは、ROM のメモリの割り当てや作業域の保護は行いません。CPU が表せる CE0 の容量は 128KB までです。内蔵 RAM を 256KB に増設したときや、CE0 の範囲の外にまたがる組み合わせは対象にしていません。

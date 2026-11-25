@@ -114,7 +114,7 @@ PRINT 12*34
 
 - **Load program**: load a BAS or BIN file from the PC into the machine, from the toolbar or by drag and drop. A BAS in the form the machine saves goes straight into RAM, with no `LOAD` typed.
 - **Memory**: 8 to 256KB of internal RAM (up to the E650/U6000 expansion mod). RAM cards are image files you create and swap.
-- **AMC**: the CPU's address conversion is supported, so a RAM card can join directly below the internal RAM. The card image and state file formats are unchanged. See [what is implemented and checked](docs/design/02_AMC.md).
+- **AMC**: the CPU's address conversion is supported, so a RAM card can join directly below the internal RAM. The card image and state file formats are unchanged. See [what is implemented and checked](docs/design/02_AMC.md) (Japanese).
 - **Saving**: the contents survive power-off. Save and restore the whole state at any time.
 - **Speed**: 0.5x to 4x, with BEEP sound.
 - **Language**: Japanese or English.
@@ -160,7 +160,7 @@ The full list is in [the change history](docs/CHANGELOG.md) (Japanese).
 |---|---|
 | [docs/README_en.md](docs/README_en.md) | The contents of the manual (20 chapters: Windows, Ubuntu, the Mac, using it, the command line, MCP, troubleshooting) |
 | [app/manual/index_en.html](app/manual/index_en.html) | The illustrated user manual (the Help button opens it) |
-| [docs/design/](docs/design/01_BUILD_en.md) | Building and testing, implementation notes |
+| [docs/design/](docs/design/01_BUILD.md) | Building and testing, implementation notes (Japanese) |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Change history (Japanese) |
 
 ## License
