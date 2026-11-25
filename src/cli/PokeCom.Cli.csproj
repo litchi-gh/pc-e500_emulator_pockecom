@@ -16,7 +16,10 @@
     <ForWindows Condition="'$(RuntimeIdentifier)'!='' And $(RuntimeIdentifier.StartsWith('win'))">true</ForWindows>
     <ForWindows Condition="'$(RuntimeIdentifier)'=='' And '$(OS)'=='Windows_NT'">true</ForWindows>
     <CoreFile Condition="'$(ForWindows)'=='true'">../../bin/e500core.dll</CoreFile>
-    <CoreFile Condition="'$(ForWindows)'!='true'">../../bin/libe500core.so</CoreFile>
+    <ForMac Condition="'$(RuntimeIdentifier)'!='' And $(RuntimeIdentifier.StartsWith('osx'))">true</ForMac>
+    <ForMac Condition="'$(RuntimeIdentifier)'=='' And $([MSBuild]::IsOSPlatform('OSX'))">true</ForMac>
+    <CoreFile Condition="'$(ForWindows)'!='true' And '$(ForMac)'=='true'">../../bin/libe500core.dylib</CoreFile>
+    <CoreFile Condition="'$(ForWindows)'!='true' And '$(ForMac)'!='true'">../../bin/libe500core.so</CoreFile>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../shared/*.cs" LinkBase="shared" />

@@ -11,7 +11,7 @@ namespace PokeCom;
 /// </summary>
 internal static class Native
 {
-    // "e500core.dll" on Windows, "libe500core.so" on Linux.
+    // "e500core.dll" on Windows, "libe500core.so" on Linux, "libe500core.dylib" on macOS.
     const string Dll = "e500core";
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern IntPtr e500_create(byte[] rom, int size);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern IntPtr e500_create_config(byte[] rom,int size,int ram,int card);

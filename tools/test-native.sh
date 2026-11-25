@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds and runs the core's tests on Linux.
+# Builds and runs the core's tests on Linux and macOS.
 set -e
 cd "$(dirname "$0")/.."
 out=$(mktemp -d)

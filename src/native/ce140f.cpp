@@ -3,6 +3,8 @@
 // CE-140F ドライブの実装（仕様は ce140f.h を参照）。
 #include "ce140f.h"
 #include <algorithm>
+#include <cctype>
+#include <cstdio>
 #include <fstream>
 #include <numeric>
 #include <cstring>
@@ -28,9 +30,9 @@ struct DiskError:std::runtime_error {
 };
 // 扱うファイルの上限（1MB）。
 static constexpr size_t MaxFile=1024*1024;
-// What differs between Windows and Linux, in one place: links, the read-only
+// What differs between Windows and the others (Linux, macOS), in one place: links, the read-only
 // mark, and putting a finished file in the place of the old one.
-// Windows と Linux で違う所：リンクか、読み取り専用の印、書き終えたファイルの置き換え。
+// Windows とほか（Linux・macOS）で違う所：リンクか、読み取り専用の印、書き終えたファイルの置き換え。
 #ifdef _WIN32
 // パスがシンボリックリンク・ジャンクションなど、別の場所を指すものか。
 static bool reparse(const fs::path &p) {

@@ -1,0 +1,42 @@
+# Builds and tries pokecom on GitHub's Macs. Only by hand, or on a branch named ci/...: there is no ROM here,
+# so it goes as far as the core's own tests and starting the program.
+name: macOS command line
+on:
+  workflow_dispatch:
+  push:
+    branches: ['ci/**']
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            rid: osx-arm64
+          - os: macos-15-intel
+            rid: osx-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: sh tools/package-macos.sh
+      - run: CXX=clang++ sh tools/test-native.sh
+      # Unpacked as a user would; without a ROM it must say so, with exit code 1.
+      - run: |
+          mkdir try && tar xzf dist/pokecom-*-${{ matrix.rid }}.tar.gz -C try && cd try/*
+          file pokecom libe500core.dylib
+          codesign --verify --verbose pokecom libe500core.dylib
+          ./pokecom help | head -5
+          if ./pokecom exec "PRINT 1"; then exit 1; else test $? -eq 1; fi
+          # A blank image of the right size loads the core, makes a machine of it and runs it; BASIC never comes up.
+          head -c 262144 /dev/zero > rom/blank.rom
+          ./pokecom exec "PRINT 1" --rom rom/blank.rom --lang en 2>&1 | tee out.txt || true
+          grep -q BASIC out.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pokecom-${{ matrix.rid }}
+          path: dist/pokecom-*-${{ matrix.rid }}.tar.gz

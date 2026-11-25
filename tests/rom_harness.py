@@ -4,7 +4,7 @@
 """
 from pathlib import Path
 import ctypes as c
-import os
+import os, sys
 from PIL import Image
 ROOT=Path(__file__).resolve().parents[1]
 # キーの行列（Keyboard.cs の Matrix と同じ並び）。KEYS はキーの名前から（行, ビット）を引く表。
@@ -18,7 +18,7 @@ class Emulator:
  """エミュレーションコア1台。ram・card は内蔵 RAM とカードの容量（KB）、disk は CE-140F のフォルダ、rom は ROM のパス。"""
  def __init__(self,ram=32,card=0,disk=None,rom=None):
   self.capture=None
-  self.lib=c.CDLL(str(ROOT/'bin'/('e500core.dll' if os.name=='nt' else 'libe500core.so')));l=self.lib
+  self.lib=c.CDLL(str(ROOT/'bin'/('e500core.dll' if os.name=='nt' else 'libe500core.dylib' if sys.platform=='darwin' else 'libe500core.so')));l=self.lib
   for n,types,result in [('create_config',[c.c_void_p,c.c_int,c.c_int,c.c_int],c.c_void_p),('run',[c.c_void_p,c.c_int],c.c_int),('key',[c.c_void_p,c.c_int,c.c_int,c.c_int],None),('pixels',[c.c_void_p,c.c_void_p],None),('reg',[c.c_void_p,c.c_int],c.c_uint32),('disk_mount',[c.c_void_p,c.c_wchar_p if os.name=='nt' else c.c_char_p,c.c_int],c.c_int),('disk_trace',[c.c_void_p,c.c_void_p,c.c_int],c.c_int),('printer_read',[c.c_void_p,c.c_void_p,c.c_int],c.c_int),('printer_connect',[c.c_void_p,c.c_int],None),('peek',[c.c_void_p,c.c_int],c.c_int),('audio',[c.c_void_p,c.c_void_p,c.c_int],c.c_int),('reset',[c.c_void_p,c.c_int],None),('imem',[c.c_void_p,c.c_void_p],c.c_int),('cycles',[c.c_void_p],c.c_uint64),('symbols',[c.c_void_p,c.c_int],c.c_int),('destroy',[c.c_void_p],None)]:
    f=getattr(l,'e500_'+n);f.argtypes=types;f.restype=result
   rom_path=Path(rom) if rom else DEFAULT_ROM
