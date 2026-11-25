@@ -15,7 +15,7 @@ done
 OUT=$WORK/$NAME
 mkdir -p "$OUT/manual" dist
 for f in PC-E500 pokecom libe500core.so libSkiaSharp.so libHarfBuzzSharp.so; do cp "$WORK/out/$f" "$OUT/"; done
-cp src/avalonia/pc-e500.png LICENSE THIRD_PARTY_NOTICES.md third_party/dotnet/DOTNET-*.txt third_party/avalonia/*.txt "$OUT/"
+cp src/avalonia/pc-e500.png LICENSE docs/THIRD_PARTY_NOTICES.md third_party/dotnet/DOTNET-*.txt third_party/avalonia/*.txt "$OUT/"
 sed "s/@VERSION@/$VERSION/" packaging/linux/README.txt > "$OUT/README.txt"
 cp -r app/manual/*.html app/manual/images app/manual/images-en "$OUT/manual/"
 mkdir "$OUT/rom" "$OUT/ram" "$OUT/drive-x"

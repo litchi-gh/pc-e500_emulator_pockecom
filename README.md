@@ -1,8 +1,8 @@
-# PC-E500 シリーズ エミュレータ for Windows（PokeCom）
+# PC-E500 シリーズ エミュレータ（PokeCom）
 
 [English](README_en.md)
 
-シャープのポケットコンピュータ **PC-E500 シリーズ** を、実機の ROM のまま Windows で動かすエミュレータです。CPU（SC62015）から液晶・キー・周辺機器までを再現しているので、BASIC も関数電卓も、ROM に入っている実機の処理がそのまま動きます。
+シャープのポケットコンピュータ **PC-E500 シリーズ** を、実機の ROM のまま PC で動かすエミュレータです。Windows と Ubuntu ではウィンドウで、Windows・Linux・Mac ではコマンドラインや AI のツール（MCP）からも使えます。CPU（SC62015）から液晶・キー・周辺機器までを再現しているので、BASIC も関数電卓も、ROM に入っている実機の処理がそのまま動きます。
 
 ![メインウィンドウ（PC-E500）](app/manual/images/main-e500.png)
 
@@ -11,11 +11,20 @@
 | 機種 | ROM | 本体の外観 |
 |---|---|---|
 | PC-E500・PC-E550・PC-1480U・PC-1490U・PC-1490UII | 256KB | PC-E500 |
+| PC-E500S | 384KB（本体の S3A と拡張の S3B を結合） | PC-E500 |
 | PC-E650・PC-U6000 | 384KB（本体の S3A と拡張の S3B を結合） | PC-E650 |
 
-**ROM は含まれていません。** お手持ちの実機から吸い出してください（[吸い出しの手順](MANUAL.md#実機からのrom吸い出しと-toolsmerge_savem_rompy)）。PC-E500・PC-E550・PC-1480U・PC-1490UII・PC-E650・PC-U6000 の ROM で動作確認済みです。
+**ROM は含まれていません。** お手持ちの実機から吸い出してください（[吸い出しの手順](docs/manual/04_ROM.md#実機からのrom吸い出しと-toolsmerge_savem_rompy)）。PC-E500・PC-E500S・PC-E550・PC-1480U・PC-1490UII・PC-E650・PC-U6000 の ROM で動作確認済みです。
 
 ## 動作環境
+
+| システム | 使えるもの | 説明 |
+|---|---|---|
+| Windows 10 / 11（x64） | ウィンドウのあるエミュレータ、コマンドライン、MCP | [1章](docs/manual/01_WINDOWS.md) |
+| Ubuntu 24.04 以降（x86-64） | ウィンドウのあるエミュレータ、コマンドライン、MCP | [2章](docs/manual/02_LINUX.md) |
+| macOS 15 以降（14 でも動く見込み）、Apple シリコンか Intel | コマンドライン、MCP | [3章](docs/manual/03_MACOS.md) |
+
+Windows 版の詳細です。
 
 | 項目 | 内容 |
 |---|---|
@@ -64,7 +73,7 @@ XInput（Xbox 系）や DirectInput のゲームパッドのボタンに、本�
 
 ### 周辺機器：CE-140F と CE-126P
 
-- **CE-140F（フロッピー）**：PC のフォルダを X: ドライブとして使います。`SAVE "X:..."`・`LOAD`・`OPEN`・`FILES` などが、実機と同じ11ピンの通信で動きます。実機とプログラムをやり取りするときは、通常の形（`,A` なし）を使ってください。テキストの形は、CE-140F のエミュレータ（ハード）の不具合で、実機での読み込みの最後にエラーが出ます（[詳しく](MANUAL.md#実機とのファイルのやり取り)）。
+- **CE-140F（フロッピー）**：PC のフォルダを X: ドライブとして使います。`SAVE "X:..."`・`LOAD`・`OPEN`・`FILES` などが、実機と同じ11ピンの通信で動きます。実機とプログラムをやり取りするときは、通常の形（`,A` なし）を使ってください。テキストの形は、CE-140F のエミュレータ（ハード）の不具合で、実機での読み込みの最後にエラーが出ます（[詳しく](docs/manual/10_PROGRAMS.md#実機とのファイルのやり取り)）。
 - **CE-126P（プリンタ）**：`LPRINT`・`LLIST` を24桁で印字します。紙はテキストや PNG で保存できます。USB のサーマルプリンタ（58mm）や、Windows のプリンタにも印刷できます。
 
 | | |
@@ -84,17 +93,36 @@ CPU のレジスタ、内部 RAM、メモリを見ながら、その場で書き
 
 ![デバッグウィンドウ](app/manual/images/debugger.png)
 
+### コマンドラインと、AI からの操作（MCP）
+
+`pokecom` は、ウィンドウなしでエミュレータを動かすコマンドです。BASIC を実行して液晶や印字を受け取れるので、プログラムの自動テストにも使えます。`pokecom mcp` は MCP サーバーで、Claude Code・VS Code・Cursor などの AI のツールが、BASIC のプログラムを書いて実際に動かせます。
+
+```console
+$ pokecom exec "PRINT 12*34"
+PRINT 12*34
+                                     408
+>
+```
+
+[コマンドラインの使い方](docs/manual/16_CLI.md) ・ [MCP サーバーの使い方](docs/manual/18_MCP.md)
+
+### Ubuntu でも同じ操作
+
+![Ubuntu で動かしたところ](docs/images/linux-main.png)
+
 ### そのほか
 
 - **プログラム読込**：PC の BAS・BIN を、ツールバーかドラッグ＆ドロップで本体に読み込めます。本体で保存した形の BAS は、`LOAD` を打たずに RAM へ直接入ります。
 - **メモリ**：内蔵 RAM は 8〜256KB です（E650/U6000 の増設改造相当まで）。RAM カードはイメージファイルとして作り、差し替えられます。
-- **AMC**：CPUの番地変換に対応し、カードを内蔵RAMの直前へつなぐアクセスを再現します。物理カード画像と状態ファイル形式は維持します。[実装・検証範囲](src/native/AMC.md)を参照してください。
+- **AMC**：CPUの番地変換に対応し、カードを内蔵RAMの直前へつなぐアクセスを再現します。物理カード画像と状態ファイル形式は維持します。[実装・検証範囲](docs/design/02_AMC.md)を参照してください。
 - **保存**：電源を切っても内容は残ります。いつでも状態を保存・復元できます。
 - **速度**：0.5〜4倍で動かせます。BEEP の音も鳴ります。
 - **表示言語**：日本語と英語を選べます。
 - **更新**：新しい版が出たらツールバーで知らせます（更新は手動です）。
 
-## はじめかた
+## はじめかた（Windows）
+
+Ubuntu は [2章](docs/manual/02_LINUX.md)、Mac は [3章](docs/manual/03_MACOS.md)を見てください。
 
 1. [リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)から、インストーラー（`-setup.exe`）か zip を入手します。Windows x64 用で、.NET などを別に入れる必要はありません。0.0.4 より後のリリースでは、本文に各ファイルの SHA-256 を載せています。ダウンロードしたファイルが本物かは、PowerShell の `Get-FileHash <ファイル名>` で出る値と比べて確かめられます。
 2. 実機から吸い出した ROM を、データフォルダの `rom` に置きます。右クリックのメニューの「データフォルダを開く」で開けます。
@@ -110,15 +138,16 @@ CPU のレジスタ、内部 RAM、メモリを見ながら、その場で書き
 - **機械語エリア**：内蔵 RAM の並びを見ながら確保できます。デバッグにはメモリマップと 8 バイトごとのチェックサムが付きました。
 - **設定**：常に手前に表示、自動電源 OFF の切り替えを足しました。
 
-一覧は [CHANGELOG.md](CHANGELOG.md) にあります。
+一覧は [変更履歴](docs/CHANGELOG.md) にあります。
 
 ## ドキュメント
 
 | ファイル | 内容 |
 |---|---|
-| [MANUAL.md](MANUAL.md) | 詳しい使い方と仕組み（キー操作、設定、コントローラー、RAM、CE-140F・CE-126P、プログラム読込、保存、ROM の吸い出し、ビルドとテスト） |
+| [docs/README.md](docs/README.md) | マニュアルの目次（20章：Windows・Ubuntu・Mac、使い方、コマンドライン、MCP、困ったとき） |
 | [app/manual/index.html](app/manual/index.html) | 画像付きの取扱説明書（ツールバーの「使い方」で開きます） |
-| [CHANGELOG.md](CHANGELOG.md) | 変更履歴 |
+| [docs/design/](docs/design/01_BUILD.md) | ビルドとテスト、実装の記録 |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 変更履歴 |
 
 ## ライセンス
 
@@ -129,7 +158,7 @@ CPU のレジスタ、内部 RAM、メモリを見ながら、その場で書き
 | ビルド済みアプリに同梱する .NET ランタイム / Windows Forms | MIT。通知は `app/DOTNET-LICENSE.txt`、`app/DOTNET-THIRD-PARTY-NOTICES.txt`、`app/WINDOWSDESKTOP-LICENSE.txt` |
 | 内蔵ROM・テクニカルリファレンスマニュアル | 本プロジェクトに**含まれません**。シャープ株式会社の著作物であり、利用者が所有する実機から各自で吸い出してください。ROMのダウンロード・埋め込み・再配布は行いません |
 
-詳細な由来は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) にまとめています。SHARP、PC-E500、CE-140F などの名称は各権利者の商標です。本プロジェクトはシャープ株式会社とは無関係です。
+詳細な由来は [THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) にまとめています。SHARP、PC-E500、CE-140F などの名称は各権利者の商標です。本プロジェクトはシャープ株式会社とは無関係です。
 
 ## 謝辞
 

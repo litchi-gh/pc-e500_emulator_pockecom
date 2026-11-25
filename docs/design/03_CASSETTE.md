@@ -59,4 +59,4 @@ exact oscillator edges and reset/snapshot behavior. Neither uses a stock ROM.
 This endpoint does not yet provide desktop WAV controls. CustomROM implements
 physical CAS blocks/headers, remote commands/start-stop waits and the
 CAS special-file/FCS layer on this endpoint; see
-[the ROM driver and its native/C validation](../../../CustomROM/TAPE_DESIGN.md).
+the ROM driver and its native/C validation (not in this repository).

@@ -34,6 +34,27 @@ class Folder(unittest.TestCase):
         return out if code == 0 else err
 
 
+class Manual(unittest.TestCase):
+    def test_reference_holds_every_command(self):
+        """The manual's command reference has every command, with every argument, in both languages."""
+        names = [line.split()[0] for line in cli('help')[1].split('Commands')[1].split('On one machine')[0].splitlines()[1:] if line.startswith('  ')]
+        names = sorted({*names, 'start', 'key-down', 'key-up', 'script', 'mcp', 'help', 'version'})
+        self.assertGreater(len(names), 36)
+        for folder in ('manual', 'manual_en'):
+            text = (ROOT / 'docs' / folder / '17_CLI_REFERENCE.md').read_text(encoding='utf-8')
+            parts = {p.splitlines()[0]: p for p in text.split('### ')[1:]}
+            for name in names:
+                with self.subTest(folder=folder, command=name):
+                    if name in ('script', 'mcp', 'help', 'version'):
+                        self.assertIn(f'| `{name}', text)
+                        continue
+                    out = cli('help', name)[1].splitlines()
+                    self.assertIn(out[0].strip(), parts[name])
+                    for line in out[3:]:
+                        if line.startswith('  '):
+                            self.assertIn(f'| `{line.split()[0]}` |', parts[name])
+
+
 class CommandLine(Folder):
     def test_exec(self):
         code, out, err = cli('exec', 'PRINT 12*34')

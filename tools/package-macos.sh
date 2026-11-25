@@ -15,7 +15,7 @@ for rid in osx-arm64 osx-x64; do
     dotnet publish src/cli/*.csproj -c Release -r $rid --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false -p:DebugType=none -o "$WORK/$rid" --nologo -v quiet
     OUT=$WORK/$NAME
     mkdir -p "$OUT/rom"
-    cp "$WORK/$rid/pokecom" "$WORK/$rid/libe500core.dylib" LICENSE THIRD_PARTY_NOTICES.md third_party/dotnet/DOTNET-*.txt "$OUT/"
+    cp "$WORK/$rid/pokecom" "$WORK/$rid/libe500core.dylib" LICENSE docs/THIRD_PARTY_NOTICES.md third_party/dotnet/DOTNET-*.txt "$OUT/"
     sed "s/@VERSION@/$VERSION/" packaging/macos/README.txt > "$OUT/README.txt"
     chmod 755 "$OUT/pokecom"
     # Signed ad hoc, without an Apple developer's name: Apple silicon runs nothing unsigned.
