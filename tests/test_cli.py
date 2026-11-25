@@ -1,5 +1,5 @@
 """コマンドライン（pokecom）と MCP サーバーのテスト。src/cli をビルドしたものを使う。"""
-import base64, json, os, pathlib, subprocess, tempfile, unittest, wave
+import base64, json, os, pathlib, shutil, subprocess, tempfile, unittest, wave
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 EXE = pathlib.Path(os.environ.get('POKECOM_CLI') or ROOT / 'src/cli/bin/Release/net10.0' / ('pokecom.exe' if os.name == 'nt' else 'pokecom'))
 ROMS = sorted(p for p in (ROOT / 'app/rom').iterdir() if p.suffix.lower() in ('.rom', '.bin') and p.stat().st_size in (256 * 1024, 256 * 1024 + 16, 384 * 1024))
@@ -32,6 +32,31 @@ class Folder(unittest.TestCase):
         got, out, err = cli('script', '-', *args, text=text, rom=rom)
         self.assertEqual(got, code, out + err)
         return out if code == 0 else err
+
+
+class WhereTheRomIs(Folder):
+    def test_first_folder_then_newest_version(self):
+        """The first folder with a ROM wins, and in it the newest PC-E500, by number."""
+        folders = [self.dir / 'now' / 'rom', self.dir / 'data' / 'PockeComE500' / 'rom']
+        env = {k: v for k, v in os.environ.items() if k != 'POKECOM_ROM'}
+        env['LOCALAPPDATA'] = env['XDG_DATA_HOME'] = str(self.dir / 'data')
+
+        def chosen():
+            r = subprocess.run([str(EXE), 'info', '--lang', 'en'], cwd=folders[0].parent, env=env, capture_output=True, encoding='utf-8', timeout=120)
+            return next(line for line in r.stdout.splitlines() if line.startswith('ROM:'))
+
+        def put(folder, *names):
+            folder.mkdir(parents=True, exist_ok=True)
+            for name in names:
+                shutil.copy(ROM, folder / name)
+        put(folders[0], 'small.txt', 'PC-E500(7.2).ROM', 'PC-E500(10.1).ROM', 'PC-E500.ROM', 'A.ROM')
+        (folders[0] / 'PC-E500(99.9).ROM').write_bytes(b'not a ROM')
+        put(folders[1], 'PC-E500(12.0).ROM')
+        self.assertIn('PC-E500(10.1).ROM', chosen())
+        for f in folders[0].iterdir():
+            if f.name != 'PC-E500.ROM':
+                f.unlink()
+        self.assertIn('PC-E500.ROM', chosen())
 
 
 class Manual(unittest.TestCase):

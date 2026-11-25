@@ -28,7 +28,7 @@ In this order; the first found is used.
 
 1. The file given with `--rom`
 2. The file in the `POKECOM_ROM` environment variable
-3. A `rom` folder: in the current folder, the folder of `pokecom`, or the user's data folder. Among files named `PC-E500(version).ROM`, the newest version
+3. A `rom` folder: in the current folder, the folder of `pokecom`, or the user's data folder, in that order. The first folder with a ROM is used: the newest of the files named `PC-E500(version).ROM` there, or else the first by name. A file of 256 KB (or 256 KB + 16, with its header) or 384 KB is taken for a ROM
 
 | System | The user's data folder |
 |---|---|

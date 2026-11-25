@@ -241,23 +241,22 @@ internal static class Roms
         if(here.Contains($"{s}src{s}cli{s}bin{s}",StringComparison.Ordinal))
             for(var d=new DirectoryInfo(here);d is not null;d=d.Parent)if(Directory.Exists(Path.Combine(d.FullName,"app","rom")))yield return Path.Combine(d.FullName,"app","rom");
     }
-    /// <summary>見つかった ROM（256KB・384KB のイメージ）。</summary>
-    internal static List<string> All() {
-        var found=new List<string>();
-        foreach(string folder in Folders().Distinct().Where(Directory.Exists))
-            foreach(string f in Directory.EnumerateFiles(folder).Order(StringComparer.OrdinalIgnoreCase)) {
-                long size=new FileInfo(f).Length;
-                if(size is 256*1024 or 256*1024+16 or 384*1024 && !found.Contains(f))found.Add(f);
-            }
-        return found;
+    /// <summary>フォルダの中の ROM（256KB・384KB のイメージ）。</summary>
+    static List<string> In(string folder)=>[..Directory.EnumerateFiles(folder).Where(f=>new FileInfo(f).Length is 256*1024 or 256*1024+16 or 384*1024).Order(StringComparer.OrdinalIgnoreCase)];
+    /// <summary>見つかった ROM。</summary>
+    internal static List<string> All()=>[..Folders().Distinct().Where(Directory.Exists).SelectMany(In)];
+    /// <summary>名前「PC-E500(7.2).ROM」の版（その形でなければ null）。</summary>
+    static Version? E500Version(string path) {
+        var m=System.Text.RegularExpressions.Regex.Match(Path.GetFileName(path),@"^PC-E500\((\d+\.\d+)\)",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return m.Success && Version.TryParse(m.Groups[1].Value,out var v)?v:null;
     }
     /// <summary>使う ROM（指定、環境変数 POKECOM_ROM、見つかったものの順）。</summary>
     internal static string Find(string? asked) {
         asked??=Environment.GetEnvironmentVariable("POKECOM_ROM") is {Length:>0} e?e:null;
         if(asked is not null)return File.Exists(asked)?asked:throw new FileNotFoundException(L.T($"ROM が見つかりません: {asked}",$"No ROM here: {asked}"));
-        var all=All();
-        // The PC-E500 of the highest version, else whatever there is.
-        return all.Where(f=>Path.GetFileName(f).StartsWith("PC-E500(",StringComparison.OrdinalIgnoreCase)).Order(StringComparer.OrdinalIgnoreCase).LastOrDefault() ?? all.FirstOrDefault()
+        // The first folder with a ROM: there, the PC-E500 of the highest version, else whatever comes first.
+        var roms=Folders().Where(Directory.Exists).Select(In).FirstOrDefault(r=>r.Count>0);
+        return roms?.Where(f=>E500Version(f) is not null).MaxBy(E500Version) ?? roms?[0]
             ?? throw new FileNotFoundException(L.T("ROM が見つかりません。--rom か環境変数 POKECOM_ROM で指定するか、次のどこかに置いてください。","No ROM was found. Give it with --rom or POKECOM_ROM, or put one in one of these folders.")+"\n"+string.Join("\n",Folders()));
     }
 }
