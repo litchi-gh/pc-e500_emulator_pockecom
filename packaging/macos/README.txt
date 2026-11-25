@@ -1,7 +1,8 @@
 pokecom for macOS @VERSION@ - SHARP PC-E500 series emulator, command line and MCP server
 https://github.com/litchi-gh/pc-e500_emulator_pockecom
 
-動作環境 / Requirements: macOS 14 以降 / macOS 14 or later
+動作環境 / Requirements: macOS 15 以降（14 でも動く見込み）、Apple シリコンか Intel
+                         macOS 15 or later (14 should work too), Apple silicon or Intel
 
 ターミナルでこのフォルダに移って使います。初めに一度、ダウンロードしたファイルの
 実行の制限を外してください（Apple の公証を受けていないため）。
