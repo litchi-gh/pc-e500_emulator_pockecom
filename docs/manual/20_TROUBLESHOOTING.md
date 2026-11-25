@@ -10,7 +10,8 @@
 | `S1(MAIN): NEW CARD`（アタラシイ カードデス）と出る | 初めての起動では正常です。PF1（F1）で初期化します（[5章](05_FIRST_STEPS.md)） |
 | Ubuntu で `./PC-E500` が起動しない | 端末から起動して、出るメッセージを見ます。tar.gz では足りないライブラリが自動では入らないので、`.deb` で入れるか、`sudo apt install libx11-6 libice6 libsm6 libfontconfig1 libasound2t64` を試します |
 | Ubuntu で日本語が □ になる | `sudo apt install fonts-noto-cjk` |
-| Mac で「開発元を確認できない」と出る | `xattr -dr com.apple.quarantine .` を実行します（[3章](03_MACOS.md#入れかた)） |
+| Mac で「開発元を確認できない」と出る | ブラウザでダウンロードしたものです。[3章](03_MACOS.md#入れかた)のコマンドで入れ直すか、`xattr -dr com.apple.quarantine ~/pockecom/Emulator` を実行します |
+| 入れるときに `curl: (2)` か `curl: option : blank argument` と出る | 名前の合うファイルが最新の[リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)にありません |
 
 ## 使っているとき
 

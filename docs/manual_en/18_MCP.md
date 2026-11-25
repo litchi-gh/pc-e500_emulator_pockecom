@@ -43,7 +43,8 @@ Paths, for example:
 |---|---|
 | Windows | `C:\\Tools\\pokecom\\pokecom.exe` (a `\` is written twice in JSON) |
 | Ubuntu (.deb) | `/usr/bin/pokecom` |
-| Mac | `/usr/local/bin/pokecom` |
+| Ubuntu (tar.gz) | `/home/name/pockecom/Emulator/pokecom` |
+| Mac | `/Users/name/pockecom/Emulator/pokecom` |
 
 ### Claude Code
 
@@ -188,7 +189,7 @@ Most AI tools ask before using a tool. Keep that on at first.
 
 | Symptom | Look at |
 |---|---|
-| The server does not start | Does the command's path run in a terminal? On a Mac, has [`xattr`](03_MACOS.md#installing) been done? |
+| The server does not start | Does the command's path run in a terminal? On a Mac, if downloaded with a browser, has [`xattr`](03_MACOS.md#installing) been done? |
 | "No ROM was found" | Is `POKECOM_ROM` or `--rom` given with a full path? |
 | The tools do not appear | Has the AI tool read its settings again (most need restarting)? |
 | The screen does not change | Is the last program still running? Press `BRK` with `key`, or start afresh with `start` |

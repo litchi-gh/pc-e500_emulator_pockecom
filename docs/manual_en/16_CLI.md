@@ -19,8 +19,8 @@ PRINT 12*34
 | System | Where `pokecom` is |
 |---|---|
 | Windows | `pokecom.exe` in the folder `pokecom-<version>-win-x64.zip` unpacks to |
-| Ubuntu | `pokecom` with the `.deb`; `./pokecom` in the folder of the tar.gz |
-| Mac | `./pokecom` in the folder of `pokecom-<version>-osx-arm64.tar.gz` (or `osx-x64`; [chapter 3](03_MACOS.md)) |
+| Ubuntu | `pokecom`, once the `.deb` is installed with the commands of [chapter 2](02_LINUX.md#installing); `~/pockecom/Emulator/pokecom` with the tar.gz |
+| Mac | `pokecom`, once installed with the commands of [chapter 3](03_MACOS.md#installing) |
 
 ### Where the ROM is looked for
 
@@ -121,10 +121,12 @@ $ pokecom script demo.txt
 ### Keep the screen, the sound and the paper
 
 ```console
-$ pokecom exec "PRINT 1" --png lcd.png            # the LCD at the end, as a PNG
-$ pokecom record beep.wav --line "BEEP 3"         # the sound, as a WAV
-$ pokecom script work.txt                         # with printed --to out.txt --png out.png in it
+$ pokecom exec "PRINT 1" --png lcd.png
+$ pokecom record beep.wav --line "BEEP 3"
+$ pokecom script work.txt
 ```
+
+These keep the LCD at the end as a PNG, the sound as a WAV, and the paper as text and a PNG (for the paper, `work.txt` holds `printed --to out.txt --png out.png`).
 
 ## Peripherals and set-up
 

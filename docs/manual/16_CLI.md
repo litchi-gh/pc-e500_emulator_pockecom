@@ -19,8 +19,8 @@ PRINT 12*34
 | システム | `pokecom` の場所 |
 |---|---|
 | Windows | `pokecom-<版>-win-x64.zip` を展開したフォルダの `pokecom.exe` |
-| Ubuntu | `.deb` を入れれば `pokecom`。tar.gz なら、展開したフォルダの `./pokecom` |
-| Mac | `pokecom-<版>-osx-arm64.tar.gz`（か `osx-x64`）を展開したフォルダの `./pokecom`（[3章](03_MACOS.md)） |
+| Ubuntu | [2章](02_LINUX.md#入れかた)のコマンドで `.deb` を入れれば `pokecom`。tar.gz なら `~/pockecom/Emulator/pokecom` |
+| Mac | [3章](03_MACOS.md#入れかた)のコマンドで入れれば `pokecom` |
 
 ### ROM の探し方
 
@@ -121,10 +121,12 @@ $ pokecom script demo.txt
 ### 画面・音・紙を残す
 
 ```console
-$ pokecom exec "PRINT 1" --png lcd.png            # 終わりの液晶を PNG に
-$ pokecom record beep.wav --line "BEEP 3"         # 音を WAV に
-$ pokecom script work.txt                         # この中で printed --to out.txt --png out.png
+$ pokecom exec "PRINT 1" --png lcd.png
+$ pokecom record beep.wav --line "BEEP 3"
+$ pokecom script work.txt
 ```
+
+上から、終わりの液晶を PNG に、音を WAV に、紙をテキストと PNG に残します（紙は、`work.txt` の中に `printed --to out.txt --png out.png` と書きます）。
 
 ## 周辺機器と構成
 

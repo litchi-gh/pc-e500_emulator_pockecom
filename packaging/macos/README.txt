@@ -4,10 +4,10 @@ https://github.com/litchi-gh/pc-e500_emulator_pockecom
 動作環境 / Requirements: macOS 15 以降（14 でも動く見込み）、Apple シリコンか Intel
                          macOS 15 or later (14 should work too), Apple silicon or Intel
 
-ターミナルでこのフォルダに移って使います。初めに一度、ダウンロードしたファイルの
-実行の制限を外してください（Apple の公証を受けていないため）。
-In Terminal, in this folder. Once, first, lift the block macOS puts on downloaded
-files (these are not notarized by Apple):
+ターミナルでこのフォルダに移って使います。ブラウザでダウンロードしたときは、初めに一度、
+実行の制限を外してください（Apple の公証を受けていないため。curl なら要りません）。
+In Terminal, in this folder. If it was downloaded with a browser, once, first, lift
+the block macOS puts on it (these are not notarized by Apple; not needed with curl):
 
   xattr -dr com.apple.quarantine .
 

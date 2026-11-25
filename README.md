@@ -122,7 +122,7 @@ PRINT 12*34
 
 ## はじめかた（Windows）
 
-Ubuntu は [2章](docs/manual/02_LINUX.md)、Mac は [3章](docs/manual/03_MACOS.md)を見てください。
+Ubuntu は [2章](docs/manual/02_LINUX.md#入れかた)、Mac は [3章](docs/manual/03_MACOS.md#入れかた)を見てください。どちらも、端末のコマンドだけでダウンロードから入れ終わりまで進みます。
 
 1. [リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)から、インストーラー（`-setup.exe`）か zip を入手します。Windows x64 用で、.NET などを別に入れる必要はありません。0.0.4 より後のリリースでは、本文に各ファイルの SHA-256 を載せています。ダウンロードしたファイルが本物かは、PowerShell の `Get-FileHash <ファイル名>` で出る値と比べて確かめられます。
 2. 実機から吸い出した ROM（[ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper) などで）を、データフォルダの `rom` に置きます。右クリックのメニューの「データフォルダを開く」で開けます。

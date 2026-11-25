@@ -122,7 +122,7 @@ PRINT 12*34
 
 ## Getting started (Windows)
 
-For Ubuntu see [chapter 2](docs/manual_en/02_LINUX.md), for the Mac [chapter 3](docs/manual_en/03_MACOS.md).
+For Ubuntu see [chapter 2](docs/manual_en/02_LINUX.md#installing), for the Mac [chapter 3](docs/manual_en/03_MACOS.md#installing): both download and install with commands in a terminal.
 
 1. Get the installer (`-setup.exe`) or the zip from [Releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases). It is for Windows x64 and needs no separate .NET install. From the release after 0.0.4 on, the release notes list each file’s SHA-256: compare it with what PowerShell’s `Get-FileHash <file>` prints to check a download.
 2. Put the ROM dumped from your machine (with [ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md), for one) in the data folder's `rom`. "Open the data folder" in the right-click menu opens it.

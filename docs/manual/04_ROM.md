@@ -57,7 +57,13 @@ python tools/merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o
 
 カバー率が100%でない場合は吸い出しが欠けています。手順の詳細と確認方法は、[画像付きの取扱説明書](../../app/manual/index.html)（ツールバーの「使い方」）の13章にあります。
 
-`tools/merge_savem_rom.py` は、Windows では `python`、Ubuntu と Mac では `python3` で動かします。
+`tools/merge_savem_rom.py` は、Windows では `python`、Ubuntu と Mac では `python3` で動かします。Ubuntu と Mac では、次のように取ってきて使えます（1行目で置き場所を作り、2行目で取り、3行目で、いまいるフォルダの2つのファイルのヘッダーを確かめます）。
+
+```sh
+mkdir -p ~/pockecom/download
+curl -fL -o ~/pockecom/download/merge_savem_rom.py https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/tools/merge_savem_rom.py
+python3 ~/pockecom/download/merge_savem_rom.py S3A.ROM S3B.ROM --info
+```
 
 ## PC-E500S / PC-E650 / PC-U6000 の384KB ROM
 

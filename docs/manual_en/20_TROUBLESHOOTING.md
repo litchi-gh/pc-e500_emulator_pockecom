@@ -10,7 +10,8 @@
 | `S1(MAIN): NEW CARD` | Normal at the first start. PF1 (F1) initialises the memory ([chapter 5](05_FIRST_STEPS.md)) |
 | `./PC-E500` does not start on Ubuntu | Start it from a terminal and read the message. The tar.gz brings no missing libraries: install the `.deb`, or try `sudo apt install libx11-6 libice6 libsm6 libfontconfig1 libasound2t64` |
 | Japanese shows as boxes on Ubuntu | `sudo apt install fonts-noto-cjk` |
-| A Mac says the developer cannot be verified | Run `xattr -dr com.apple.quarantine .` ([chapter 3](03_MACOS.md#installing)) |
+| A Mac says the developer cannot be verified | It was downloaded with a browser. Install it with the commands of [chapter 3](03_MACOS.md#installing), or run `xattr -dr com.apple.quarantine ~/pockecom/Emulator` |
+| Installing stops with `curl: (2)` or `curl: option : blank argument` | The newest [release](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) has no file of that name |
 
 ## In use
 

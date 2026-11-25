@@ -59,10 +59,10 @@ sh tools/package-linux.sh                       # dist/ に tar.gz と .deb
 
 ## macOS（pokecom）
 
-Xcode のコマンドラインツールと .NET 10 SDK を使います。
+Xcode のコマンドラインツールと .NET 10 SDK を使います。`dist/` に Apple シリコン用と Intel 用の tar.gz ができます。
 
 ```sh
-sh tools/package-macos.sh                       # dist/ に Apple シリコン用と Intel 用の tar.gz
+sh tools/package-macos.sh
 CXX=clang++ sh tools/test-native.sh
 ```
 

@@ -43,7 +43,8 @@ $ pokecom exec "PRINT 1+2" --rom "/path/to/PC-E500(7.2).ROM"
 |---|---|
 | Windows | `C:\\Tools\\pokecom\\pokecom.exe`（JSON では `\` を2つ書きます） |
 | Ubuntu（.deb） | `/usr/bin/pokecom` |
-| Mac | `/usr/local/bin/pokecom` |
+| Ubuntu（tar.gz） | `/home/名前/pockecom/Emulator/pokecom` |
+| Mac | `/Users/名前/pockecom/Emulator/pokecom` |
 
 ### Claude Code
 
@@ -188,7 +189,7 @@ Symbols: RUN CAPS DEG
 
 | 症状 | 見るところ |
 |---|---|
-| サーバーが起動しない | コマンドのパスを端末で実行できるか。Mac では [`xattr`](03_MACOS.md#入れかた) を済ませたか |
+| サーバーが起動しない | コマンドのパスを端末で実行できるか。Mac でブラウザからダウンロードしたときは [`xattr`](03_MACOS.md#入れかた) を済ませたか |
 | 「ROM が見つかりません」 | `POKECOM_ROM` か `--rom` をフルパスで指定したか |
 | ツールが出てこない | ツールの設定を読み直したか（多くは再起動が要ります） |
 | 画面が変わらない | 前のプログラムが動いたままでないか。`key` で `BRK`、または `start` でまっさらにします |

@@ -57,7 +57,13 @@ python tools/merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o
 
 Coverage below 100% means the dump is incomplete. Chapter 13 of the [illustrated manual](../../app/manual/index_en.html) (Help on the toolbar) walks through the whole procedure.
 
-Run `tools/merge_savem_rom.py` with `python` on Windows and `python3` on Ubuntu and the Mac.
+Run `tools/merge_savem_rom.py` with `python` on Windows and `python3` on Ubuntu and the Mac. There, these make a folder, download it, and look at the headers of two files in the current folder:
+
+```sh
+mkdir -p ~/pockecom/download
+curl -fL -o ~/pockecom/download/merge_savem_rom.py https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/tools/merge_savem_rom.py
+python3 ~/pockecom/download/merge_savem_rom.py S3A.ROM S3B.ROM --info
+```
 
 ## The 384KB PC-E500S / PC-E650 / PC-U6000 ROM
 

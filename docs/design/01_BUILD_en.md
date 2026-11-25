@@ -59,10 +59,10 @@ sh tools/package-linux.sh                       # tar.gz and .deb into dist/
 
 ## macOS (pokecom)
 
-With Xcode's command line tools and the .NET 10 SDK:
+With Xcode's command line tools and the .NET 10 SDK; the tar.gz for Apple silicon and for Intel go into `dist/`:
 
 ```sh
-sh tools/package-macos.sh                       # tar.gz for Apple silicon and Intel into dist/
+sh tools/package-macos.sh
 CXX=clang++ sh tools/test-native.sh
 ```
 
