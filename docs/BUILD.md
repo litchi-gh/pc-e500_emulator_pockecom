@@ -1,4 +1,4 @@
-# 1. ビルドとテスト
+# ビルドとテスト
 
 ## Windows
 
@@ -37,7 +37,7 @@ flowchart TB
 - `tests/test_roms.py`: `app/rom` にあるすべての ROM で、起動・計算・プログラム・CE-140F への SAVE と LOAD・LPRINT を試す（各段階の画面は `tests/output/roms/`）
 - `installer/`、`package.ps1`: インストーラーの定義と、zip とインストーラーを作るスクリプト
 - `tests/test_cli.py`: `pokecom` のコマンド・スクリプト・MCP と、マニュアルのコマンド一覧の漏れ
-- `tests/test_cassette.cpp`: カセットの信号とコンテナ形式（[3章](03_CASSETTE.md)）
+- `tests/test_cassette.cpp`: カセットの信号とコンテナ形式
 - `.github/workflows/`: GitHub の Mac での `pokecom` のビルドとコアのテスト（手動、または `ci/` で始まるブランチ）
 - `tests/output/`: テスト結果と画面画像
 - `third_party/pockemul/`: 移植元のソースとライセンス

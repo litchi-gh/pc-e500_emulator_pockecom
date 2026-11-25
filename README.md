@@ -114,7 +114,7 @@ PRINT 12*34
 
 - **プログラム読込**：PC の BAS・BIN を、ツールバーかドラッグ＆ドロップで本体に読み込めます。本体で保存した形の BAS は、`LOAD` を打たずに RAM へ直接入ります。
 - **メモリ**：内蔵 RAM は 8〜256KB です（E650/U6000 の増設改造相当まで）。RAM カードはイメージファイルとして作り、差し替えられます。
-- **AMC**：CPUの番地変換に対応し、カードを内蔵RAMの直前へつなぐアクセスを再現します。物理カード画像と状態ファイル形式は維持します。[実装・検証範囲](docs/design/02_AMC.md)を参照してください。
+- **AMC**：CPUの番地変換に対応し、カードを内蔵RAMの直前へつなぐアクセスを再現します。物理カード画像と状態ファイル形式は維持します。
 - **保存**：電源を切っても内容は残ります。いつでも状態を保存・復元できます。
 - **速度**：0.5〜4倍で動かせます。BEEP の音も鳴ります。
 - **表示言語**：日本語と英語を選べます。
@@ -160,7 +160,7 @@ curl -fsSL https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom
 |---|---|
 | [docs/README.md](docs/README.md) | マニュアルの目次（20章：Windows・Ubuntu・Mac、使い方、コマンドライン、MCP、困ったとき） |
 | [app/manual/index.html](app/manual/index.html) | 画像付きの取扱説明書（ツールバーの「使い方」で開きます） |
-| [docs/design/](docs/design/01_BUILD.md) | ビルドとテスト、実装の記録 |
+| [docs/BUILD.md](docs/BUILD.md) | ビルドとテスト |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 変更履歴 |
 
 ## ライセンス

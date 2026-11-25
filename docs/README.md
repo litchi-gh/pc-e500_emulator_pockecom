@@ -55,9 +55,7 @@
 
 | 文書 | 内容 |
 |---|---|
-| [ビルドとテスト](design/01_BUILD.md) | コードの構成、ビルド、テスト、配布物の作りかた |
-| [AMC](design/02_AMC.md) | CPU の番地変換の実装と検証 |
-| [カセット](design/03_CASSETTE.md) | カセットの信号の実装 |
+| [ビルドとテスト](BUILD.md) | コードの構成、ビルド、テスト、配布物の作りかた |
 | [変更履歴](CHANGELOG.md) | 版ごとの変更 |
 | [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) | 移植元と同梱物のライセンス |
 | [画像付きの取扱説明書](../app/manual/index.html) | ツールバーの「使い方」で開くもの |
