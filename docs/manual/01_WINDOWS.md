@@ -1,9 +1,9 @@
 # 1. Windows で使う
 
-配布は[リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)のインストーラー（`PC-E500-Emulator-<版>-win-x64-setup.exe`）と zip（`PC-E500-Emulator-<版>-win-x64.zip`）の2通りです。どちらも署名はありません。0.0.4 より後のリリースでは、本文に各ファイルの SHA-256 を載せています。ダウンロードしたファイルが本物かは、PowerShell の `Get-FileHash <ファイル名>` で出る値と比べて確かめられます。
+配布は[リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)のインストーラー（`PC-E500-Emulator-<版>-win-x64-setup.exe`）と zip（`PC-E500-Emulator-<版>-win-x64.zip`）の2通りです。どちらも署名はありません。0.0.4 より後のリリースでは本文に各ファイルの SHA-256 を載せています。ダウンロードしたファイルが本物かは、PowerShell の `Get-FileHash <ファイル名>` で出る値と比べて確かめられます。
 
-- **インストーラー**：最初に「自分だけ」（管理者の権限なし。既定）か「すべてのユーザー」かを選べます。プログラムは `%LocalAppData%\Programs\PockeComE500\`（すべてのユーザーなら `C:\Program Files\PockeComE500\`）に入ります。ROM・RAM・設定などのデータは、どちらでも利用者ごとの `%LocalAppData%\PockeComE500\` に置きます（スタートメニューの「PC-E500 Emulator のデータフォルダ」や、右クリックのメニューの「データフォルダを開く」で開けます）。アンインストールしてもデータは残ります。
-- **zip**：展開したフォルダの `PC-E500.exe` を起動します。データは `PC-E500.exe` の横に置きます。
+- インストーラー：最初に「自分だけ」（管理者の権限なし。既定）か「すべてのユーザー」かを選べます。プログラムは `%LocalAppData%\Programs\PockeComE500\`（すべてのユーザーなら `C:\Program Files\PockeComE500\`）に入ります。ROM・RAM・設定などのデータはどちらでも利用者ごとの `%LocalAppData%\PockeComE500\` に置きます（スタートメニューの「PC-E500 Emulator のデータフォルダ」や、右クリックのメニューの「データフォルダを開く」で開けます）。アンインストールしてもデータは残ります。
+- zip：展開したフォルダの `PC-E500.exe` を起動します。データは `PC-E500.exe` の横に置きます。
 
 ソースからビルドした場合は、`Start-PC-E500.cmd` をダブルクリックしてください。`app/PC-E500.exe` を直接開くこともできます。
 
@@ -29,9 +29,9 @@
 
 ![新しい版のお知らせ](../../app/manual/images/update.png)
 
-起動したとき、1日に1回まで GitHub の[リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)に新しい版が出ていないかを問い合わせ、あればツールバーと右クリックのメニューで知らせます。ダウンロードや置き換えはしません。更新するときは、エミュレータを終了し、インストーラーで入れた場合は新しい `-setup.exe` を実行、zip の場合は中身を今の `PC-E500.exe` があるフォルダに上書きで展開してください。どちらでもデータはそのまま残ります。
+起動したとき、1日に1回まで GitHub の[リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)に新しい版が出ていないかを問い合わせ、あればツールバーと右クリックのメニューで知らせます。ダウンロードや置き換えはしません。更新するときは、エミュレータを終了してから、インストーラーで入れた場合は新しい `-setup.exe` を実行し、zip の場合は中身を今の `PC-E500.exe` があるフォルダに上書きで展開してください。どちらでもデータはそのまま残ります。
 
-問い合わせは GitHub の公開 API（`api.github.com`）に対して、アカウントなしで行います。送るのは今の版の番号（User-Agent）だけです。自動の確認は「設定」の「起動時に新しい版を確認する」で止められ、右クリックのメニューの「新しい版を確認...」でいつでも確認できます。
+GitHub の公開 API（`api.github.com`）へは、アカウントなしで問い合わせます。送るのは今の版の番号（User-Agent）だけです。自動の確認は「設定」の「起動時に新しい版を確認する」で止められ、右クリックのメニューの「新しい版を確認...」でいつでも確認できます。
 
 ---
 

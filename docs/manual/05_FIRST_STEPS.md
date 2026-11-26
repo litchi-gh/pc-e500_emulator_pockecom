@@ -14,7 +14,7 @@
 
 Enterで登録し、**BASIC** で **RUN** 表示に戻してから `RUN`、Enterを入力すると `123` が表示されます。RUNモードのまま行番号付きプログラムを入力するとSyntax errorになります。
 
-文字列出力はRUN表示で `PRINT "HELLO"`、Enterを入力してください。
+文字列を出力するには、RUN表示で `PRINT "HELLO"`、Enterを入力してください。
 
 ---
 

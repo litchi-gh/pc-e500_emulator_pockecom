@@ -26,7 +26,7 @@ ROMDump: https://github.com/litchi-gh/pc-e500_beep_romdumper
 
 更新：新しい版が出ると、ツールバーに「新しい版」のボタンが出ます。
 エミュレータを終了してから、インストーラーで入れた場合は新しい
--setup.exe を実行、zip の場合は中身をこのフォルダに上書きで展開して
+-setup.exe を実行し、zip の場合は中身をこのフォルダに上書きで展開して
 ください。ROM・RAM・設定はそのまま残ります。
 
 ライセンス: GPL-2.0-or-later（LICENSE、THIRD_PARTY_NOTICES.md を参照）

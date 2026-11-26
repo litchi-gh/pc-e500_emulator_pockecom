@@ -12,7 +12,7 @@
 | Ubuntu で日本語が □ になる | `sudo apt install fonts-noto-cjk` |
 | Mac で「開発元を確認できない」と出る | ブラウザでダウンロードしたものです。[3章](03_MACOS.md#入れかた)の1行で入れ直すか、`xattr -dr com.apple.quarantine ~/pockecom/Emulator` を実行します |
 | 入れるときに「最新のリリースに、名前が … で終わるファイルがありません」と出る | その環境のファイルが、最新の[リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)に載っていません |
-| 入れたのに `pokecom` や `pc-e500` が「見つかりません」になる | 新しい端末（ターミナル）を開きます。PATH は、開いたときに読まれます |
+| 入れたのに `pokecom` や `pc-e500` が「見つかりません」になる | 新しい端末（ターミナル）を開きます。PATH は開いたときに読まれます |
 
 ## 使っているとき
 

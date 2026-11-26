@@ -23,15 +23,15 @@ ROM は含まれていません。お手持ちの実機から吸い出したも�
 
 [PC-E500 BEEP ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper) は、ポケコンのブザーで ROM を鳴らし、スマホで録音して、PC のアプリ（BeepDump）で ROM ファイルに戻すツールです。周辺機器は要りません。
 
-1. [リリース](https://github.com/litchi-gh/pc-e500_beep_romdumper/releases)から `BeepDump.exe`（Windows）を入手します。Linux と Mac では、コマンドライン版をビルドして使います。
-2. 録音を始めてから、実機の BASIC の RUN 表示で命令を打ちます。256KB の本体 ROM は、次の1行です（約22分。プログラムは要りません）。
+1. [リリース](https://github.com/litchi-gh/pc-e500_beep_romdumper/releases)から `BeepDump.exe`（Windows）を入手します。Linux と Mac ではコマンドライン版をビルドして使います。
+2. 録音を始めてから、実機の BASIC の RUN 表示で命令を打ちます。256KB の本体 ROM は次の1行です（約22分。プログラムは要りません）。
 
    ```basic
    CSAVE M &HC0000,&HFFFFF
    ```
 
-   この方法（CSAVE M）は、読み違いを見つけるために2回録音します。PC-E650・PC-U6000 は、拡張 ROM も録音します。短い時間で読める機械語版（約15分）もあります。
-3. 録音ファイルを BeepDump に読み込ませ、そろったら「ROM を保存」で保存します。PC-E650・PC-U6000 は、結合した 384KB のファイルになります。
+   この方法（CSAVE M）は読み違いを見つけるために2回録音します。PC-E650・PC-U6000 は拡張 ROM も録音します。短い時間で読める機械語版（約15分）もあります。
+3. 録音ファイルを BeepDump に読み込ませ、そろったら「ROM を保存」で保存します。PC-E650・PC-U6000 は結合した 384KB のファイルになります。
 4. できたファイルを `PC-E500(7.2).ROM` のような名前にして、`rom` フォルダに置きます。結合やヘッダーの除去は要りません。
 
 対応機種は PC-E500・PC-E500PJ・PC-1480U・PC-1490UII・PC-E550・PC-E650・PC-U6000 です。**実験的なツールです。** くわしい手順、確かめられていること、足りない所の録り直しかたは、[ROMDump の説明](https://github.com/litchi-gh/pc-e500_beep_romdumper)を見てください。
@@ -57,7 +57,7 @@ python tools/merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o
 
 カバー率が100%でない場合は吸い出しが欠けています。手順の詳細と確認方法は、[画像付きの取扱説明書](../../app/manual/index.html)（ツールバーの「使い方」）の13章にあります。
 
-`tools/merge_savem_rom.py` は、Windows では `python`、Ubuntu と Mac では `python3` で動かします。Ubuntu と Mac では、次のように取ってきて使えます（1行目でいまいるフォルダに取り、2行目で、そこにある2つのファイルのヘッダーを確かめます）。
+`tools/merge_savem_rom.py` は、Windows では `python`、Ubuntu と Mac では `python3` で動かします。Ubuntu と Mac では次のように取ってきて使えます（1行目でいまいるフォルダに取り、2行目でそこにある2つのファイルのヘッダーを確かめます）。
 
 Ubuntu：
 
@@ -82,7 +82,7 @@ PC-E500S / PC-E650 / PC-U6000の内蔵ROMは、提示されたメモリマップ
 | `00000-1FFFF` | `20000-3FFFF` | 128KB | CE3 |
 | `20000-5FFFF` | `C0000-FFFFF` | 256KB | CE2 |
 
-「ROMを開く」では、PC-E500の256KBイメージとPC-E500S/PC-E650/PC-U6000の384KBイメージを自動判別します。384KBのうち、本体ROMの機種コード（版の下の桁）が3のものをPC-E500Sとして扱います。ステータスバーの ROM の欄に判別した系列（E500・E500S・E650）を、マウスを乗せたときのヒントに ROM の容量とファイルを表示します。384KBファイルは、アドレスの低い追加ROMを先頭、その後ろに256KB本体ROMを置いた形式です。
+「ROMを開く」では、PC-E500の256KBイメージとPC-E500S/PC-E650/PC-U6000の384KBイメージを自動判別します。384KBのうち、本体ROMの機種コード（版の下の桁）が3のものをPC-E500Sとして扱います。判別した系列（E500・E500S・E650）はステータスバーの ROM の欄に、ROM の容量とファイルはマウスを乗せたときのヒントに表示します。384KBファイルは、先頭にアドレスの低い追加ROM、その後ろに256KB本体ROMを置いた形式です。
 
 画面下部のステータスバーには`ROM Ver.x.y`も表示します。この値はファイル名ではなく、サービスメンテ画面が使う本体ROM末尾16バイト内のメジャー／マイナーバージョンから取得します。動作確認に使ったPC-E500 ROMはVer.7.2、PC-E650 ROMはVer.8.5です。
 

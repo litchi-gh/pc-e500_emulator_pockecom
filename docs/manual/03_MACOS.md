@@ -1,6 +1,6 @@
 # 3. Mac で使う（コマンドライン）
 
-Mac では、画面のあるエミュレータの代わりに、コマンドラインの `pokecom` が使えます。[16章](16_CLI.md)のコマンドと、AI のツールから使う [MCP サーバー](18_MCP.md)は、Windows・Linux と同じです。
+Mac では画面のあるエミュレータの代わりに、コマンドラインの `pokecom` が使えます。[16章](16_CLI.md)のコマンドと、AI のツールから使う [MCP サーバー](18_MCP.md)は、Windows・Linux と同じです。
 
 ## 動作環境
 
@@ -12,7 +12,7 @@ Mac では、画面のあるエミュレータの代わりに、コマンドラ�
 
 ## 入れかた
 
-「ターミナル」（「アプリケーション」→「ユーティリティ」）を開いて、次の1行を貼り付けます。いちばん新しい版を GitHub から取って、入れ終わりまで進みます。新しくするときも、同じ行をもう一度実行します（ROM はそのまま残ります）。
+「ターミナル」（「アプリケーション」→「ユーティリティ」）を開いて、次の1行を貼り付けます。いちばん新しい版を GitHub から取って、入れ終わりまで進みます。新しくするときも同じ行をもう一度実行します（ROM はそのまま残ります）。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh
@@ -52,10 +52,10 @@ sh install.sh
 | ROM | `~/pockecom/Emulator/rom` |
 
 - `sudo` を付けずに実行します。自分のフォルダだけに入れるので、管理者の権限は要りません。Apple シリコンか Intel かは、スクリプトが調べます。
-- `~/.local/bin` が PATH（コマンドを探すフォルダの一覧）になければ、`~/.zshrc` に1行足します。**新しいターミナルを開くと**、`pokecom` が打てるようになります。
+- `~/.local/bin` が PATH（コマンドを探すフォルダの一覧）になければ、スクリプトが `~/.zshrc` に1行足します。**新しいターミナルを開くと**、`pokecom` が打てるようになります。
 - `~/pockecom` を別の場所にするには、`POCKECOM_HOME=フォルダ sh install.sh` のように書きます。
-- 置き場所は、[PC-E500 開発ツール](https://github.com/litchi-gh/pc-e500_tools)の `install.sh` と同じです。そちらで入れたエミュレータは、そのまま使えます。
-- ブラウザで取ったファイルには、macOS の「実行の制限」の印が付きます（Apple の公証を受けていないため）。`--emulator` で入れれば、スクリプトが外します。
+- 置き場所は[PC-E500 開発ツール](https://github.com/litchi-gh/pc-e500_tools)の `install.sh` と同じです。そちらで入れたエミュレータはそのまま使えます。
+- ブラウザで取ったファイルには macOS の「実行の制限」の印が付きます（Apple の公証を受けていないため）。`--emulator` で入れれば、スクリプトが外します。
 
 入ったかどうかを確かめます。
 
@@ -80,26 +80,26 @@ rm ~/.local/bin/pokecom
 
 ## ROM を置く
 
-`--rom` を付けて入れたときは、もう置いてあります。あとから置くときは、[実機から吸い出した ROM](04_ROM.md) を、次のどれかに置きます。
+`--rom` を付けて入れたときは、もう置いてあります。あとから置くときは、[実機から吸い出した ROM](04_ROM.md) を次のどれかに置きます。
 
 - `pokecom` のあるフォルダの `rom`（`~/pockecom/Emulator/rom`）
 - `~/Library/Application Support/PockeComE500/rom`
 - いまいるフォルダの `rom`
 
-自分の ROM が `~/PC-E500(7.2).ROM`（ホーム）にある例です。`cp 元 先` は、ファイルをコピーします。名前の `( )` はシェルの記号なので `'…'` で囲みます。
+自分の ROM が `~/PC-E500(7.2).ROM`（ホーム）にある例です。`cp 元 先` はファイルをコピーします。名前の `( )` はシェルの記号なので `'…'` で囲みます。
 
 ```sh
 cp ~/'PC-E500(7.2).ROM' ~/pockecom/Emulator/rom/
 ```
 
-`pokecom roms` で、見つかった ROM の一覧が出ます。
+`pokecom roms` で見つかった ROM の一覧が出ます。
 
 ```sh
 pokecom roms
 pokecom exec "PRINT 12*34"
 ```
 
-別の場所の ROM は、`--rom` か環境変数 `POKECOM_ROM` で指定します。
+別の場所の ROM は `--rom` か環境変数 `POKECOM_ROM` で指定します。
 
 ```sh
 pokecom exec "PRINT 1+2" --rom "$HOME/PC-E500(7.2).ROM"

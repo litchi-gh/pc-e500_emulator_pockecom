@@ -11,7 +11,7 @@ cd Emulator
 ./package.ps1   # リリース用の zip とインストーラーを dist\ に作る
 ```
 
-`package.ps1` は、ビルドしてから配布するファイルを1つのフォルダに集め、そこから zip とインストーラーの両方を作ります（同じファイルが入ります）。版は `src/desktop/PcE500.csproj` の `<Version>` で、`app/README.txt` の1行目にも同じ版が書かれていなければ止まります。インストーラーには [Inno Setup 6](https://jrsoftware.org/isinfo.php)（`winget install JRSoftware.InnoSetup`）が要ります。定義は `installer/PockeComE500.iss` です。最後に、zip とインストーラーの SHA-256 を `dist/PC-E500-Emulator-<版>-win-x64-SHA256.txt`（`sha256sum -c` で読める形）に書き、リリースの本文に貼る形でも表示します。リリースの本文には、この「## SHA-256」の節を必ず入れてください。
+`package.ps1` は、ビルドしてから、配布するファイルを1つのフォルダに集め、そこから zip とインストーラーの両方を作ります（同じファイルが入ります）。版は `src/desktop/PcE500.csproj` の `<Version>` で、`app/README.txt` の1行目にも同じ版が書かれていなければ止まります。インストーラーには [Inno Setup 6](https://jrsoftware.org/isinfo.php)（`winget install JRSoftware.InnoSetup`）が要ります。定義は `installer/PockeComE500.iss` です。最後に、zip とインストーラーの SHA-256 を `dist/PC-E500-Emulator-<版>-win-x64-SHA256.txt`（`sha256sum -c` で読める形）に書き、リリースの本文に貼る形でも表示します。リリースの本文にはこの「## SHA-256」の節を必ず入れてください。
 
 ## コードの構成
 
@@ -42,7 +42,7 @@ flowchart TB
 - `tests/output/`: テスト結果と画面画像
 - `third_party/pockemul/`: 移植元のソースとライセンス
 
-CPUファイルは `tools/prepare_core.py` で移植元から抽出しています。再生成にはPythonが必要です。通常のビルドには不要です。
+CPUファイルは `tools/prepare_core.py` で移植元から抽出しています。再生成にはPythonが必要ですが、通常のビルドには不要です。
 
 ## Ubuntu（Linux）
 
@@ -70,8 +70,8 @@ Windows の `pokecom` は `package.ps1` が zip にします（`tools/package-po
 
 ## install.sh（Ubuntu・Mac）
 
-- ルートの `install.sh` は、最新のリリースから、名前の終わりが `linux-x64.tar.gz`・`amd64.deb`・`osx-arm64.tar.gz`・`osx-x64.tar.gz` のファイルを取ります。リリースには、それぞれ1つだけ付けます。[pc-e500_tools](https://github.com/litchi-gh/pc-e500_tools) の `install.sh` も同じ名前で取ります。
-- 手順書は `main` の `install.sh` を実行するので、`main` に置きます。
+- ルートの `install.sh` は最新のリリースから、名前の終わりが `linux-x64.tar.gz`・`amd64.deb`・`osx-arm64.tar.gz`・`osx-x64.tar.gz` のファイルを取ります。リリースにはそれぞれ1つだけ付けます。[pc-e500_tools](https://github.com/litchi-gh/pc-e500_tools) の `install.sh` も同じ名前で取ります。
+- 手順書のコマンドは `main` の `install.sh` を実行するので、`main` に置きます。
 - 手元のファイルで試すには `sh install.sh --emulator dist/…` です。`POCKECOM_HOME` と `HOME` を別のフォルダにすれば、自分の環境を変えずに試せます。
 
 ## マニュアルのコマンド一覧
