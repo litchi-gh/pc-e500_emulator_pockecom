@@ -333,7 +333,7 @@ internal sealed class MainForm : Form
             menu.Items.Add(item);
         }
         menu.Items.Insert(0,updateItem);
-        menu.Items.Add(L.T("新しい版を確認...","Check for a new version..."),MenuIcon(Theme.Icons.Download),(_,_)=>_=CheckForUpdate(true));
+        menu.Items.Add(L.T("新しいバージョンを確認...","Check for a new version..."),MenuIcon(Theme.Icons.Download),(_,_)=>_=CheckForUpdate(true));
         menu.Items.Add(L.T("機械語エリア...","Machine-code area..."),MenuIcon(Theme.Icons.Code),(_,_)=>TryAction(ShowMachineCode));
         menu.Items.Add(L.T("データフォルダを開く","Open the data folder"),MenuIcon(Theme.Icons.Folder),(_,_)=>TryAction(()=>System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(AppFolders.Prepare(root)){UseShellExecute=true})));
         var speedMenu=new ToolStripMenuItem(L.T("速度","Speed"),MenuIcon(Theme.Icons.Speed));
@@ -372,13 +372,13 @@ internal sealed class MainForm : Form
         Release? release;
         try {release=await UpdateCheck.FetchAsync();}
         catch(Exception ex) {
-            if(manual && !IsDisposed)MessageBox.Show(this,L.T("新しい版を確認できませんでした。\n","Could not check for a new version.\n")+ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            if(manual && !IsDisposed)MessageBox.Show(this,L.T("新しいバージョンを確認できませんでした。\n","Could not check for a new version.\n")+ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Warning);
             return;
         }
         if(IsDisposed)return;
         settings=settings with{UpdateCheckedAt=DateTime.UtcNow};SaveSettings();
         if(release is null || !UpdateCheck.IsNewer(release)) {
-            if(manual)MessageBox.Show(this,L.T($"最新の版です（{UpdateCheck.Current}）。",$"This is the latest version ({UpdateCheck.Current})."),"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            if(manual)MessageBox.Show(this,L.T($"最新のバージョンです（{UpdateCheck.Current}）。",$"This is the latest version ({UpdateCheck.Current})."),"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Information);
             return;
         }
         ShowUpdate(release,manual);
@@ -389,8 +389,8 @@ internal sealed class MainForm : Form
     void ShowUpdate(Release release,bool manual) {
         if(!manual && release.Tag==settings.SkippedUpdate)return;
         available=release;
-        updateNotice.Text=L.T($"新しい版 {release.Tag}",$"New version {release.Tag}");updateNotice.Visible=true;
-        updateItem.Text=L.T($"新しい版 {release.Tag} があります...",$"Version {release.Tag} is out...");updateItem.Available=true;
+        updateNotice.Text=L.T($"新しいバージョン {release.Tag}",$"New version {release.Tag}");updateNotice.Visible=true;
+        updateItem.Text=L.T($"新しいバージョン {release.Tag} があります...",$"Version {release.Tag} is out...");updateItem.Available=true;
         if(manual)OpenUpdate();
     }
     /// <summary>新しい版のお知らせを開く。</summary>

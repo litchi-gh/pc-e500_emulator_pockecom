@@ -232,7 +232,7 @@ internal static class DemoVideo
                 g.DrawString("PokeCom",TitleFont,accent,new RectangleF(0,250,W,140),center);
                 using var text=new SolidBrush(Color.FromArgb(40,40,48));
                 g.DrawString("PC-E500 エミュレータ",TitleSub,text,new RectangleF(0,390,W,70),center);
-                g.DrawString(version.Length>0?$"v{version} の紹介":"新しい版の紹介",TitleSub,text,new RectangleF(0,460,W,70),center);
+                g.DrawString(version.Length>0?$"v{version} の紹介":"新しいバージョンの紹介",TitleSub,text,new RectangleF(0,460,W,70),center);
             } else {
                 using var accent=new SolidBrush(Accent);
                 g.DrawString(version.Length>0?$"PokeCom v{version} をぜひ使ってみてね":"PokeCom をぜひ使ってみてね",TitleFont,accent,new RectangleF(0,280,W,140),center);

@@ -16,7 +16,7 @@ internal sealed class HardwareDialog : ThemedForm
     readonly CheckBox muted=new(){Text=L.T("消音","Mute"),AutoSize=true};
     readonly CheckBox autoOff=new(){Text=L.T("自動電源OFF（実機と同じ）","Auto power off (as the real one)"),AutoSize=true};
     readonly CheckBox topMost=new(){Text=L.T("常に手前に表示","Always on top"),AutoSize=true};
-    readonly CheckBox checkUpdates=new(){Text=L.T("起動時に新しい版を確認する（1日に1回）","Check for a new version at start-up (once a day)"),AutoSize=true};
+    readonly CheckBox checkUpdates=new(){Text=L.T("起動時に新しいバージョンを確認する（1日に1回）","Check for a new version at start-up (once a day)"),AutoSize=true};
     readonly NumericUpDown volume=new(){Minimum=0,Maximum=100,Width=85};
     readonly TextBox folder=new(){Width=470};
     // Called by the apply button. The dialog is modeless, so there is no

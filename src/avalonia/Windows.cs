@@ -15,7 +15,7 @@ internal sealed class SettingsWindow : AppWindow
     readonly TextBox cardPath=new(){Width=380,IsReadOnly=true},folder=new(){Width=470};
     readonly CheckBox disk=new(){Content=L.T("CE-140Fを接続 (X:)","Connect CE-140F (X:)")},protect=new(){Content=L.T("ディスクを書込み禁止にする","Write-protect the disk")},
         muted=new(){Content=L.T("消音","Mute")},autoOff=new(){Content=L.T("自動電源OFF（実機と同じ）","Auto power off (as the real one)")},topMost=new(){Content=L.T("常に手前に表示","Always on top")},
-        checkUpdates=new(){Content=L.T("起動時に新しい版を確認する（1日に1回）","Check for a new version at start-up (once a day)")};
+        checkUpdates=new(){Content=L.T("起動時に新しいバージョンを確認する（1日に1回）","Check for a new version at start-up (once a day)")};
     readonly NumericUpDown volume=new(){Minimum=0,Maximum=100,Width=130,FormatString="0",Increment=5};
     readonly TextBlock ramNote=Ui.Note("",560);
     /// <summary>「適用」で呼ぶ処理。引数は今の設定にウィンドウの値を重ねる関数。false を返すとウィンドウを閉じない。</summary>
@@ -207,13 +207,13 @@ internal sealed class UpdateWindow : AppWindow
 {
     /// <summary>「この版は通知しない」を押したか。</summary>
     internal bool Skip {get;private set;}
-    internal UpdateWindow(Release release) : base(L.T("新しい版のお知らせ","New version"),620,480) {
-        var heading=Ui.Heading(L.T($"新しい版 {release.Tag} が公開されています（今の版は {UpdateCheck.Current}）。",$"Version {release.Tag} is out (this is {UpdateCheck.Current})."));heading.Margin=new Thickness(0,0,0,10);
+    internal UpdateWindow(Release release) : base(L.T("新しいバージョンのお知らせ","New version"),620,480) {
+        var heading=Ui.Heading(L.T($"新しいバージョン {release.Tag} が公開されています（今のバージョンは {UpdateCheck.Current}）。",$"Version {release.Tag} is out (this is {UpdateCheck.Current})."));heading.Margin=new Thickness(0,0,0,10);
         var notes=new TextBox{IsReadOnly=true,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,BorderThickness=new Thickness(0),Text=(release.Notes.Length>0?release.Notes:release.Name).Replace("\r\n","\n")};
         var how=Ui.Note(L.T("更新：エミュレータを終了して、ダウンロードしたものを今のフォルダに上書きで展開します。ROM・RAM・設定はそのまま残ります。","To update: quit the emulator and unpack the download over its folder. ROMs, RAM and settings stay."));how.Margin=new Thickness(0,8,0,0);
         var body=new DockPanel();DockPanel.SetDock(heading,Dock.Top);DockPanel.SetDock(how,Dock.Bottom);body.Children.AddRange([heading,how,Ui.CardOf(L.T("変更点","Changes"),notes)]);
         var open=Ui.Button(L.T("ダウンロードのページを開く","Open the download page"),async ()=>{try{UpdateCheck.Open(release.Url);Close();}catch(Exception ex){await Ask.Message(this,ex.Message);}},true);open.IsDefault=true;
-        Fill(body,Ui.Footer(null,open,Ui.Button(L.T("この版は通知しない","Skip this version"),()=>{Skip=true;Close();}),Ui.Button(L.T("閉じる","Close"),Close)));
+        Fill(body,Ui.Footer(null,open,Ui.Button(L.T("このバージョンは通知しない","Skip this version"),()=>{Skip=true;Close();}),Ui.Button(L.T("閉じる","Close"),Close)));
     }
 }
 

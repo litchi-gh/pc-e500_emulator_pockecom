@@ -275,7 +275,7 @@ internal sealed class Core : IDisposable
         // ファイルの形式・ROM・中身のハッシュを確かめる。
         var state=JsonSerializer.Deserialize<SavedState>(File.ReadAllText(path));
         if(state is not null && state.Version>CurrentVersion)
-            throw new InvalidDataException(L.T("保存ファイルは新しい版のエミュレータで作られています。","The state file was made by a newer version of the emulator."));
+            throw new InvalidDataException(L.T("保存ファイルは新しいバージョンのエミュレータで作られています。","The state file was made by a newer version of the emulator."));
         if(state is null || state.Version<1 || state.RomSha256!=Hash || state.Data is null ||
            state.DataSha256!=Convert.ToHexString(SHA256.HashData(state.Data)))
             throw new InvalidDataException(L.T("保存ファイルが不正、またはROMが異なります。","The state file is invalid or belongs to another ROM."));

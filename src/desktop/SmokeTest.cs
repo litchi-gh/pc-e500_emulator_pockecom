@@ -98,7 +98,7 @@ internal static class SmokeTest
                     if(form.TestUpdateNotice.Visible || form.TestUpdateNotice.InMenu || form.TestSettings.SkippedUpdate!="v99.1.2")throw new Exception("Skipped update still announced");
                     form.TestShowUpdate(newer);
                     if(form.TestUpdateNotice.Visible)throw new Exception("A skipped version was announced again");
-                    if(!menuTexts.Contains(L.T("新しい版を確認...","Check for a new version...")))throw new Exception("No way to check for a new version from the menu");
+                    if(!menuTexts.Contains(L.T("新しいバージョンを確認...","Check for a new version...")))throw new Exception("No way to check for a new version from the menu");
                 }
                 // A double-click on a key is two keystrokes, not a change of window.
                 var five=surface.Keys.First(k=>k.Id=="5").Bounds;
@@ -215,7 +215,7 @@ internal static class SmokeTest
                 string newer=Path.Combine(output,"newer.e500state");
                 File.WriteAllText(newer,json.Replace("\"Version\":4","\"Version\":5",StringComparison.Ordinal));
                 try{core.Load(newer);throw new Exception("A newer state file was loaded");}
-                catch(InvalidDataException ex) when(ex.Message.Contains(L.T("新しい版","newer version"),StringComparison.Ordinal)){}
+                catch(InvalidDataException ex) when(ex.Message.Contains(L.T("新しいバージョン","newer version"),StringComparison.Ordinal)){}
             }
             if(!form.TestPaste("2+3\r\n").Contains("4文字"))throw new Exception("Clipboard-style paste queue failed");
             if(!core.ScreenText().Contains('5'))throw new Exception("Pasted calculation did not reach LCD");

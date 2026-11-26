@@ -164,10 +164,10 @@ internal sealed class MainWindow : Window
         }
         MenuItem Sub(string text,string icon,IEnumerable<MenuItem> items){var m=new MenuItem{Header=text,Icon=Ui.Icon(icon,15)};foreach(var i in items)m.Items.Add(i);return m;}
         menu.Items.Clear();
-        if(available is not null)menu.Items.Add(Item(L.T($"新しい版 {available.Tag}",$"New version {available.Tag}"),Icons.Download,()=>_=OpenUpdate()));
+        if(available is not null)menu.Items.Add(Item(L.T($"新しいバージョン {available.Tag}",$"New version {available.Tag}"),Icons.Download,()=>_=OpenUpdate()));
         foreach(var c in commands)menu.Items.Add(c.Pause?Item(paused?L.T("再開","Resume"):c.Text,paused?Icons.Play:c.Icon,c.Action):Item(c.Text,c.Icon,c.Action));
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item(L.T("新しい版を確認...","Check for a new version..."),Icons.Download,()=>_=CheckForUpdate(true)));
+        menu.Items.Add(Item(L.T("新しいバージョンを確認...","Check for a new version..."),Icons.Download,()=>_=CheckForUpdate(true)));
         menu.Items.Add(Item(L.T("機械語エリア...","Machine-code area..."),Icons.Code,()=>Try(ShowMachineCode)));
         menu.Items.Add(Item(L.T("データフォルダを開く","Open the data folder"),Icons.Folder,()=>Try(()=>Ui.Launch(root))));
         menu.Items.Add(Sub(L.T("速度","Speed"),Icons.Speed,Speeds.Select((s,i)=>Item(s,null,()=>SetSpeed(i),speedIndex==i))));
@@ -304,15 +304,15 @@ internal sealed class MainWindow : Window
     async Task CheckForUpdate(bool manual) {
         Release? release;
         try{release=await UpdateCheck.FetchAsync();}
-        catch(Exception ex){if(manual)await Ask.Message(this,L.T("新しい版を確認できませんでした。\n","Could not check for a new version.\n")+ex.Message);return;}
+        catch(Exception ex){if(manual)await Ask.Message(this,L.T("新しいバージョンを確認できませんでした。\n","Could not check for a new version.\n")+ex.Message);return;}
         settings=settings with{UpdateCheckedAt=DateTime.UtcNow};SaveSettings();
         if(release is null || !UpdateCheck.IsNewer(release)) {
-            if(manual)await Ask.Message(this,L.T($"最新の版です（{UpdateCheck.Current}）。",$"This is the latest version ({UpdateCheck.Current})."));
+            if(manual)await Ask.Message(this,L.T($"最新のバージョンです（{UpdateCheck.Current}）。",$"This is the latest version ({UpdateCheck.Current})."));
             return;
         }
         if(!manual && release.Tag==settings.SkippedUpdate)return;
         available=release;
-        if(updateNotice?.Content is StackPanel row && row.Children[1] is TextBlock label){label.Text=L.T($"新しい版 {release.Tag}",$"New version {release.Tag}");updateNotice.IsVisible=true;}
+        if(updateNotice?.Content is StackPanel row && row.Children[1] is TextBlock label){label.Text=L.T($"新しいバージョン {release.Tag}",$"New version {release.Tag}");updateNotice.IsVisible=true;}
         if(manual)await OpenUpdate();
     }
     async Task OpenUpdate() {
