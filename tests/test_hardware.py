@@ -21,6 +21,11 @@ def has_three(e):
     p=e.pixels()
     return any(all(bool(p[(y+dy)*240+234+dx])==(THREE[dy][dx]=='#') for dy in range(8) for dx in range(6)) for y in [0,8,16,24])
 
+def rom_384k(e500s):
+    """384KB ROM images in app/rom: the PC-E500S's (model code 3, the last byte but 14) or the E650/U6000's."""
+    # 384KB の ROM のうち、E500S（機種コード 3）のもの、または E650・U6000 のもの。
+    return [p for p in sorted((ROOT/'app'/'rom').iterdir()) if p.suffix.lower()=='.rom' and p.stat().st_size==384*1024 and (p.read_bytes()[-15]==3)==e500s]
+
 class HardwareTests(unittest.TestCase):
     def test_pc_u6000_384k_rom_map_and_basic(self):
         # The merged 384KB image, named model(version).ROM or, as before, PC-U6000-full.rom.
@@ -71,9 +76,22 @@ class HardwareTests(unittest.TestCase):
                         self.assertTrue(has_three(e))
                     finally:e.close()
 
+    def test_e500s_one_62256(self):
+        """The E500S packs its 384KB ROM like the E650 but has one 62256: 32KB, the E500's sizes."""
+        rom_path=next(iter(rom_384k(e500s=True)),None)
+        if rom_path is None:self.skipTest('No 384KB PC-E500S ROM is installed')
+        for kb in [32,64]:
+            with self.subTest(kb=kb):
+                e=Emulator(rom=rom_path,ram=kb)
+                try:
+                    e.run(10240000);e.key('F1');e.run(10240000)
+                    e.key('BASIC');e.run();e.type('1+2')
+                    self.assertTrue(has_three(e))
+                finally:e.close()
+
     def test_e650_internal_ram_expansion(self):
         """A 628128 SRAM swap takes the stock 64KB E650/U6000 to 128KB or 256KB."""
-        rom_path=next((p for p in sorted((ROOT/'app'/'rom').iterdir()) if p.suffix.lower()=='.rom' and p.stat().st_size==384*1024),None)
+        rom_path=next(iter(rom_384k(e500s=False)),None)
         if rom_path is None:self.skipTest('No 384KB PC-E650/PC-U6000 ROM is installed')
         for kb in [64,128,256]:
             with self.subTest(kb=kb):
@@ -193,6 +211,16 @@ class HardwareTests(unittest.TestCase):
             for command,bits in [('RADIAN',0x04),('GRAD',0x0c),('DEGREE',0x18)]:
                 e.type(command);self.assertEqual(e.symbols(5)&0x1c,bits,command)
         finally:e.close()
+    def test_batt_symbol_is_page_6_bit_0(self):
+        """BATT の表示シンボル。ROM は作業域 BFC97h（785559）をページ 6 の 1 バイトとして書くので、
+        BATT はページ 6 の bit0（ページ 5 の bit7 ではない）。CLS で表示シンボルが描き直される。"""
+        e=Emulator()
+        try:
+            e.boot()
+            for value in (1,0):
+                e.type(f'POKE 785559,{value}:CLS');e.run(2000000)
+                self.assertEqual(e.symbols(6)&1,value);self.assertEqual(e.symbols(5)&0x80,0)
+        finally:e.close()
     def test_ce140f_binary_multiblock_and_ascii(self):
         with tempfile.TemporaryDirectory(prefix='pce500-disk-test-') as folder:
             e=Emulator(disk=folder)
@@ -224,6 +252,7 @@ class HardwareTests(unittest.TestCase):
                                  ('EOF right after the last line',b'10 PRINT 123\r\n20 PRINT 456\x1a',b'10 PRINT 123\r\n20 PRINT 456\r\n'),
                                  ('padded after EOF',b'10 PRINT 123\r\n\x1a\x00\x00\xff99 REM\r\n',b'10 PRINT 123\r\n'),
                                  ('no EOF',b'10 PRINT 123\r\n',b'10 PRINT 123\r\n'),
+                                 ('LF line ends',b'10 PRINT 456\n20 PRINT 123\n',b'10 PRINT 456\r\n20 PRINT 123\r\n'),
                                  ('no EOF, no line end',b'10 PRINT 123\r\n20 PRINT 456',b'10 PRINT 123\r\n20 PRINT 456\r\n')]:
             with self.subTest(label),tempfile.TemporaryDirectory(prefix='pce500-eof-') as folder:
                 pathlib.Path(folder,'A.BAS').write_bytes(data)
@@ -295,15 +324,15 @@ class HardwareTests(unittest.TestCase):
                 self.assertEqual(pathlib.Path(folder,'NEW.DAT').read_bytes(),b'HELLO\r\nWORLD\r\n')
                 self.assertFalse(pathlib.Path(folder,'COPY.DAT').exists())
                 e.type('SET "X:NEW.DAT","P"')
-                self.assertTrue(c.windll.kernel32.GetFileAttributesW(str(pathlib.Path(folder,'NEW.DAT')))&1)
+                self.assertFalse(pathlib.Path(folder,'NEW.DAT').stat().st_mode&0o200)
                 e.type('SET "X:NEW.DAT"," "')
                 # Verify the actual ROM attribute-clear variant before deleting the test file.
-                self.assertFalse(c.windll.kernel32.GetFileAttributesW(str(pathlib.Path(folder,'NEW.DAT')))&1)
+                self.assertTrue(pathlib.Path(folder,'NEW.DAT').stat().st_mode&0o200)
                 e.type('KILL "X:NEW.DAT"');self.assertFalse(pathlib.Path(folder,'NEW.DAT').exists())
                 self.assertNotIn('ERROR:',e.trace())
             finally:
                 e.close()
-                for p in pathlib.Path(folder).iterdir():c.windll.kernel32.SetFileAttributesW(str(p),128)
+                for p in pathlib.Path(folder).iterdir():p.chmod(0o644)
 
     def test_ce126p_lprint_llist_and_disconnect(self):
         e=Emulator()
@@ -433,11 +462,11 @@ class HardwareTests(unittest.TestCase):
 
     def test_ce140f_does_not_stand_in_for_a_missing_ce126p(self):
         # The other way round: the disk stays silent through a code whose first
-        # bit is 0, the printer's 20h, so with the printer unplugged LPRINT fails
-        # the same way, at the same moment, whether a disk is on the bus or not.
+        # bit is 0, the printer's 20h, so with the printer unplugged the ROM passes
+        # LPRINT over at the same moment, whether a disk is on the bus or not.
         # Answering it, the ROM went on to wait out the data phase, and PF1 at
         # power-on took long enough to swallow the keys typed after it.
-        # プリンタを外した LPRINT は、ディスクの有無にかかわらず同じ時点で同じエラーになる。
+        # プリンタを外した LPRINT は、ディスクの有無にかかわらず同じ時点で読み飛ばされる。
         results=[]
         with tempfile.TemporaryDirectory(prefix='pce500-disk-test-') as folder:
             for disk in (None,folder):
@@ -445,8 +474,8 @@ class HardwareTests(unittest.TestCase):
                 try:
                     e.lib.e500_printer_connect(e.m,0)
                     e.boot();e.type('LPRINT "A"',enter=False);r,b=KEYS['ENTER']
-                    # Timed from the press: with nothing on the bus the error comes
-                    # while ENTER is still down.
+                    # Timed from the press: with nothing on the bus it is over
+            # while ENTER is still down.
                     start=e.lib.e500_cycles(e.m);last=e.pixels();changed=0
                     e.lib.e500_key(e.m,r,b,1)
                     for i in range(1250):

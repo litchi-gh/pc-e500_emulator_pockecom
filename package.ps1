@@ -1,5 +1,6 @@
 ﻿# Builds the release: dist\PC-E500-Emulator-<version>-win-x64.zip and
-# dist\PC-E500-Emulator-<version>-win-x64-setup.exe, both from the same files.
+# dist\PC-E500-Emulator-<version>-win-x64-setup.exe, both from the same files,
+# and the command line's dist\pokecom-<version>-win-x64.zip.
 # The version is PcE500.csproj's <Version>; app\README.txt must name it too.
 # Needs Inno Setup 6 (ISCC.exe), found where winget or its installer puts it,
 # or given with -Iscc.
@@ -68,11 +69,17 @@ try {
 
     Remove-Item -LiteralPath $stage -Recurse -Force
 
-    # Neither file is signed, so the release notes carry their SHA-256 for users
+    # The command line, in a zip of its own.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'tools/package-pokecom.ps1')
+    if ($LASTEXITCODE -ne 0) { throw 'The command line was not packaged.' }
+    $pokecom = "pokecom-$version-win-x64.zip"
+    if (-not (Test-Path -LiteralPath (Join-Path $dist $pokecom))) { throw "No dist\$pokecom (is src/cli another version?)." }
+
+    # No file is signed, so the release notes carry their SHA-256 for users
     # to check a download against. Written in the form sha256sum -c reads, and
     # printed ready to paste into the notes.
     # 署名がないので、リリースの本文に載せる SHA-256 を書き出す（sha256sum -c で読める形）。
-    $packages = Get-ChildItem -LiteralPath $dist -File | Where-Object { $_.Name -eq "$name.zip" -or $_.Name -eq "$name-setup.exe" } | Sort-Object Name
+    $packages = Get-ChildItem -LiteralPath $dist -File | Where-Object { $_.Name -eq "$name.zip" -or $_.Name -eq "$name-setup.exe" -or $_.Name -eq $pokecom } | Sort-Object Name
     $sums = Join-Path $dist "$name-SHA256.txt"
     $lines = $packages | ForEach-Object { '{0} *{1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name }
     [System.IO.File]::WriteAllText($sums, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))

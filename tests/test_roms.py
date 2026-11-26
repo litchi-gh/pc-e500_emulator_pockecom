@@ -46,8 +46,11 @@ class RomTests(unittest.TestCase):
         name=rom.stem
         def shot(step):e.screenshot(f'roms/{name}-{step}.png')
         with tempfile.TemporaryDirectory() as disk:
-            # The E650/U6000's 384KB ROM comes with 64KB inside as standard.
-            e=Emulator(rom=rom,ram=64 if rom.stat().st_size==384*1024 else 32,disk=disk)
+            # The E650/U6000's 384KB ROM comes with 64KB inside as standard; the
+            # E500S's (model code 3, the last byte but 14) with 32KB, as the E500's.
+            # E650・U6000 の 384KB の ROM は標準で 64KB、E500S（機種コード 3）は E500 と同じ 32KB。
+            data=rom.read_bytes()
+            e=Emulator(rom=rom,ram=64 if len(data)==384*1024 and data[-15]!=3 else 32,disk=disk)
             try:
                 e.run(10240000);shot('1-start')
                 e.key('F1');e.run(10240000);shot('2-initialised')

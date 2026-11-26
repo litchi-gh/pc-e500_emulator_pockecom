@@ -98,7 +98,7 @@ internal static class SmokeTest
                     if(form.TestUpdateNotice.Visible || form.TestUpdateNotice.InMenu || form.TestSettings.SkippedUpdate!="v99.1.2")throw new Exception("Skipped update still announced");
                     form.TestShowUpdate(newer);
                     if(form.TestUpdateNotice.Visible)throw new Exception("A skipped version was announced again");
-                    if(!menuTexts.Contains(L.T("新しい版を確認...","Check for a new version...")))throw new Exception("No way to check for a new version from the menu");
+                    if(!menuTexts.Contains(L.T("新しいバージョンを確認...","Check for a new version...")))throw new Exception("No way to check for a new version from the menu");
                 }
                 // A double-click on a key is two keystrokes, not a change of window.
                 var five=surface.Keys.First(k=>k.Id=="5").Bounds;
@@ -215,7 +215,7 @@ internal static class SmokeTest
                 string newer=Path.Combine(output,"newer.e500state");
                 File.WriteAllText(newer,json.Replace("\"Version\":4","\"Version\":5",StringComparison.Ordinal));
                 try{core.Load(newer);throw new Exception("A newer state file was loaded");}
-                catch(InvalidDataException ex) when(ex.Message.Contains(L.T("新しい版","newer version"),StringComparison.Ordinal)){}
+                catch(InvalidDataException ex) when(ex.Message.Contains(L.T("新しいバージョン","newer version"),StringComparison.Ordinal)){}
             }
             if(!form.TestPaste("2+3\r\n").Contains("4文字"))throw new Exception("Clipboard-style paste queue failed");
             if(!core.ScreenText().Contains('5'))throw new Exception("Pasted calculation did not reach LCD");
@@ -652,7 +652,7 @@ internal static class SmokeTest
             }
             string banks=Path.Combine(output,"memory-roundtrip");
             foreach(int kb in HardwareSettings.Sizes) {
-                int internalKB=HardwareSettings.CoerceInternal(core.RomKB,kb);
+                int internalKB=HardwareSettings.CoerceInternal(core.StandardRamKB,kb);
                 // A card is an image file: its size is the capacity, its bytes the
                 // contents, and the contents go back to the same file.
                 string cardImage=Path.Combine(banks,$"card-{kb}KB.ram");
@@ -711,8 +711,8 @@ internal static class SmokeTest
             catch(InvalidDataException){}
             try {using var missing=new Core(rom,64,Path.Combine(output,"no-such-card.ram"));throw new Exception("A missing card image was accepted");}
             catch(FileNotFoundException){}
-            if(core.IsE650Family) {
-                foreach(int kb in HardwareSettings.InternalSizes(core.RomKB)) {
+            if(core.StandardRamKB==64) {
+                foreach(int kb in HardwareSettings.InternalSizes(core.StandardRamKB)) {
                     using var expanded=new Core(rom,kb);
                     if(expanded.InternalKB!=kb)throw new Exception($"E650/U6000 internal RAM expansion to {kb}KB was not applied");
                 }
@@ -755,7 +755,7 @@ internal static class SmokeTest
             var coerced=HardwareSettings.LoadOrReset(config,out string? fine,out _);
             if(fine is not null || coerced.InternalKB!=32 || coerced.Appearance!="PC-E500" || coerced.DiskFolder!=settings.DiskFolder || coerced.CardPath!=settings.CardPath)
                 throw new Exception("A settings file with one bad value was not kept with that value at its default");
-            using(var dialog=new HardwareDialog(settings,core.RomKB,Path.Combine(output,"memory-roundtrip"))) {
+            using(var dialog=new HardwareDialog(settings,core.StandardRamKB,Path.Combine(output,"memory-roundtrip"))) {
                 dialog.Show(form);Application.DoEvents();
                 if(dialog.Over(settings)!=settings)throw new Exception("Hardware dialog values mismatch");
                 // Settings the dialog does not show come through an apply as they are.

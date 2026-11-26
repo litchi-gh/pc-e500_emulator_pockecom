@@ -1,0 +1,18 @@
+pokecom for Windows @VERSION@ - SHARP PC-E500 series emulator, command line and MCP server
+https://github.com/litchi-gh/pc-e500_emulator_pockecom
+
+動作環境 / Requirements: Windows 10 / 11 (x64)
+
+PowerShell かコマンドプロンプトで、このフォルダに移って使います。
+In PowerShell or the Command Prompt, in this folder:
+
+  .\pokecom help
+
+ROMイメージは含まれていません。お手持ちの実機から吸い出した ROM を rom\ フォルダに
+置くか、--rom で指定してください。
+No ROM image is included: dump one from your own machine, and put it in rom\ or
+name it with --rom.
+音で吸い出すツール / A tool to dump it by sound:
+  https://github.com/litchi-gh/pc-e500_beep_romdumper
+
+ライセンス / License: GPL-2.0-or-later (LICENSE, THIRD_PARTY_NOTICES.md)

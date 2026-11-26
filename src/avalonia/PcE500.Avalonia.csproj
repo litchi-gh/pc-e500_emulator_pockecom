@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>PC-E500</AssemblyName>
+    <RootNamespace>PokeCom</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Version>0.2.0</Version>
+    <Product>PC-E500 Emulator (PokeCom)</Product>
+  </PropertyGroup>
+  <!-- The core of the system built for: named by the runtime identifier, or the one building. -->
+  <PropertyGroup>
+    <ForWindows Condition="'$(RuntimeIdentifier)'!='' And $(RuntimeIdentifier.StartsWith('win'))">true</ForWindows>
+    <ForWindows Condition="'$(RuntimeIdentifier)'=='' And '$(OS)'=='Windows_NT'">true</ForWindows>
+    <CoreFile Condition="'$(ForWindows)'=='true'">../../bin/e500core.dll</CoreFile>
+    <CoreFile Condition="'$(ForWindows)'!='true'">../../bin/libe500core.so</CoreFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="12.2.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.2.0" />
+    <!-- It only reports builds to Avalonia's makers; nothing here needs it. -->
+    <PackageReference Include="Avalonia.BuildServices" Version="12.0.0" ExcludeAssets="all" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../shared/*.cs" LinkBase="shared" />
+    <Compile Include="../ui/*.cs" LinkBase="ui" />
+    <Compile Include="../desktop/AudioOutput.cs" LinkBase="desktop" />
+    <EmbeddedResource Include="pc-e500.png" LogicalName="pc-e500.png" />
+    <None Include="$(CoreFile)" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+</Project>

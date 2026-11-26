@@ -1,19 +1,6 @@
 ﻿// SPDX-License-Identifier: GPL-2.0-or-later
 namespace PokeCom;
 
-// What the main window shows: everything, the case alone with no window frame
-// around it, or the glass alone. A double-click on the case steps through them.
-/// <summary>メインウィンドウの表示（ダブルクリックで順に切り替わる）。</summary>
-internal enum WindowView
-{
-    /// <summary>タイトル・ボタン・案内・ステータスを含む、いつもの表示。</summary>
-    Normal,
-    /// <summary>ウィンドウの枠や帯のない、本体の絵だけ。</summary>
-    Body,
-    /// <summary>本体の絵もない、LCD の部分だけ。</summary>
-    Screen
-}
-
 // Modeless, and every change shows at once on the machine; the main window
 // keeps the values and writes them out when this closes.
 /// <summary>「画面」ウィンドウ（LCD のリアル表示・コントラスト・ウィンドウの表示）。変更はすぐに反映する。</summary>

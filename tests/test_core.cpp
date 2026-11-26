@@ -112,9 +112,64 @@ void testAmc() {
     check(absent->Get_8(0xa8000)==0xff && absent->mem[0xb8000]==0xff,
           "AMC absent card does not fall through to an internal-RAM mirror");
 }
+extern "C" void e500_set_reg(Machine*,int,UINT32);
+extern "C" void e500_debug_breakpoints(Machine*,const uint32_t*,int);
+extern "C" int e500_debug_run(Machine*,int,int,int);
+extern "C" int e500_debug_step(Machine*);
+extern "C" int e500_debug_frames(Machine*,uint32_t*,int);
+extern "C" int e500_debug_call(Machine*,int,int,int);
+extern "C" void e500_debug_watch_reads(Machine*,const uint32_t*,int,int);
+extern "C" int e500_debug_read_hit(Machine*);
+extern "C" int e500_debug_write_imem(Machine*,int,const BYTE*,int);
+// デバッガの API：ブレークポイント、呼び出しの記録、ステップアウト、1命令、レジスタの書き込み、呼び出し。
+void testDebugger() {
+    auto m=std::make_unique<Machine>();auto &c=m->cpu;c.Reset();
+    // B8000: CALL 8010 / NOP / HALT    B8010: MV A,5 / RET
+    const BYTE code[]={0x04,0x10,0x80,0x00,0xde};const BYTE sub[]={0x08,0x05,0x06};
+    std::copy_n(code,sizeof code,m->mem.begin()+0xb8000);std::copy_n(sub,sizeof sub,m->mem.begin()+0xb8010);
+    c.reg.x.p=0xb8000;c.reg.x.s=0xbff00;c.imem[IMEM_IMR]=0;
+    uint32_t bp=0xb8010;e500_debug_breakpoints(m.get(),&bp,1);
+    check(e500_debug_run(m.get(),1000,0,-1)==2 && c.reg.x.p==0xb8010,"debugger stops at a breakpoint before running it");
+    uint32_t f[8]{};
+    check(e500_debug_frames(m.get(),f,2)==1 && f[0]==0xb8000 && f[1]==0xb8010 && f[2]==0xbfefe && f[3]==0,"debugger records the CALL as a frame");
+    check(e500_debug_run(m.get(),1000,0,-1)==2,"debugger stays at the breakpoint without flag 1");
+    check(e500_debug_run(m.get(),1000,1,1)==3 && c.reg.x.p==0xb8003 && c.reg.r.a==5 && m->frames.empty(),"step out returns to the caller");
+    check(e500_debug_step(m.get())==0 && c.reg.x.p==0xb8004,"one step runs one instruction");
+    e500_set_reg(m.get(),0,0x177);e500_set_reg(m.get(),9,0xfb8010);
+    check(c.reg.r.a==0x77 && c.reg.x.p==0xb8010,"registers are written masked to their width");
+    e500_debug_breakpoints(m.get(),nullptr,0);
+    check(!m->isBreak(0xb8010),"breakpoints are cleared");
+    uint32_t sentinel=0xbfff2;e500_debug_breakpoints(m.get(),&sentinel,1);
+    check(e500_debug_call(m.get(),0xb8010,0xbfff2,0)==1 && m->frames.size()==1,"a near call is pushed");
+    check(e500_debug_run(m.get(),1000,0,-1)==2 && c.reg.x.p==0xbfff2 && c.reg.x.s==0xbff00 && m->frames.empty(),"the near call returns to the sentinel");
+    // A far call, as BASIC's CALL makes, returns by RETF.
+    const BYTE farSub[]={0x08,0x09,0x07};std::copy_n(farSub,sizeof farSub,m->mem.begin()+0xb8020);
+    sentinel=0xffff2;e500_debug_breakpoints(m.get(),&sentinel,1);
+    check(e500_debug_call(m.get(),0xb8020,0xffff2,1)==1 && e500_debug_run(m.get(),1000,0,-1)==2 && c.reg.x.p==0xffff2 && c.reg.r.a==9 && c.reg.x.s==0xbff00,"the far call returns by RETF");
+    // A read watch stops after the instruction that read the byte, through a mirror too.
+    // B8030: NOP / MV A,[B9000] / NOP     (B1000 is the same byte as B9000 in 32KB)
+    const BYTE reader[]={0x00,0x88,0x00,0x90,0x0b,0x00};std::copy_n(reader,sizeof reader,m->mem.begin()+0xb8030);
+    m->mem[0xb9000]=0x5a;e500_debug_breakpoints(m.get(),nullptr,0);
+    uint32_t watched=0xb1000;e500_debug_watch_reads(m.get(),&watched,1,-1);
+    c.reg.x.p=0xb8030;c.halt=false;
+    check(e500_debug_run(m.get(),1000,0,-1)==4 && c.reg.x.p==0xb8035 && c.reg.r.a==0x5a && e500_debug_read_hit(m.get())==0xb9000,"a read watch stops after the reading instruction");
+    // Filtered to reads that leave P elsewhere, this one goes by; at its own place it stops.
+    e500_debug_watch_reads(m.get(),&watched,1,0xb8099);c.reg.x.p=0xb8030;c.reg.r.a=0;
+    check(e500_debug_run(m.get(),200,0,-1)==0 && c.reg.r.a==0x5a,"a read from another place passes the filter by");
+    e500_debug_watch_reads(m.get(),&watched,1,0xb8035);c.reg.x.p=0xb8030;
+    check(e500_debug_run(m.get(),1000,0,-1)==4 && c.reg.x.p==0xb8035,"a read at the filter's place stops");
+    e500_debug_watch_reads(m.get(),nullptr,0,-1);
+    check(e500_debug_read_hit(m.get())==-1 && m->readBits.empty(),"read watches are cleared");
+    // The internal RAM up to PY; not the AMC and the I/O after it.
+    const BYTE two[]={0x12,0x34};BYTE amc=c.imem[IMEM_AMC];
+    check(e500_debug_write_imem(m.get(),0xed,two,2)==1 && c.imem[0xed]==0x12 && c.imem[0xee]==0x34,"internal RAM is written up to PY");
+    check(!e500_debug_write_imem(m.get(),0xee,two,2) && c.imem[0xee]==0x34 && c.imem[IMEM_AMC]==amc,"a write reaching the AMC writes nothing");
+    check(!e500_debug_write_imem(m.get(),0xfb,two,1) && !e500_debug_write_imem(m.get(),-1,two,1) && !e500_debug_write_imem(m.get(),0,two,0),"I/O and bad ranges are refused");
+}
 int main() {
     try {
         testAmc();
+        testDebugger();
         auto m=std::make_unique<Machine>();auto &c=m->cpu;
         m->mem[0xffffd]=0x00;m->mem[0xffffe]=0x01;m->mem[0xfffff]=0x0c;
         c.Reset();check(c.reg.x.p==0xc0100,"reset vector");
@@ -373,6 +428,15 @@ int main() {
             }
             for(int kb:{8,16,32})
                 check(e500_create_config(familyRom.data(),int(familyRom.size()),kb,0)==nullptr,"PC-E650/U6000 rejects capacities below its two 62256 sockets");
+            // The PC-E500S packs its ROM the same way, but its model code (FFFF1h) is 3
+            // and it has one 62256, so it starts with 32KB and takes the E500's sizes.
+            std::vector<BYTE> e500sRom(familyRom);e500sRom[e500sRom.size()-15]=3;
+            std::unique_ptr<Machine,void(*)(Machine*)> e500s(e500_create(e500sRom.data(),int(e500sRom.size())),e500_destroy);
+            check(e500s && e500s->romKB==384 && e500s->standardKB==32 && e500s->internalKB==32 && e500s->Get_8(0x20000)==0xa5,"PC-E500S: split ROM map, 32KB internal RAM");
+            for(int kb:{8,16,32,64,128,256}) {
+                std::unique_ptr<Machine,void(*)(Machine*)> sized(e500_create_config(e500sRom.data(),int(e500sRom.size()),kb,0),e500_destroy);
+                check(sized && sized->internalKB==kb,"PC-E500S internal RAM capacity");
+            }
             configured->Set_8(0x80000,0x81);
             check(configured->Get_8(0x80000)==0x81 && configured->Get_8(0xbffff)!=0x81,"256KB internal RAM reaches 80000 without mirroring");
             // Debugger writes land in RAM only, through the mirrors, and all or nothing.
@@ -441,7 +505,7 @@ int main() {
             auto filename=[](BYTE cmd,std::string stem,std::string ext="BAS") {
                 std::vector<BYTE> b{cmd,'X',':'};stem.resize(8,' ');stem+='.';stem+=ext;stem.resize(12,' ');b.insert(b.end(),stem.begin(),stem.end());return b;
             };
-            check(disk.command({5,0})==std::vector<BYTE>{255},"CE rejects checksum mismatch");
+            check(disk.command({5,0})==std::vector<BYTE>{0x40},"CE rejects checksum mismatch");
             check(disk.command(packet(filename(0x10,"TEST")))==std::vector<BYTE>{0},"SAVE filename");
             check(!disk.canSnapshot(),"SAVE context prevents inconsistent snapshots");
             check(disk.command(packet({0x11,0,3,0,0}))==std::vector<BYTE>{0},"SAVE size");
@@ -462,7 +526,7 @@ int main() {
                 check(disk.command(packet(filename(0x05,"T??","???")))==std::vector<BYTE>({0,0,0}),"FILES T??.??? does not match TEST");
                 fs::remove(path/"A.BAS");fs::remove(path/"LONGNAME.TXT");
             }
-            auto bad=filename(0x10,"..\\EVIL");check(disk.command(packet(bad))==std::vector<BYTE>{255},"CE rejects path traversal");
+            auto bad=filename(0x10,"..\\EVIL");check(disk.command(packet(bad))==std::vector<BYTE>{0x31},"CE rejects path traversal");
             {
                 // A folder that cannot be opened (here a file) leaves the drive on the
                 // one it had, with its open file still open.
@@ -470,10 +534,10 @@ int main() {
                 auto open=filename(0x03,"TEST");open.push_back(1);open.push_back(2);
                 check(disk.command(packet(open))==std::vector<BYTE>{0},"CE140F file open before a bad mount");
                 check(!disk.mount((path/"TEST.BAS").c_str(),false),"CE140F refuses a file as its folder");
-                check((disk.status()&1) && !disk.canSnapshot() && disk.command(packet({0x1b,2}))!=std::vector<BYTE>{255},"CE140F keeps its folder and open file after a refused mount");
+                check((disk.status()&1) && !disk.canSnapshot() && disk.command(packet({0x1b,2})).size()==5,"CE140F keeps its folder and open file after a refused mount");
                 check(disk.command(packet({0x04,0xff}))==std::vector<BYTE>{0} && disk.canSnapshot(),"CE140F closes the file");
             }
-            disk.mount(path.c_str(),true);check(disk.command(packet(filename(0x0a,"TEST")))==std::vector<BYTE>{255} && fs::exists(path/"TEST.BAS"),"write protection enforces KILL");
+            disk.mount(path.c_str(),true);check(disk.command(packet(filename(0x0a,"TEST")))==std::vector<BYTE>{0x33} && fs::exists(path/"TEST.BAS"),"write protection enforces KILL");
             {
                 // The machine's RESET closes the drive's files and transfer: BASIC
                 // has no file number left to close them with.
@@ -515,16 +579,39 @@ int main() {
                       disk.command(packet({0x41}))==std::vector<BYTE>{0} && fs::exists(path/"PROG"),"SAVE with no extension");
                 check(disk.command(packet(filename(0x10,"COMP")))==std::vector<BYTE>{0} && disk.command(packet({0x11,0,1,0,0}))==std::vector<BYTE>{0} &&
                       disk.command(packet({0x42}))==std::vector<BYTE>{0},"COMP is not a device name");
-                check(disk.command(packet(filename(0x10,"COM1")))==std::vector<BYTE>{255},"COM1 is a device name");
+                check(disk.command(packet(filename(0x10,"COM1")))==std::vector<BYTE>{0x31},"COM1 is a device name");
+                // Every error is a status the ROM makes a BASIC error of: FFh, and
+                // anything below 10h, pass for success there.
+                // エラーは、ROM が BASIC のエラーにする状態で返す（FFh と 10h 未満は成功とみなされる）。
+                auto two=[&](BYTE cmd,std::string from,std::string to){auto b=filename(cmd,from),c=filename(0,to);b.insert(b.end(),c.begin()+1,c.end());return disk.command(packet(b));};
+                const std::vector<BYTE> done{0},notFound{0x32},isProtected{0x33},full{0x34},nameError{0x35},mode{0x3e},io{0x40};
+                check(opened("NONE","DAT",1,2)==notFound && disk.command(packet(filename(0x0e,"NONE")))==notFound && disk.command(packet(filename(0x0a,"NONE")))==notFound,"OPEN, LOAD and KILL of a missing file");
+                check(two(0x0b,"NONE","NEW")==notFound && two(0x0d,"NONE","NEW")==notFound,"NAME and COPY of a missing file");
+                check(two(0x0b,"TEST","COMP")==nameError && two(0x0b,"TEST","COM1")==nameError && fs::exists(path/"TEST.BAS"),"NAME to a name taken, or one that cannot be used");
+                auto attribute=filename(0x0c,"NONE");attribute.push_back('P');attribute.push_back(1);check(disk.command(packet(attribute))==notFound,"SET of a missing file");
+                fs::create_directory(path/"SUB");check(disk.command(packet(filename(0x0a,"SUB","")))==notFound && fs::exists(path/"SUB"),"KILL leaves a folder alone");fs::remove(path/"SUB");
+                check(opened("CR","TXT",1,2)==done && disk.command(packet({0x15,2}))==mode,"PRINT# to a file open for INPUT");
+                check(opened("OUT","TXT",2,3)==done && disk.command(packet({0x13,3}))==mode,"INPUT# from a file open for OUTPUT");
+                disk.command(packet({0x04,0xff}));fs::remove(path/"OUT.TXT");
+                check(disk.command(packet({0x13,2}))==io && disk.command(packet({0x7f,0}))==io,"a file not open, and a command there is not");
+                check(disk.command(packet(filename(0x10,"BIG")))==done && disk.command(packet({0x11,0,1,0,0x20}))==full && disk.canSnapshot(),"SAVE too large for the disk ends there");
+                {std::ofstream f(path/"EMPTY.BAS");}
+                check(disk.command(packet(filename(0x0e,"EMPTY"))).size()>1 && disk.command(packet({0x17,1}))==io && disk.canSnapshot(),"LOAD past the end of a file");fs::remove(path/"EMPTY.BAS");
+                check(disk.mount(path.c_str(),true) && opened("NEW","TXT",2,2)==isProtected && opened("CR","TXT",3,2)==isProtected && disk.command(packet(filename(0x10,"NEW")))==isProtected &&
+                      two(0x0b,"TEST","NEW")==isProtected && two(0x0d,"TEST","NEW")==isProtected && disk.command(packet({0x08}))==isProtected && disk.command(packet({0x09}))==isProtected,"a write-protected disk");
+                check(disk.mount(path.c_str(),false),"CE140F mounted again");
                 // FILES lists PROG and COMP.BAS though a name outside the code page sits beside them.
-                std::ofstream(path/fs::path(L"\u2603.TXT"))<<"x";
+                std::ofstream(path/fs::u8path("\xe2\x98\x83.TXT"))<<"x";
                 std::ofstream(path/"lower.bas")<<"x";
                 auto listed=disk.command(packet(filename(0x05,"????????","???")));
                 // LOG.TXT CR.TXT ASCII.TXT B256.BIN PROG COMP.BAS LOWER.BAS TEST.BAS
                 check(listed.size()==3 && listed[1]==8,"FILES lists the disk past a name it cannot show");
+                // A small-letter name copied from a PC is read by the name FILES shows.
+                auto small=disk.command(packet(filename(0x0e,"LOWER","BAS")));
+                check(small.size()>1 && small[0]==0 && small[2]==1,"LOAD finds a lower-case file");
                 // INIT clears what FILES shows, lower-case names included.
                 check(disk.command(packet({0x09}))==std::vector<BYTE>{0} && !fs::exists(path/"lower.bas") && !fs::exists(path/"PROG"),"INIT clears lower-case and extensionless names");
-                fs::remove(path/fs::path(L"\u2603.TXT"));
+                fs::remove(path/fs::u8path("\xe2\x98\x83.TXT"));
             }
             // Only the specifically created file and empty test directory are removed.
             fs::remove(path/"TEST.BAS");fs::remove(path);
@@ -741,7 +828,7 @@ int main() {
             auto idle=p.save();check(idle.lastActivity==0,"CE126P idle state carries no time");
             // With no printer on the bus the disk answers a code that starts with
             // 1, as 41h does (0Fh), all the way, and stays silent through one that
-            // starts with 0 (20h), so the ROM finds no printer and LPRINT fails at once.
+            // starts with 0 (20h), so the ROM finds no printer and passes LPRINT over at once.
             p.connected=false;tick(false,false);
             for(BYTE c:{BYTE(0x0f),BYTE(0x20)}) {
                 xout=true;tick(false,false);bool answered=true,silent=true;

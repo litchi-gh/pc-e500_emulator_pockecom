@@ -70,23 +70,25 @@ internal sealed class MainForm : Form
     /// <summary>自動保存の番が来たのに、前の書き込みが終わっておらず始められなかったか（次の回にすぐ試す）。</summary>
     bool saveOwed;
     readonly Stopwatch clock=Stopwatch.StartNew();
-    /// <summary>キー入力の待ち行列：キーコード、押すか離すか、その状態を保つサイクル数。</summary>
-    readonly Queue<(int Code,bool Down,int Cycles)> inputQueue=new();
-    
-    /// <summary>画面でクリックして押したままの SHIFT・CTRL。</summary>
-    readonly HashSet<int> held=new();
+    /// <summary>プログラムの読み込み（BAS・BIN）と、機械語エリアの確保。</summary>
+    readonly ProgramLoader loader;
+    // The drive's file is written over without asking in a test; a reservation is asked of AskMachineCode, or taken as it is.
+    /// <summary>はい・いいえ（と取り消し）を聞く。</summary>
+    ProgramLoader.Answer Ask(string title,string question,bool cancel) {
+        bool code=title==ProgramLoader.MachineCodeTitle;
+        if(code && AskMachineCode is not null)return Of(AskMachineCode(question));
+        if(testing)return code && cancel?ProgramLoader.Answer.No:ProgramLoader.Answer.Yes;
+        return Of(MessageBox.Show(this,question,title,cancel?MessageBoxButtons.YesNoCancel:MessageBoxButtons.YesNo,MessageBoxIcon.Question));
+        static ProgramLoader.Answer Of(DialogResult r)=>r==DialogResult.Yes?ProgramLoader.Answer.Yes:r==DialogResult.No?ProgramLoader.Answer.No:ProgramLoader.Answer.Cancel;
+    }
+    /// <summary>キー入力の待ち行列。</summary>
+    readonly KeyInput<HoldBy> input;
     // PC keys physically down. A KEYDOWN for one already in here is Windows
     // repeating the key, not a second keystroke.
     readonly HashSet<Keys> downKeys=new();
     bool charRepeats;
     /// <summary>最後に押された PC のキー（続く文字をこのキーの長押しとして扱う）。</summary>
     Keys lastDown;
-    // A PC key held down holds the machine's key down until it comes up, as a
-    // finger on the real keys would: the ROM's own repeat (BS, DEL, the cursor
-    // keys) and games that read a held key then work as on the machine.
-    // Windows' repeats are not used; they only ever were taps.
-    /// <summary>PC のキーごとに、押したままにしている本体のキーと、一緒に押している SHIFT・CTRL（なければ -1）。</summary>
-    readonly Dictionary<HoldBy,(int Code,int Modifier)> holding=new();
     // A key held by the controller is held under its binding ("UP", "SHIFT+A"),
     // so two buttons on one key (the D-pad and the stick) hold it once, until both are up.
     /// <summary>キーを押したままにしている元：PC のキーか、コントローラーの割り当て（Binding）。</summary>
@@ -110,8 +112,6 @@ internal sealed class MainForm : Form
     /// <summary>データを置くフォルダ（rom・ram・drive-x・state がある）と、プログラムのフォルダ（manual がある）。
     /// zip 版では同じ、インストール版では別（AppFolders を参照）。</summary>
     readonly string root,programRoot;
-    /// <summary>今のキーの状態を保つ残りのサイクル数（0 なら次のキーへ）。</summary>
-    int inputWait;
     double previous;
     bool paused;
     /// <summary>ツールバー・本体の絵・案内・ステータスバーを並べる表（通常の表示のときだけ見せる）。</summary>
@@ -142,6 +142,8 @@ internal sealed class MainForm : Form
     internal MainForm(string? romPath=null, bool testing=false)
     {
         programRoot=AppFolders.Program();root=AppFolders.Data(programRoot);
+        input=new(()=>core,()=>paused,surface.SetPressed);
+        loader=new(()=>core,input,()=>paused,()=>settings.DiskFolder,Notify,UpdateDisplay,(title,question,cancel)=>Task.FromResult(Ask(title,question,cancel)));
         this.testing=testing;
         if(!testing && AppFolders.IsInstalled(programRoot))AppFolders.Prepare(root);
         if(!testing) {
@@ -199,17 +201,7 @@ internal sealed class MainForm : Form
         surface.KeyClicked+=name=>{
             if(core is null||paused)return;
             if(name=="RESET") {TryAction(ResetPin);return;}
-            int code=Keyboard.Codes[name];
-            // A clicked SHIFT or CTRL joins the queue, so it reaches the key after the
-            // ones still waiting, not those too; it stays down for the next key.
-            // 画面の SHIFT・CTRL は待ち行列に入れる（待っている前のキーには効かせず、次のキーまで押したまま）。
-            if(name is "SHIFT" or "CTRL") {
-                bool down=held.Add(code);if(!down)held.Remove(code);
-                inputQueue.Enqueue((code,down,down?ShiftLeadCycles:ModifierCycles));NextKey();surface.SetPressed(name,down);
-            }
-            // The PC's Ctrl held while a key is clicked adds CTRL to it.
-            else if((ModifierKeys&Keys.Control)!=0)QueueWith(Keyboard.Codes["CTRL"],code);
-            else QueueKey(code);
+            input.Click(name,(ModifierKeys&Keys.Control)!=0);
         };
         // Focus leaving lets go of the PC's keys only; typing still queued (a paste) goes on.
         Deactivate+=(_,_)=>ReleaseKeys(true);
@@ -341,7 +333,7 @@ internal sealed class MainForm : Form
             menu.Items.Add(item);
         }
         menu.Items.Insert(0,updateItem);
-        menu.Items.Add(L.T("新しい版を確認...","Check for a new version..."),MenuIcon(Theme.Icons.Download),(_,_)=>_=CheckForUpdate(true));
+        menu.Items.Add(L.T("新しいバージョンを確認...","Check for a new version..."),MenuIcon(Theme.Icons.Download),(_,_)=>_=CheckForUpdate(true));
         menu.Items.Add(L.T("機械語エリア...","Machine-code area..."),MenuIcon(Theme.Icons.Code),(_,_)=>TryAction(ShowMachineCode));
         menu.Items.Add(L.T("データフォルダを開く","Open the data folder"),MenuIcon(Theme.Icons.Folder),(_,_)=>TryAction(()=>System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(AppFolders.Prepare(root)){UseShellExecute=true})));
         var speedMenu=new ToolStripMenuItem(L.T("速度","Speed"),MenuIcon(Theme.Icons.Speed));
@@ -380,13 +372,13 @@ internal sealed class MainForm : Form
         Release? release;
         try {release=await UpdateCheck.FetchAsync();}
         catch(Exception ex) {
-            if(manual && !IsDisposed)MessageBox.Show(this,L.T("新しい版を確認できませんでした。\n","Could not check for a new version.\n")+ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+            if(manual && !IsDisposed)MessageBox.Show(this,L.T("新しいバージョンを確認できませんでした。\n","Could not check for a new version.\n")+ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Warning);
             return;
         }
         if(IsDisposed)return;
         settings=settings with{UpdateCheckedAt=DateTime.UtcNow};SaveSettings();
         if(release is null || !UpdateCheck.IsNewer(release)) {
-            if(manual)MessageBox.Show(this,L.T($"最新の版です（{UpdateCheck.Current}）。",$"This is the latest version ({UpdateCheck.Current})."),"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            if(manual)MessageBox.Show(this,L.T($"最新のバージョンです（{UpdateCheck.Current}）。",$"This is the latest version ({UpdateCheck.Current})."),"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Information);
             return;
         }
         ShowUpdate(release,manual);
@@ -397,8 +389,8 @@ internal sealed class MainForm : Form
     void ShowUpdate(Release release,bool manual) {
         if(!manual && release.Tag==settings.SkippedUpdate)return;
         available=release;
-        updateNotice.Text=L.T($"新しい版 {release.Tag}",$"New version {release.Tag}");updateNotice.Visible=true;
-        updateItem.Text=L.T($"新しい版 {release.Tag} があります...",$"Version {release.Tag} is out...");updateItem.Available=true;
+        updateNotice.Text=L.T($"新しいバージョン {release.Tag}",$"New version {release.Tag}");updateNotice.Visible=true;
+        updateItem.Text=L.T($"新しいバージョン {release.Tag} があります...",$"Version {release.Tag} is out...");updateItem.Available=true;
         if(manual)OpenUpdate();
     }
     /// <summary>新しい版のお知らせを開く。</summary>
@@ -582,76 +574,13 @@ internal sealed class MainForm : Form
         var b=new ToolButton{Text=text,AutoSize=true,Glyph=glyph,Margin=new Padding(0,0,2,0)};
         b.Click+=(_,_)=>TryAction(action);parent.Controls.Add(b);
     }
-    // The ROM scans the key matrix from its 64 Hz sub-timer, and only counts a key
-    // whose press and release land in different scans with one scan between them.
-    // 18000 down plus 24000 up (one and a half scans, then two) is the shortest pair that never drops a key; the
-    // 120000/100000 at 1.024 MHz that this replaces spent 215 ms per key, so anything faster than
-    // five keys a second piled up into a backlog that felt like input lag.
-    // A shifted character only comes out shifted when SHIFT is already down for a
-    // whole scan before the key joins it, and stays down for a whole scan after the
-    // key leaves. The 8000 that both used to be is half a scan, so whichever
-    // keystroke the scan phase fell on lost its SHIFT: pasting LOAD M "X:TETRIS.BIN"
-    // dropped the closing quote to a bare W, and typing quotes gave one W in four.
-    const int CpuHz=768000,KeyDownCycles=18000,KeyUpCycles=24000,ModeSettleCycles=200000,ModifierCycles=7500,
-        ShiftLeadCycles=18000,ShiftTailCycles=18000;
-    /// <summary>キーを1回押して離す操作を待ち行列に入れ、すぐに始める。</summary>
-    /// <param name="code">キーコード</param>
-    void QueueKey(int code) {
-        if(core is null || paused)return;
-        inputQueue.Enqueue((code,true,KeyDownCycles));inputQueue.Enqueue((code,false,KeyUpCycles));
-        if(code==Keyboard.Codes["BASIC"] || code==Keyboard.Codes["MENU"] || code==Keyboard.Codes["F1"])
-            inputQueue.Enqueue((code,false,ModeSettleCycles));
-        // Keep a clicked modifier held until the character's matrix scan completes.
-        foreach(var modifier in held.ToArray()) {inputQueue.Enqueue((modifier,false,ModifierCycles));held.Remove(modifier);}
-        // Press now instead of on the next frame: the 16 ms timer would otherwise
-        // add its own wait in front of the ROM scan on every keystroke.
-        NextKey();
-    }
-    /// <summary>SHIFT を押したまま code のキーを押す操作を待ち行列に入れる。</summary>
-    void QueueShifted(int code)=>QueueWith(Keyboard.Codes["SHIFT"],code);
-    // The PC's Ctrl is no longer held down in the machine while it is held on the
-    // PC: with a key it goes into the queue around that key, the way SHIFT does.
-    // Held down, it reached the first key of a Ctrl+V paste, and stayed down
-    // after a Ctrl+letter that sent nothing.
-    /// <summary>modifier（SHIFT・CTRL）を押したまま code のキーを押す操作を待ち行列に入れる。</summary>
-    void QueueWith(int modifier,int code) {
-        inputQueue.Enqueue((modifier,true,ShiftLeadCycles));
-        QueueKey(code);
-        inputQueue.Enqueue((modifier,false,ShiftTailCycles));
-    }
-    /// <summary>前のキーの時間が過ぎていれば、待ち行列の次の操作を本体へ送る。</summary>
-    /// <returns>送ったか</returns>
-    bool NextKey() {
-        if(core is null || inputWait!=0 || !inputQueue.TryDequeue(out var key))return false;
-        core.Key(key.Code,key.Down);inputWait=key.Cycles;
-        surface.SetPressed(Keyboard.Matrix[key.Code/8][key.Code%8],key.Down);
-        return true;
-    }
-    // Windows repeats a held key thirty-one times a second. Those repeats used to
-    // be sent as taps (and thinned so they never piled up); now the key is simply
-    // held, and the repeats are ignored, so nothing can pile up behind a held key.
-    /// <summary>本体のキーを押し、PC のキー pcKey が離されるまで押したままにする（modifier は一緒に押す SHIFT・CTRL、なければ -1）。</summary>
-    void Hold(Keys pcKey,int code,int modifier)=>Hold(new HoldBy(pcKey),code,modifier);
-    void Hold(HoldBy pcKey,int code,int modifier) {
-        if(core is null || paused || holding.ContainsKey(pcKey))return;
-        if(modifier>=0)inputQueue.Enqueue((modifier,true,ShiftLeadCycles));
-        // The press stays at least one key time, so a quick tap still reaches a scan.
-        inputQueue.Enqueue((code,true,KeyDownCycles));
-        holding[pcKey]=(code,modifier);NextKey();
-    }
-    /// <summary>PC のキー pcKey で押したままにしていた本体のキーを離す。</summary>
-    void Unhold(Keys pcKey)=>Unhold(new HoldBy(pcKey));
-    void Unhold(HoldBy pcKey) {
-        if(!holding.Remove(pcKey,out var h))return;
-        inputQueue.Enqueue((h.Code,false,KeyUpCycles));
-        if(h.Code==Keyboard.Codes["BASIC"] || h.Code==Keyboard.Codes["MENU"] || h.Code==Keyboard.Codes["F1"])inputQueue.Enqueue((h.Code,false,ModeSettleCycles));
-        if(h.Modifier>=0)inputQueue.Enqueue((h.Modifier,false,ShiftTailCycles));
-        // A SHIFT or CTRL clicked on the case goes with this key, as with a tap.
-        foreach(var modifier in held.ToArray()){inputQueue.Enqueue((modifier,false,ModifierCycles));held.Remove(modifier);surface.SetPressed(Keyboard.Matrix[modifier/8][modifier%8],false);}
-        NextKey();
-    }
-    /// <summary>押したままの本体のキーをすべて離す（ウィンドウからフォーカスが離れたとき）。</summary>
-    void UnholdAll(){foreach(var pcKey in holding.Keys.ToArray())Unhold(pcKey);}
+    const int CpuHz=KeyInput<HoldBy>.CpuHz;
+    void QueueKey(int code)=>input.Tap(code);
+    void QueueWith(int modifier,int code)=>input.TapWith(modifier,code);
+    void Hold(Keys pcKey,int code,int modifier)=>input.Hold(new HoldBy(pcKey),code,modifier);
+    void Hold(HoldBy pcKey,int code,int modifier)=>input.Hold(pcKey,code,modifier);
+    void Unhold(Keys pcKey)=>input.Unhold(new HoldBy(pcKey));
+    void Unhold(HoldBy pcKey)=>input.Unhold(pcKey);
     // The keys with no character (Enter, the arrows, F1...) arrive in
     // ProcessCmdKey; here only the repeat of a character key is told apart, and
     // Ctrl is taken without pressing anything (it goes with the next key).
@@ -704,7 +633,7 @@ internal sealed class MainForm : Form
         }
         if(char.IsControl(e.KeyChar))return;
         if(!charRepeats) {
-            if(!CharacterKey(e.KeyChar,out int code,out int modifier))
+            if(!KeyInput<HoldBy>.CharacterKey(e.KeyChar,out int code,out int modifier))
                 Notify(L.T($"未対応のPC文字: {e.KeyChar}（画面のSHIFTとポケコンのキーで入力してください）",$"Unsupported PC character: {e.KeyChar} (use the on-screen SHIFT and pocket computer keys)"));
             else if(hold)Hold(lastDown,code,modifier);
             else if(modifier>=0)QueueWith(modifier,code);else QueueKey(code);
@@ -712,40 +641,8 @@ internal sealed class MainForm : Form
         // Consumed: a WM_CHAR that arrives without its WM_KEYDOWN is a fresh keystroke.
         charRepeats=false;e.Handled=true;
     }
-    /// <summary>1文字を本体のキー操作に変えて待ち行列に入れる。</summary>
-    /// <param name="character">文字</param>
-    /// <returns>対応するキーがあったか</returns>
-    bool QueueCharacter(char character) {
-        if(!CharacterKey(character,out int code,out int modifier))return false;
-        if(modifier>=0)QueueWith(modifier,code);else QueueKey(code);
-        return true;
-    }
-    /// <summary>1文字に当たる本体のキーと、一緒に押す SHIFT（なければ -1）。</summary>
-    /// <returns>対応するキーがあったか</returns>
-    static bool CharacterKey(char character,out int code,out int modifier) {
-        modifier=-1;
-        string text=character==' '?"SPACE":char.ToUpperInvariant(character).ToString();
-        if(Keyboard.Codes.TryGetValue(text,out code))return true;
-        if(Keyboard.Shifted.TryGetValue(character,out string? baseKey)){code=Keyboard.Codes[baseKey];modifier=Keyboard.Codes["SHIFT"];return true;}
-        return false;
-    }
-    /// <summary>文字列をキー入力として送る（改行は ENTER、タブは空白4つ、対応しない文字は省く）。</summary>
-    /// <param name="value">貼り付ける文字列（4096文字まで）</param>
-    /// <returns>結果のメッセージ</returns>
-    string PasteText(string value) {
-        if(core is null)return L.T("ROMが読み込まれていません。","No ROM is loaded.");
-        if(paused)return L.T("一時停止を解除してから貼り付けてください。","Resume the machine before pasting.");
-        if(value.Length>4096)return L.T("貼り付けは一度に4096文字までです。","Paste up to 4096 characters at a time.");
-        value=value.Replace("\r\n","\n").Replace('\r','\n');int queued=0,skipped=0;
-        foreach(char character in value) {
-            if(character=='\n'){QueueKey(Keyboard.Codes["ENTER"]);queued++;continue;}
-            if(character=='\t'){for(int i=0;i<4;i++)QueueCharacter(' ');queued+=4;continue;}
-            if(QueueCharacter(character))queued++;else skipped++;
-        }
-        string message=L.T($"{queued}文字をキー入力へ送信しました。",$"Sent {queued} characters as key input.");
-        if(skipped>0)message+=L.T($" 未対応の{skipped}文字は省略しました。",$" Skipped {skipped} unsupported characters.");
-        return message;
-    }
+    /// <summary>文字列をキー入力として送る（KeyInput.Paste）。</summary>
+    string PasteText(string value)=>input.Paste(value);
     // A paste can take minutes to type. Moving to another window or using the
     // toolbar lets go of the PC's keys only; what stops the machine (a ROM
     // switch, a pause, a reset) drops the rest too, and says so.
@@ -753,14 +650,14 @@ internal sealed class MainForm : Form
     /// そうでなければ本体のキーもすべて離して待ち行列を空にし、残っていれば知らせる。</summary>
     void ReleaseKeys(bool keepQueue=false) {
         // Keys held come up in the queue, behind what is still to be typed.
-        if(keepQueue){UnholdAll();downKeys.Clear();charRepeats=false;return;}
-        downKeys.Clear();charRepeats=false;holding.Clear();
-        if(inputQueue.Count>0)Notify(L.T("入力の残り（貼り付けの途中など）を取り消しました。","The keys still to be typed (a paste) were dropped."));
-        core?.Release();held.Clear();inputQueue.Clear();inputWait=0;
+        if(keepQueue){input.UnholdAll();downKeys.Clear();charRepeats=false;return;}
+        downKeys.Clear();charRepeats=false;
+        if(input.Queue.Count>0)Notify(L.T("入力の残り（貼り付けの途中など）を取り消しました。","The keys still to be typed (a paste) were dropped."));
+        input.Clear();
         // A BIN waiting for its reservation is dropped with the typing: the machine it
         // was meant for may be gone (a state loaded, a ROM switched, a reset).
         // 確保を待っている BIN も一緒にやめる（状態の読み込み・ROM の切り替え・リセットで、別の本体になっていることがある）。
-        if(pendingBin is {} job){pendingBin=null;Notify(L.T($"{job.Name} の読み込みをやめました（機械語エリアの確保が終わる前に中断しました）。",$"{job.Name} was not loaded (stopped before the machine-code area was reserved)."));}
+        if(loader.Drop() is {} name){Notify(L.T($"{name} の読み込みをやめました（機械語エリアの確保が終わる前に中断しました）。",$"{name} was not loaded (stopped before the machine-code area was reserved)."));}
         surface.ReleaseKeys();
     }
     // A message shown in place of the status line for a few seconds; the line is
@@ -819,12 +716,8 @@ internal sealed class MainForm : Form
     /// <param name="cycles">実行するサイクル数</param>
     void RunCycles(int cycles) {
         if(core is null)return;
-        while(cycles>0) {
-            NextKey();
-            int batch=inputWait>0?Math.Min(cycles,inputWait):cycles;
-            core.Run(batch);cycles-=batch;if(inputWait>0)inputWait-=batch;
-        }
-        if(pendingBin is not null)FinishPendingBin();
+        input.Run(cycles);
+        loader.Finish();
     }
     /// <summary>LCD を読み直して絵を更新し、ステータスバーに状態を表示する。</summary>
     void UpdateDisplay() {
@@ -862,7 +755,7 @@ internal sealed class MainForm : Form
             Short:padDevice is not null?L.T("接続中","on"):L.T("未接続","off"));
         status.ShortOrder=pad is null?[3,4,6,5,2,1,0]:[3,4,6,7,5,2,1,0];
         status.SetParts(state,message,[
-            new(Theme.Icons.Chip,$"ROM Ver.{core.RomVersion} ({(core.IsE650Family?"E650":"E500")})",Tip:$"{core.RomKB}KB ({(core.IsE650Family?"E650/U6000":"E500")})\n{core.RomPath}",Short:$"Ver.{core.RomVersion}"),
+            new(Theme.Icons.Chip,$"ROM Ver.{core.RomVersion} ({(core.IsE500S?"E500S":core.IsE650Family?"E650":"E500")})",Tip:$"{core.RomKB}KB ({(core.IsE500S?"E500S":core.IsE650Family?"E650/U6000":"E500")})\n{core.RomPath}",Short:$"Ver.{core.RomVersion}"),
             new(Theme.Icons.Memory,$"RAM {core.InternalKB}KB{card}",Click:()=>TryAction(ConfigureHardware),
                 Tip:L.T($"内蔵RAM {core.InternalKB}KB / ",$"Internal RAM {core.InternalKB}KB / ")+(core.HasCard?L.T($"RAMカード {core.CardKB}KB ({core.CardName})",$"RAM card {core.CardKB}KB ({core.CardName})"):L.T("RAMカードなし","no RAM card"))+L.T("\n押すと「設定」を開きます","\nClick to open Settings"),Short:$"{core.InternalKB}KB{card}"),
             new(Theme.Icons.Code,ml is not {Size:>0} m?L.T("機械語 なし","ML none"):L.T($"機械語 {Bytes(m.Size)}",$"ML {Bytes(m.Size)}"),Click:()=>TryAction(ShowMachineCode),
@@ -883,103 +776,14 @@ internal sealed class MainForm : Form
         if(core is null)throw new InvalidOperationException(L.T("ROMが読み込まれていません。","No ROM is loaded."));
         var area=MachineCodeArea.Read(core);int free=BasicImage.FreeBytes(core);
         if(area is not {} a || free<0)throw new InvalidOperationException(L.T("今の RAM からは機械語エリアを読めません（初期化の前など）。","The machine-code area cannot be read from the RAM now (before it is set up, say)."));
-        ShowWindow("machine-code",()=>new MachineCodeDialog(RamLayout.Internal(core),a.Size,LargestMachineCode(a.Size,free)){Apply=size=>{
+        ShowWindow("machine-code",()=>new MachineCodeDialog(RamLayout.Internal(core),a.Size,MachineCodeArea.Largest(a.Size,free)){Apply=size=>{
             try{Notify(ReserveMachineCode(size));return true;}
             catch(Exception ex){MessageBox.Show(ex.Message,L.T("機械語エリア","Machine-code area"),MessageBoxButtons.OK,MessageBoxIcon.Warning);return false;}
         }});
     }
-    // Room is left for the BASIC program and variables to work in: the ROM stops a
-    // request it cannot meet, but one that leaves nothing would stop BASIC instead.
-    /// <summary>機械語エリアにできるいちばん大きい値（今の大きさと空きから、BASIC の分を 200h 残して 100h 単位に）。</summary>
-    static int LargestMachineCode(int current,int free)=>Math.Max(current,(current+free-0x200)/0x100*0x100);
-    /// <summary>機械語エリアを size バイトにする（ROM の確保の処理を打ち込み、メインメニューから BASIC に戻す）。</summary>
-    /// <returns>結果のメッセージ</returns>
-    /// <summary>確保が終わるのを待って書き込む BIN（名前、ファイルの中身、確保する大きさ）。</summary>
-    (string Name,byte[] Data,int Size)? pendingBin;
     /// <summary>確保と読み込みのどちらにするかを聞く処理（テストで差し替える。null なら MessageBox）。</summary>
     internal Func<string,DialogResult>? AskMachineCode;
-    // Asked only when the bytes go into the internal RAM below the system bytes and
-    // not wholly into the area as it is; the area is taken from the BIN's start
-    // up. Yes reserves (at BASIC's prompt) and loads once that is done; No loads
-    // as before; Cancel loads nothing.
-    /// <summary>機械語エリアの外に書く BIN なら、確保してから読み込むかを聞く。確保するなら始めたことのメッセージ、
-    /// このまま読み込むなら null を返す（やめたら例外）。</summary>
-    string? MachineCodeOffer(string name,int start,int length) {
-        if(core is null || length<=0)return null;
-        int bottom=0xc0000-core.InternalKB*1024,end=start+length;
-        // Only the RAM really there: an address beyond it lands on a mirror of
-        // another part (the program, the stacks), so such a file is refused.
-        // 実際にある RAM だけ。範囲外の番地は別の場所（プログラムやスタック）の写しに当たるので断る。
-        bool inInternal=start>=bottom && end<=0xc0000,inCard=core.CardKB>0 && start>=0x40000 && end<=0x40000+core.CardKB*1024;
-        if(!inInternal && !inCard)throw new InvalidDataException(L.T($"{name} は {start:X5}〜{end-1:X5} に入るファイルですが、この本体の RAM にはその範囲がありません。デバッグ（Ctrl+D）の「BIN書込み」で書く場所を指定してください。",
-            $"{name} goes to {start:X5}-{end-1:X5}, which is not in this machine's RAM. Use BIN load in the debugger (Ctrl+D) and give the address."));
-        // What is in use there (the program, the variables, the stacks, the work
-        // areas, the system bytes) is not written over as it is: only a reservation,
-        // which moves it out of the way first, can make the room.
-        // 使用中の所（プログラム、変数、スタック、作業域、システム）にはそのまま書かない。確保（先にそれらをずらす）だけができる。
-        bool clobbers=(inInternal?RamLayout.Internal(core):RamLayout.Card(core)).Any(r=>r.Kind is not (RegionKind.Free or RegionKind.MachineCode) && r.Start<end && start<r.End);
-        string inUse=L.T($"{name} は {start:X5}〜{end-1:X5} に入りますが、ここには使用中の所（BASIC のプログラム・変数・作業域など）があり、そのまま書くと壊れます。",
-            $"{name} goes to {start:X5}-{end-1:X5}, where parts in use (the BASIC program, variables, work areas) are; writing it there as it is would break them.");
-        if(!inInternal || end>0xbfc00 || MachineCodeArea.Read(core) is not {} area || start>=area.Start) {
-            if(clobbers)throw new InvalidDataException(inUse+L.T(" デバッグ（Ctrl+D）の「BIN書込み」なら書けます。"," BIN load in the debugger (Ctrl+D) can still write it."));
-            return null;
-        }
-        int size=0xbfc00-start,free=BasicImage.FreeBytes(core);
-        int mode=Native.e500_symbols(core.Handle,0);
-        bool canReserve=free>=0 && size<=LargestMachineCode(area.Size,free) && (mode&1)==0 && (mode&6)!=0 && !paused;
-        if(clobbers) {
-            if(!canReserve)throw new InvalidDataException(inUse+L.T(size>LargestMachineCode(area.Size,free)?" 空きが足りないため、機械語エリアとしても確保できません。":" BASIC の RUN か PRO の表示で読み込むと、先に機械語エリアを確保できます。",
-                size>LargestMachineCode(area.Size,free)?" There is not enough free RAM to reserve it as the machine-code area either.":" Load it at BASIC's RUN or PRO prompt to reserve the machine-code area first."));
-            string reserve=inUse+L.T($"\n\n機械語エリアを {size:X}h バイト（{start:X5}〜BFBFF）確保してから読み込みますか？",$"\n\nReserve {size:X}h bytes ({start:X5}-BFBFF) for machine code first, then load?");
-            var yes=AskMachineCode?.Invoke(reserve)??(testing?DialogResult.Yes:MessageBox.Show(this,reserve,L.T("機械語エリア","Machine-code area"),MessageBoxButtons.YesNo,MessageBoxIcon.Question));
-            if(yes!=DialogResult.Yes)throw new OperationCanceledException(L.T("読み込みをやめました。","Loading was cancelled."));
-            ReserveMachineCode(size);
-            return L.T($"機械語エリアを {size:X}h バイト確保してから、{name} を読み込みます。",$"Reserving {size:X}h bytes for machine code, then loading {name}.");
-        }
-        string where=L.T($"{name} は {start:X5}〜{end-1:X5} に入りますが、ここは機械語エリアの外（BASIC の空き）です。BASIC のプログラムや変数に上書きされることがあります。",
-            $"{name} goes to {start:X5}-{end-1:X5}, outside the machine-code area (in BASIC's free space), where the BASIC program or variables can overwrite it.");
-        string question=canReserve
-            ?where+L.T($"\n\n機械語エリアを {size:X}h バイト（{start:X5}〜BFBFF）確保してから読み込みますか？\n「いいえ」はこのまま読み込みます。",$"\n\nReserve {size:X}h bytes ({start:X5}-BFBFF) for machine code first, then load?\nNo loads it as it is.")
-            :where+L.T(size>LargestMachineCode(area.Size,free)?"\n\n空きが足りないため、ここまでは確保できません。このまま読み込みますか？":"\n\n確保は BASIC の RUN か PRO の表示でできます。このまま読み込みますか？",
-                size>LargestMachineCode(area.Size,free)?"\n\nThere is not enough free RAM to reserve that much. Load it as it is?":"\n\nReserving needs BASIC's RUN or PRO prompt. Load it as it is?");
-        var answer=AskMachineCode?.Invoke(question)??(testing?(canReserve?DialogResult.No:DialogResult.Yes):
-            MessageBox.Show(this,question,L.T("機械語エリア","Machine-code area"),canReserve?MessageBoxButtons.YesNoCancel:MessageBoxButtons.YesNo,MessageBoxIcon.Question));
-        if(answer==DialogResult.Cancel || (!canReserve && answer==DialogResult.No))throw new OperationCanceledException(L.T("読み込みをやめました。","Loading was cancelled."));
-        if(!canReserve || answer!=DialogResult.Yes)return null;
-        ReserveMachineCode(size);
-        return L.T($"機械語エリアを {size:X}h バイト確保してから、{name} を読み込みます。",$"Reserving {size:X}h bytes for machine code, then loading {name}.");
-    }
-    // Once the typed reservation has gone through (nothing left to type), the BIN
-    // goes in if the area came out as asked; otherwise nothing is written.
-    /// <summary>確保を待っている BIN があれば、確保が終わったところで書き込む。</summary>
-    void FinishPendingBin() {
-        if(pendingBin is not {} job || core is null || inputQueue.Count>0 || inputWait>0)return;
-        pendingBin=null;
-        if(MachineCodeArea.Read(core) is not {Size:var got} || got<job.Size){Notify(L.T($"機械語エリアを確保できなかったため、{job.Name} は読み込みませんでした。",$"The machine-code area was not reserved, so {job.Name} was not loaded."));return;}
-        try {
-            var (address,length)=BinaryTransfer.Load(core,job.Data,0,true);
-            UpdateDisplay();
-            Notify(L.T($"機械語エリアを確保し、{job.Name} を {address:X5}-{address+length-1:X5} に書き込みました。",$"Reserved the machine-code area and wrote {job.Name} to {address:X5}-{address+length-1:X5}."));
-        } catch(Exception ex) {Notify(ex.Message);}
-    }
-    internal string ReserveMachineCode(int size) {
-        if(core is null)throw new InvalidOperationException(L.T("ROMが読み込まれていません。","No ROM is loaded."));
-        if(paused)throw new InvalidOperationException(L.T("一時停止を解除してください。","Resume the machine first."));
-        var area=MachineCodeArea.Read(core);int free=BasicImage.FreeBytes(core);
-        if(area is not {} a || free<0)throw new InvalidOperationException(L.T("今の RAM からは機械語エリアを読めません。","The machine-code area cannot be read from the RAM now."));
-        if(size<0 || size>LargestMachineCode(a.Size,free))throw new InvalidOperationException(L.T($"大きすぎます。いちばん大きくて {LargestMachineCode(a.Size,free):X}h バイトです。",$"Too large: the most is {LargestMachineCode(a.Size,free):X}h bytes."));
-        if(size==a.Size)return L.T("機械語エリアの大きさは変わりません。","The machine-code area stays the size it is.");
-        int mode=Native.e500_symbols(core.Handle,0);
-        if((mode&1)!=0)throw new InvalidOperationException(L.T("プログラムの実行中です。BRK（Esc）で止めてから行ってください。","A program is running. Stop it with BRK (Esc) first."));
-        if((mode&6)==0)throw new InvalidOperationException(L.T("BASIC の RUN モードか PRO モードにしてから行ってください（BASIC キー、PC の F7）。","Switch to BASIC's RUN or PRO mode first (the BASIC key, F7 on the PC)."));
-        QueueKey(Keyboard.Codes["C-CE"]);
-        PasteText(MachineCodeArea.Command(size)+"\n");
-        // The ROM ends at the main menu; a second later, BASIC brings the prompt back.
-        inputQueue.Enqueue((Keyboard.Codes["BASIC"],false,CpuHz));
-        QueueKey(Keyboard.Codes["BASIC"]);
-        return size==0?L.T("機械語エリアを返しています。","Giving the machine-code area back.")
-            :L.T($"機械語エリアを {size:X}h バイト（{size} バイト）にしています。",$"Making the machine-code area {size:X}h bytes ({size} bytes).");
-    }
+    internal string ReserveMachineCode(int size)=>loader.Reserve(size);
     /// <summary>消音を切り替えて、設定に残す（ステータスバーの音の欄から）。</summary>
     void ToggleMute() {
         settings=settings with{Muted=!settings.Muted};if(audio is not null)audio.Muted=settings.Muted;
@@ -1013,7 +817,7 @@ internal sealed class MainForm : Form
             SaveSettings();
         }
         // An open settings window offers the RAM sizes of the machine now running.
-        if(windows.TryGetValue("hardware",out var open) && open is HardwareDialog hardware && !hardware.IsDisposed)hardware.SetRom(core.RomKB,settings.InternalKB);
+        if(windows.TryGetValue("hardware",out var open) && open is HardwareDialog hardware && !hardware.IsDisposed)hardware.SetRom(core.StandardRamKB,settings.InternalKB);
         paused=false;pause.Text=PauseCommand;
         // The drive goes in before the snapshot, which may hold its place in a
         // device code; mounted afterwards it would start that code over. A drive
@@ -1084,7 +888,7 @@ internal sealed class MainForm : Form
     void ConfigureHardware() {
         ShowWindow("hardware",()=>{
             Directory.CreateDirectory(CardFolder());
-            var dialog=new HardwareDialog(settings,core?.RomKB??256,CardFolder()){InUse=()=>core?.CardPath};
+            var dialog=new HardwareDialog(settings,core?.StandardRamKB??32,CardFolder()){InUse=()=>core?.CardPath};
             dialog.Apply=edit=>{
                 try {ReleaseKeys();ApplyHardware(edit(settings));return true;}
                 catch(Exception ex) {MessageBox.Show(ex.Message,"PC-E500",MessageBoxButtons.OK,MessageBoxIcon.Error);return false;}
@@ -1208,11 +1012,11 @@ internal sealed class MainForm : Form
         padWanted.Clear();
         var map=padConfig.Current.Map;
         foreach(var c in controls)if(map.TryGetValue(c,out string? b))padWanted.Add(b);
-        foreach(var by in holding.Keys.Where(h=>h.Binding is not null && !padWanted.Contains(h.Binding)).ToArray())Unhold(by);
+        foreach(var by in input.Holding.Keys.Where(h=>h.Binding is not null && !padWanted.Contains(h.Binding)).ToArray())Unhold(by);
         foreach(var b in padWanted)if(PadConfig.Parse(b,out int code,out int modifier))Hold(new HoldBy(Keys.None,b),code,modifier);
     }
     /// <summary>コントローラーで押したままのキーをすべて離す。</summary>
-    void ReleasePad(){foreach(var by in holding.Keys.Where(h=>h.Binding is not null).ToArray())Unhold(by);}
+    void ReleasePad(){foreach(var by in input.Holding.Keys.Where(h=>h.Binding is not null).ToArray())Unhold(by);}
     /// <summary>ROM ファイルを選んで開く。</summary>
     void OpenRom() {
         using var d=new OpenFileDialog{Filter=L.T("PC-E500シリーズの ROM (*.rom;*.bin)|*.rom;*.bin|すべてのファイル|*.*","PC-E500 series ROM (*.rom;*.bin)|*.rom;*.bin|All files|*.*"),InitialDirectory=Path.Combine(root,"rom")};
@@ -1233,86 +1037,9 @@ internal sealed class MainForm : Form
         if(run!=settings.LoadRun){settings=settings with{LoadRun=run};SaveSettings();}
         if(path is not null)Notify(LoadProgramFile(path,run));
     }
-    // A machine-code file with the SAVE M header goes straight into memory at the
-    // address the header gives, in any mode. Anything else is a BASIC program,
-    // text or the machine's own tokenised form: the ROM reads either from the
-    // CE-140F, so the file is put in the drive's folder (under a name the drive
-    // takes) and LOAD "X:..." is typed, as the user would.
-    // SAVE M のヘッダーがある機械語は、ヘッダーのアドレスへそのまま書く（どのモードでも）。ほかは BASIC のプログラム
-    //（テキストでも中間コードでも ROM が読む）として、CE-140F のフォルダに置き、LOAD "X:..." を打つ。
-    /// <summary>BAS・BIN のファイルを本体に読み込む。</summary>
-    /// <param name="path">読み込むファイル</param>
-    /// <param name="run">BAS なら読み込んだあと実行する（LOAD "X:...",R）</param>
-    /// <returns>結果のメッセージ</returns>
-    internal string LoadProgramFile(string path,bool run) {
-        if(core is null)throw new InvalidOperationException(L.T("ROMが読み込まれていません。","No ROM is loaded."));
-        if(paused)throw new InvalidOperationException(L.T("一時停止を解除してから読み込んでください。","Resume the machine before loading."));
-        // One load at a time: the last one may still be typing (a reservation, a LOAD).
-        // 読み込みは1つずつ（前の読み込みが、確保や LOAD をまだ打っていることがある）。
-        if(pendingBin is not null || inputQueue.Count>0)throw new InvalidOperationException(L.T("前の読み込み（キー入力）が終わってから読み込んでください。","Wait for the last load (keys still being typed) to finish."));
-        var info=new FileInfo(path);
-        if(!info.Exists)throw new FileNotFoundException(L.T("ファイルが見つかりません。","The file was not found."),path);
-        if(info.Length>0x100000+BinaryTransfer.HeaderLength)throw new InvalidDataException(L.T("1MBを超えるファイルは読み込めません。","Files larger than 1MB cannot be loaded."));
-        byte[] data=File.ReadAllBytes(path);
-        bool bin=string.Equals(info.Extension,".bin",StringComparison.OrdinalIgnoreCase);
-        if(BinaryTransfer.TryReadHeader(data,out int binStart,out int binLength)) {
-            // Machine code outside the machine-code area sits in BASIC's free space,
-            // where the program, the variables or a later reservation can overwrite
-            // it: offer to take the area down to its start first, then load.
-            // 機械語エリアの外の機械語は BASIC の空きにあり、上書きされうるので、先に確保してから読み込むかを聞く。
-            if(MachineCodeOffer(info.Name,binStart,binLength) is string reserving){pendingBin=(info.Name,data,0xbfc00-binStart);return reserving;}
-            var (address,length)=BinaryTransfer.Load(core,data,0,true);
-            UpdateDisplay();
-            return L.T($"{info.Name} を {address:X5}-{address+length-1:X5} に書き込みました（{length}バイト）。",$"Wrote {info.Name} to {address:X5}-{address+length-1:X5} ({length} bytes).");
-        }
-        // A program the machine saved goes straight into RAM: no LOAD, no CE-140F,
-        // any mode. A layout this does not know, or a text file, goes on to LOAD.
-        // 本体が保存した形のプログラムは RAM に直接入れる（LOAD も CE-140F も使わず、どのモードでも）。
-        if(!bin && BasicImage.IsSaved(data)) {
-            if((Native.e500_symbols(core.Handle,0)&1)!=0)throw new InvalidOperationException(L.T("プログラムの実行中です。BRK（Esc）で止めてから読み込んでください。","A program is running. Stop it with BRK (Esc) first."));
-            if(BasicImage.Load(core,data)) {
-                UpdateDisplay();
-                string loaded=L.T($"{info.Name} を RAM に直接読み込みました（{data.Length}バイト）。",$"Loaded {info.Name} straight into RAM ({data.Length} bytes).");
-                if(!run)return loaded;
-                // RUN is typed at BASIC's prompt only; elsewhere it would be a stray key.
-                if((Native.e500_symbols(core.Handle,0)&6)==0)return loaded+L.T(" 実行は BASIC の RUN か PRO モードで RUN と打ってください。"," To run it, type RUN in BASIC's RUN or PRO mode.");
-                QueueKey(Keyboard.Codes["C-CE"]);PasteText("RUN\n");
-                return L.T($"{info.Name} を RAM に直接読み込んで実行します。",$"Loaded {info.Name} straight into RAM and running it.");
-            }
-        }
-        if(bin)throw new InvalidDataException(L.T("SAVE M のヘッダーがない BIN は、書き込むアドレスが分かりません。デバッグ（Ctrl+D）の「BIN書込み」でアドレスを指定してください。","A BIN without the SAVE M header does not say where it goes. Use BIN load in the debugger (Ctrl+D) and give the address."));
-        // A BASIC program goes through the CE-140F, with the machine at its BASIC prompt.
-        if((Native.e500_disk_status(core.Handle)&1)==0)throw new InvalidOperationException(L.T("BAS の読み込みには CE-140F を使います。「設定」で CE-140F を接続してください。","A BAS file loads through the CE-140F. Connect the CE-140F in Settings."));
-        int mode=Native.e500_symbols(core.Handle,0);
-        if((mode&1)!=0)throw new InvalidOperationException(L.T("プログラムの実行中です。BRK（Esc）で止めてから読み込んでください。","A program is running. Stop it with BRK (Esc) first."));
-        if((mode&6)==0)throw new InvalidOperationException(L.T("BASIC の RUN モードか PRO モードにしてから読み込んでください（BASIC キー、PC の F7）。","Switch to BASIC's RUN or PRO mode first (the BASIC key, F7 on the PC)."));
-        string name=DriveName(info.Name),target=Path.Combine(settings.DiskFolder,name);
-        if(!string.Equals(Path.GetFullPath(target),info.FullName,StringComparison.OrdinalIgnoreCase)) {
-            if(File.Exists(target) && !File.ReadAllBytes(target).AsSpan().SequenceEqual(data) && !testing &&
-                MessageBox.Show(this,L.T($"CE-140F のフォルダに、中身の違う {name} があります。上書きしますか？",$"The CE-140F folder has another {name}. Overwrite it?"),L.T("プログラム読込","Load program"),MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)
-                return L.T("読み込みをやめました。","Loading was cancelled.");
-            File.WriteAllBytes(target,data);
-        }
-        // C-CE first: whatever is on the line is not run together with the command.
-        QueueKey(Keyboard.Codes["C-CE"]);
-        // ,R runs the program once it is in (the ROM's own LOAD option).
-        string command=$"LOAD \"X:{name}\""+(run?",R":"");
-        PasteText(command+"\n");
-        return run?L.T($"{name} を CE-140F から読み込んで実行します（{command}）。",$"Loading and running {name} from the CE-140F ({command}).")
-            :L.T($"{name} を CE-140F から読み込んでいます（{command}）。",$"Loading {name} from the CE-140F ({command}).");
-    }
-    // The CE-140F takes an 8.3 name of A-Z, 0-9, _ and -. A PC name is cut down to
-    // that: "my prog.bas" is MYPROG.BAS; one with nothing left is LOAD.BAS.
-    /// <summary>PC のファイル名を、CE-140F が受け付ける 8.3 の名前（英大文字・数字・_・-）にする。</summary>
-    /// <param name="fileName">PC のファイル名</param>
-    internal static string DriveName(string fileName) {
-        static string Keep(string s,int max)=>new string(s.ToUpperInvariant().Where(c=>c is >= 'A' and <= 'Z' or >= '0' and <= '9' or '_' or '-').Take(max).ToArray());
-        string stem=Keep(Path.GetFileNameWithoutExtension(fileName),8),extension=Keep(Path.GetExtension(fileName).TrimStart('.'),3);
-        if(stem.Length==0)stem="LOAD";
-        // The device names are refused by the drive.
-        if(stem is "CON" or "PRN" or "AUX" or "NUL" || (stem.Length==4 && (stem.StartsWith("COM",StringComparison.Ordinal) || stem.StartsWith("LPT",StringComparison.Ordinal)) && stem[3] is >= '1' and <= '9'))stem="_"+stem;
-        return extension.Length==0?stem+".BAS":stem+"."+extension;
-    }
+    /// <summary>BAS・BIN のファイルを本体に読み込む（ProgramLoader）。聞く処理はその場で答えるので、待たずに終わる。</summary>
+    internal string LoadProgramFile(string path,bool run)=>loader.Load(path,run).GetAwaiter().GetResult();
+    internal static string DriveName(string fileName)=>ProgramLoader.DriveName(fileName);
     /// <summary>状態をファイルに保存する（保存先を選ぶ）。</summary>
     void SaveState() {
         if(core is null)return;ReleaseKeys();
@@ -1375,8 +1102,8 @@ internal sealed class MainForm : Form
         HelpSummary();
     }
     /// <summary>使い方の要約をメッセージで表示する。</summary>
-    void HelpSummary() => MessageBox.Show(L.En?HelpEnglish:"初回：PF1 → BASIC（PCのF7）\nRUN表示：1+2 → Enter、BEEP 1 → Enter\nプログラム：BASICでPROに切替 → 10 PRINT 123 → Enter\nBASICでRUNに戻す → RUN → Enter\n\n文字入出力：LCD文字の範囲コピー／クリップボードからキー入力\nCtrl+C：文字入出力を開く / Ctrl+V：直接貼り付け\nCtrl+D：デバッグ（CPUレジスタ、内部RAM、メモリの表示・書換え、BINの読み書き）\nCE-140F：SAVE \"X:TEST.BAS\" / LOAD \"X:TEST.BAS\"\n保存先・書込み禁止は「設定」で変更できます。\n内蔵RAMは容量ごとに内容を保存し、OFFやアプリ終了でも保持します。\nRAMカードは「設定」でイメージファイルを作成・装着・取り外しします。内容はそのファイルへ書き込みます。\nE650/U6000の384KB ROMでは内蔵RAMは実機標準の64KB、増設改造相当の128KB・256KBから選べます。\nRESET穴はCPUを再起動し、内蔵RAMとカードを保持します。\n「オールリセット」は実機のON＋RESETと同じで、ROMが「スベテノ データヲ ショウキョ シマスカ?」とY／Nで聞いてきます。\n\nSHIFT / CTRLをクリックすると次のキーまで保持します。\nF8は2ndF、EscはON/BRKです。\n詳細はEmulatorフォルダのMANUAL.mdを参照してください。", L.T($"使い方 / PC-E500シリーズ v{UpdateCheck.Current}",$"Help / PC-E500 series v{UpdateCheck.Current}"));
-    const string HelpEnglish="First run: PF1 → BASIC (F7 on the PC)\nRUN mode: 1+2 → Enter, BEEP 1 → Enter\nProgram: BASIC switches to PRO → 10 PRINT 123 → Enter\nBASIC back to RUN → RUN → Enter\n\nText I/O: copy LCD text / type from the clipboard\nCtrl+C: open Text I/O / Ctrl+V: paste directly\nCtrl+D: Debug (registers, internal RAM, memory view and editing, BIN load/save)\nCE-140F: SAVE \"X:TEST.BAS\" / LOAD \"X:TEST.BAS\"\nFolder and write protection are in Settings.\nInternal RAM is kept per capacity and survives OFF and exit.\nRAM cards are image files created, attached and detached in Settings; contents are written to that file.\nE650/U6000 384KB ROMs offer 64KB (stock) or 128KB/256KB (expansion mod) internal RAM.\nThe RESET hole restarts the CPU and keeps internal RAM and the card.\nAll Reset is the real ON+RESET: the ROM asks whether to erase all data (Y/N).\n\nClicking SHIFT / CTRL holds it for the next key.\nF8 is 2ndF, Esc is ON/BRK.\nSee MANUAL_en.md in the Emulator folder for details.";
+    void HelpSummary() => MessageBox.Show(L.En?HelpEnglish:"初回：PF1 → BASIC（PCのF7）\nRUN表示：1+2 → Enter、BEEP 1 → Enter\nプログラム：BASICでPROに切替 → 10 PRINT 123 → Enter\nBASICでRUNに戻す → RUN → Enter\n\n文字入出力：LCD文字の範囲コピー／クリップボードからキー入力\nCtrl+C：文字入出力を開く / Ctrl+V：直接貼り付け\nCtrl+D：デバッグ（CPUレジスタ、内部RAM、メモリの表示・書換え、BINの読み書き）\nCE-140F：SAVE \"X:TEST.BAS\" / LOAD \"X:TEST.BAS\"\n保存先・書込み禁止は「設定」で変更できます。\n内蔵RAMは容量ごとに内容を保存し、OFFやアプリ終了でも保持します。\nRAMカードは「設定」でイメージファイルを作成・装着・取り外しします。内容はそのファイルへ書き込みます。\nE650/U6000の384KB ROMでは内蔵RAMは実機標準の64KB、増設改造相当の128KB・256KBから選べます。\nRESET穴はCPUを再起動し、内蔵RAMとカードを保持します。\n「オールリセット」は実機のON＋RESETと同じで、ROMが「スベテノ データヲ ショウキョ シマスカ?」とY／Nで聞いてきます。\n\nSHIFT / CTRLをクリックすると次のキーまで保持します。\nF8は2ndF、EscはON/BRKです。\n詳細は docs のマニュアルを参照してください。\nhttps://github.com/litchi-gh/pc-e500_emulator_pockecom", L.T($"使い方 / PC-E500シリーズ v{UpdateCheck.Current}",$"Help / PC-E500 series v{UpdateCheck.Current}"));
+    const string HelpEnglish="First run: PF1 → BASIC (F7 on the PC)\nRUN mode: 1+2 → Enter, BEEP 1 → Enter\nProgram: BASIC switches to PRO → 10 PRINT 123 → Enter\nBASIC back to RUN → RUN → Enter\n\nText I/O: copy LCD text / type from the clipboard\nCtrl+C: open Text I/O / Ctrl+V: paste directly\nCtrl+D: Debug (registers, internal RAM, memory view and editing, BIN load/save)\nCE-140F: SAVE \"X:TEST.BAS\" / LOAD \"X:TEST.BAS\"\nFolder and write protection are in Settings.\nInternal RAM is kept per capacity and survives OFF and exit.\nRAM cards are image files created, attached and detached in Settings; contents are written to that file.\nE650/U6000 384KB ROMs offer 64KB (stock) or 128KB/256KB (expansion mod) internal RAM.\nThe RESET hole restarts the CPU and keeps internal RAM and the card.\nAll Reset is the real ON+RESET: the ROM asks whether to erase all data (Y/N).\n\nClicking SHIFT / CTRL holds it for the next key.\nF8 is 2ndF, Esc is ON/BRK.\nThe manual in docs tells more.\nhttps://github.com/litchi-gh/pc-e500_emulator_pockecom";
     /// <summary>キーを離してから action を実行し、例外はメッセージで示す。</summary>
     // A test run shows no dialog: hidden and waited on by build.ps1 and
     // test.ps1, one would hold the build up for ever. The error is thrown instead.
@@ -1427,7 +1154,7 @@ internal sealed class MainForm : Form
     }
     internal int TestKeyCycles(string key) {
         ReleaseKeys();QueueKey(Keyboard.Codes[key]);
-        int total=inputWait+inputQueue.Sum(x=>x.Cycles);
+        int total=input.Backlog;
         ReleaseKeys();return total;
     }
     internal string TestReserveMachineCode(int size){string said=ReserveMachineCode(size);TestSettle();return said;}
@@ -1448,9 +1175,9 @@ internal sealed class MainForm : Form
     internal void TestRepeatKey(Keys key){Message m=new();ProcessCmdKey(ref m,key);}
     internal void TestRelease(Keys key)=>OnKeyUp(this,new KeyEventArgs(key));    internal void TestPad(params string[] controls)=>PressPad(controls);
     internal void TestSetPadConfig(PadConfig c)=>padConfig=c;
-    internal int TestPadHeld=>holding.Keys.Count(h=>h.Binding is not null);
+    internal int TestPadHeld=>input.Holding.Keys.Count(h=>h.Binding is not null);
     internal PadDialog TestShowPad()=>(PadDialog)ShowWindow("controller",()=>new PadDialog(padConfig));
-    internal int TestBacklogCycles=>inputWait+inputQueue.Sum(x=>x.Cycles);
+    internal int TestBacklogCycles=>input.Backlog;
     // One keystroke the way Windows delivers it: KEYDOWN, CHAR, then KEYUP. The
     // stand-in has to be a real virtual key, because KeyEventArgs.KeyCode answers
     // Keys.None for anything that is not a defined Keys member; every tap is released
@@ -1466,7 +1193,7 @@ internal sealed class MainForm : Form
         OnKeyUp(this,new KeyEventArgs(key));
     }
     void TestSettle() {
-        while(inputQueue.Count>0 || inputWait>0)RunCycles(1024000);
+        while(!input.Idle)RunCycles(1024000);
         core!.Run(1024000);UpdateDisplay();
     }
     internal void TestTypeOnly(string text) {

@@ -85,7 +85,7 @@ internal static class DemoVideo
                         Key("ON/BRK");core.Run(1024000);form.TestText("CLS");form.TestTypeOnly("PRINT \"LONG PRESS\"");form.TestRunCycles(768000);break;
                     case "settings":
                         // The folder shown is the usual one, not the scratch folder (whose path has the PC's user name in it).
-                        hardware=new HardwareDialog(form.TestSettings with{DiskFolder="drive-x"},core.RomKB,"ram"){StartPosition=FormStartPosition.CenterScreen};hardware.Show(form);overlay=hardware;
+                        hardware=new HardwareDialog(form.TestSettings with{DiskFolder="drive-x"},core.StandardRamKB,"ram"){StartPosition=FormStartPosition.CenterScreen};hardware.Show(form);overlay=hardware;
                         scroller=Scroller(hardware);break;
                     case "ml":
                         Key("ON/BRK");core.Run(1024000);form.TestText("CLS");form.TestRefresh();
@@ -232,7 +232,7 @@ internal static class DemoVideo
                 g.DrawString("PokeCom",TitleFont,accent,new RectangleF(0,250,W,140),center);
                 using var text=new SolidBrush(Color.FromArgb(40,40,48));
                 g.DrawString("PC-E500 エミュレータ",TitleSub,text,new RectangleF(0,390,W,70),center);
-                g.DrawString(version.Length>0?$"v{version} の紹介":"新しい版の紹介",TitleSub,text,new RectangleF(0,460,W,70),center);
+                g.DrawString(version.Length>0?$"v{version} の紹介":"新しいバージョンの紹介",TitleSub,text,new RectangleF(0,460,W,70),center);
             } else {
                 using var accent=new SolidBrush(Accent);
                 g.DrawString(version.Length>0?$"PokeCom v{version} をぜひ使ってみてね":"PokeCom をぜひ使ってみてね",TitleFont,accent,new RectangleF(0,280,W,140),center);

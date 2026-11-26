@@ -1,0 +1,15 @@
+Package: pc-e500-emulator
+Version: @VERSION@
+Section: games
+Priority: optional
+Architecture: amd64
+Installed-Size: @SIZE@
+Maintainer: litchi-gh <https://github.com/litchi-gh>
+Depends: libc6 (>= 2.38), libx11-6, libice6, libsm6, libfontconfig1, libicu78 | libicu76 | libicu74, libssl3t64 | libssl3, libasound2t64 | libasound2
+Recommends: fonts-noto-cjk
+Suggests: cups-client
+Homepage: https://github.com/litchi-gh/pc-e500_emulator_pockecom
+Description: SHARP PC-E500 series pocket computer emulator
+ Emulates the PC-E500, PC-E500S, PC-E550, PC-1480U, PC-1490U, PC-E650 and
+ PC-U6000 with the CE-140F drive and the CE-126P printer. A ROM dumped from
+ your own machine is needed. Includes the pokecom command line and MCP server.

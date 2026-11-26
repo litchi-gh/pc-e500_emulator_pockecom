@@ -37,7 +37,8 @@ public:
     /// @param path    フォルダのパス。null か空文字列なら取り外す
     /// @param protect 書き込み禁止にするか
     /// @return 接続できたか（取り外しは常に true）
-    bool mount(const wchar_t *path,bool protect);
+    /// path は Windows では UTF-16、Linux では UTF-8。
+    bool mount(const std::filesystem::path::value_type *path,bool protect);
     /// CPU の命令ごとに呼ばれ、バスの信号の変化を処理する。
     /// @param now  CPU のサイクル数
     /// @param xout XOUT 信号
@@ -80,7 +81,7 @@ public:
     ~Ce140f();
     /// 受け取ったパケット（末尾はチェックサム）を1つ処理し、ROM へ返す応答を返す。
     /// @param packet コマンドのバイト列とチェックサム
-    /// @return 応答のバイト列（エラーなら FFh）
+    /// @return 応答のバイト列（エラーなら、ROM が BASIC のエラーにする状態の1バイト）
     std::vector<uint8_t> command(const std::vector<uint8_t>& packet);
 private:
     /// バス上の段階（クラスの説明を参照）。

@@ -78,6 +78,7 @@
     <li><a href="#save">11. Saving and restoring</a></li>
     <li><a href="#faq">12. Troubleshooting</a></li>
     <li><a href="#romdump">13. Dumping the ROM from a real machine</a></li>
+    <li class="sub"><a href="#romdump-beep">With ROMDump (by sound)</a></li>
     <li class="sub"><a href="#romdump-savem">Dumping with SAVEM</a></li>
     <li class="sub"><a href="#romdump-header">The header and how to fix files</a></li>
     <li class="sub"><a href="#romdump-tool">Using the merge tool</a></li>
@@ -209,7 +210,7 @@ Type <code>1+2</code> and press <kbd>Enter</kbd>. The result is displayed.
 <figure><img src="images-en/window-body.png" alt="Case only"><figcaption>2. Case only</figcaption></figure>
 <figure><img src="images-en/window-screen.png" alt="Screen only"><figcaption>3. Screen only</figcaption></figure>
 <h3 id="update">New versions and updating</h3>
-<p>At start-up, once a day at most, the emulator asks GitHub whether a new version is out. If one is, a button such as <b>New version v0.1.0</b> appears at the right end of the toolbar (and at the top of the right-click menu). It shows what changed, and <b>Open the download page</b> opens the release page. The emulator never downloads or replaces anything itself.</p>
+<p>At start-up, once a day at most, the emulator asks GitHub whether a new version is out. If one is, a button such as <b>New version v0.2.1</b> appears at the right end of the toolbar (and at the top of the right-click menu). It shows what changed, and <b>Open the download page</b> opens the release page. The emulator never downloads or replaces anything itself.</p>
 <ol>
 <li>Quit the emulator.</li>
 <li>From the release page, download the <code>…-setup.exe</code> if you installed it, or the zip if you use the zip.</li>
@@ -311,7 +312,7 @@ PRINT=LPRINT             ' send PRINT to the printer (PRINT=PRINT undoes it)</pr
 <p><b>Print to</b> sends the lines on to a printer as well (kept in the settings). A <b>USB thermal printer</b> (58 mm, 384 dots, ESC/POS, such as the MPT-II) prints each line as it comes, with no driver, and the paper is fed 12 mm once printing has paused for 3 seconds. A <b>Windows printer</b> gets the lines since its last job as one job, at their real size (2 mm a character, 4 mm a line), once printing has paused for 3 seconds. <b>Print paper</b> sends the whole paper. A printer that cannot be reached is reported at the bottom of the window; the machine goes on.</p>
 <figure><img src="images-en/printer.png" alt="CE-126P window"><figcaption>The CE-126P window, after LPRINT and LLIST</figcaption></figure>
 <ul>
-<li>Untick <b>Connected</b> and LPRINT reports <code>Printer error</code>, as on a real machine with no printer. The setting is kept.</li>
+<li>Untick <b>Connected</b> and the ROM skips <code>LPRINT</code> and the like without an error, as on a real machine with no printer. Untick it in the middle of a line and you get <code>Printer error</code>. The setting is kept.</li>
 <li>It shares the 11-pin bus with the CE-140F; both work together.</li>
 <li>The paper keeps up to 2000 lines, dropping the oldest. It is not part of a snapshot (a snapshot taken mid-line prints that line again in full when loaded).</li>
 <li>Printing takes no time. Saved as text, signs such as <code>¥</code> come out as printed.</li>
@@ -415,7 +416,7 @@ PRINT=LPRINT             ' send PRINT to the printer (PRINT=PRINT undoes it)</pr
 <tr><th>A 256KB Ver.8 ROM starts with lines across the screen and stops there</th><td>Ver.8 ROMs (E650/U6000, E500S) come as a main part (S3A) and an extension (S3B); the main part alone does not start. Dump S3B from the same machine as well and merge them into a 384KB image (<a href="#romdump">chapter 13</a>)</td></tr>
 <tr><th>Where do ROMs and data go?</th><td>In <code>rom\</code> in the folder that <b>Open the data folder</b> in the right-click menu opens (<code>%LocalAppData%\PockeComE500\</code> when installed, beside <code>PC-E500.exe</code> with the zip; <a href="#start">chapter 1</a>)</td></tr>
 <tr><th>The controller does nothing</th><td>Check that the main window is in front (the pad does nothing while another window is). Also check <b>Use a controller</b> in the Controller window, and that the status bar says "Pad connected" (<a href="#pad">chapter 3</a>)</td></tr>
-<tr><th>LPRINT says Printer error</th><td><b>Connected</b> is unticked in the CE-126P window (<a href="#printer">chapter 7</a>)</td></tr>
+<tr><th>LPRINT prints nothing</th><td><b>Connected</b> is unticked in the CE-126P window (<a href="#printer">chapter 7</a>)</td></tr>
 <tr><th>The title bar and buttons are gone</th><td>That is the case-only or screen-only view. <b>Window</b> → <b>Normal</b> in the right-click menu brings them back (<a href="#menu">chapter 4</a>)</td></tr>
 <tr><th>The installer shows "Windows protected your PC"</th><td>The installer is not signed. Choose <b>More info</b> → <b>Run anyway</b></td></tr>
 <tr><th>Open ROM refuses the file</th><td>Check that it is 256KB or 384KB (plus 16 bytes if it still has the header) and that it is not S3B alone (<a href="#romdump-header">chapter 13</a>)</td></tr>
@@ -425,9 +426,20 @@ PRINT=LPRINT             ' send PRINT to the printer (PRINT=PRINT undoes it)</pr
 
 <section id="romdump">
 <h2>13. Dumping the ROM from a real machine</h2>
-<p>The emulator ships without the internal ROM. Take the ROM image from your own machine and put it in <code>app\rom\</code>. The machine's <code>SAVEM</code> command (write memory to a file) does the dumping.</p>
+<p>The emulator ships without the internal ROM. Take the ROM image from your own machine and put it in <code>app\rom\</code>. There are two ways. With no peripherals, use <a href="https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md">ROMDump</a>, which records the buzzer. With a CE-140F or another device that saves files, the machine's <code>SAVEM</code> command (write memory to a file) does it.</p>
 
-<h3>What you need</h3>
+<h3 id="romdump-beep">With ROMDump (by sound)</h3>
+<p><a href="https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md">PC-E500 BEEP ROMDump</a> plays the ROM through the machine's buzzer; you record it with a phone, and an application on the PC (BeepDump) turns the recording back into a ROM file. No peripherals are needed.</p>
+<ol class="steps">
+<li>Get <code>BeepDump.exe</code> from its <a href="https://github.com/litchi-gh/pc-e500_beep_romdumper/releases">releases</a>.</li>
+<li>Start recording, then type this at BASIC's <b>RUN</b> prompt (the 256KB main ROM; about 22 minutes).
+<pre>CSAVE M &amp;HC0000,&amp;HFFFFF</pre>Record it twice, so that a misreading is found. A PC-E650 / PC-U6000 needs its extension ROM recorded too.</li>
+<li>Give the recordings to BeepDump and, when everything has been read, save the ROM. For a PC-E650 / PC-U6000 it is the merged 384KB file, so the merging below is not needed.</li>
+<li>Name the file for its model and version, as <code>PC-E500(7.2).ROM</code>, and put it in the <code>rom</code> folder.</li>
+</ol>
+<div class="box tip">ROMDump is an experimental tool. <a href="https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md">Its own page</a> has the models it takes, a faster machine-code version and the steps in full.</div>
+
+<h3>What SAVEM needs</h3>
 <table>
 <tr><th>The machine</th><td>PC-E500 / PC-E550 / PC-1480U / PC-1490U / PC-1490UII (256KB ROM), or PC-E650 / PC-U6000 (384KB ROM)</td></tr>
 <tr><th>Somewhere to save</th><td>A CE-140F floppy drive or any other device on the 11-pin connector that can save files. A PC running CE-140F emulation software over an 11-pin cable works too. Anything that ends up as a file the PC can read is fine</td></tr>
@@ -498,7 +510,7 @@ If you want a clean 256KB file, use the merge tool's <code>--strip</code> below,
 <p>Implemented: SC62015 CPU, 256KB / 384KB ROM, internal RAM and RAM card, two HD61102 LCD controllers (240×32 dots), key matrix, timer interrupts, ON/BRK and OFF, speed selection, state save/restore, BEEP, folder-based CE-140F, CE-126P printer.</p>
 <p><b>Not implemented:</b> printers other than the CE-126P, cassette, RS-232C, clock. LCD busy time is not simulated. Machine-code programs and programs that use peripherals may behave differently from the real machine.</p>
 <p>Ported from <a href="https://github.com/matsumo/PockEmul">matsumo/PockEmul</a> (CPU core Copyright (C) Matsumo 1998,1999) and provided under the GPL. See <code>app\LICENSE</code> and <code>app\THIRD_PARTY_NOTICES.md</code>. ROM images are not included; dump them from your own machine (<a href="#romdump">chapter 13</a>).</p>
-<p>Developer information (building, tests, memory map details) is in <code>MANUAL_en.md</code> one folder up.</p>
+<p>Ubuntu, the Mac, the command line (<code>pokecom</code>), the MCP server for AI tools, and building and testing are in <a href="https://github.com/litchi-gh/pc-e500_emulator_pockecom/blob/main/docs/README_en.md">the manual on GitHub</a>.</p>
 <p>Verified to work with ROMs of the PC-E500, PC-E550, PC-1480U, PC-1490UII, PC-E650 and PC-U6000.</p>
 </section>
 

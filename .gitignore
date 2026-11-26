@@ -21,9 +21,13 @@
 /tests/test-core.*
 /src/desktop/bin/
 /src/desktop/obj/
+/src/cli/bin/
+/src/cli/obj/
 /src/native/*.obj
 *.pdb
 *.exp
 *.lib
 *.obj
 /dist/
+/src/avalonia/bin/
+/src/avalonia/obj/
