@@ -1,5 +1,5 @@
-PC-E500 Series Emulator for Windows (PokeCom) 0.1.0
-対応機種 / Models: PC-E500, PC-E550, PC-1480U, PC-1490U, PC-1490UII (256KB ROM), PC-E650, PC-U6000 (384KB ROM)
+PC-E500 Series Emulator for Windows (PokeCom) 0.2.0
+対応機種 / Models: PC-E500, PC-E550, PC-1480U, PC-1490U, PC-1490UII (256KB ROM), PC-E500S, PC-E650, PC-U6000 (384KB ROM)
 https://github.com/litchi-gh/pc-e500_emulator_pockecom
 
 動作環境 / Requirements:

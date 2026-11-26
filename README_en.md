@@ -142,15 +142,15 @@ What follows is for Windows.
 2. Put the ROM dumped from your machine (with [ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md), for one) in the data folder's `rom`. "Open the data folder" in the right-click menu opens it.
 3. Start it, press **PF1** (F1 on the PC) to initialise memory, then **BASIC** (F7).
 
-## What is new in 0.1.0 (since 0.0.5)
+## What is new in 0.2.0 (since 0.1.0)
 
-- **Load program**: load a BAS or BIN from the PC through the toolbar or by dropping it on the window. A BAS saved by the machine goes straight into RAM, with no `LOAD` typed.
-- **Game pads**: XInput and DirectInput pads can press the machine's keys. The pad picture lights the buttons pressed, and presets hold the key sets.
-- **Frame interpolation**: things moving a dot at a time slide smoothly to their next place. The screen is also drawn in step with the display's refresh.
-- **Held keys**: while a PC key is held down, the machine's key stays down too.
-- **Look and status bar**: a Windows 11 look with light and dark themes. The status bar shows the machine's state, ROM, RAM, machine-code area, peripherals, sound and controller; click a field to open its window.
-- **Machine-code area**: reserve it while seeing the internal RAM layout. The debugger has a memory map and a checksum every 8 bytes.
-- **Settings**: Always on top, and a switch for the auto power off.
+- **Ubuntu**: a window with the same controls as on Windows, for Ubuntu 24.04 or later. One line pasted into a terminal installs it (a tar.gz and a `.deb` are there too).
+- **The command line `pokecom`**: 37 operations, from running a line of BASIC or a program to typing keys, reading the LCD and reading or writing memory, for terminals and scripts. It runs on Windows, Ubuntu and the Mac (Apple silicon and Intel).
+- **MCP server**: with `pokecom mcp`, AI tools can drive the emulator.
+- **PC-E500S**: a 384 KB ROM from a PC-E500S is told apart, and the internal RAM is 32 KB as on the PC-E500.
+- **CE-140F**: errors are now the same BASIC errors as on the real machine, and a text with LF-only line ends can be `LOAD`ed.
+- **BATT on the LCD**: the BATT symbol shows when the ROM turns it on.
+- **Manual**: split into chapters under `docs/`, with new chapters on Ubuntu, the Mac, the command line, MCP and troubleshooting.
 
 The full list is in [the change history](docs/CHANGELOG.md) (Japanese).
 

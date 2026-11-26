@@ -8,7 +8,7 @@
     <RootNamespace>PokeCom</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>PC-E500 Emulator (PokeCom)</Product>
   </PropertyGroup>
   <!-- The core of the system built for: named by the runtime identifier, or the one building. -->
