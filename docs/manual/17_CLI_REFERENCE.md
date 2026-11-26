@@ -488,7 +488,7 @@ pokecom save-bin <file> <address> <length>
 | `script <file>` | 1行に1つのコマンドを、同じ本体で順に実行します（`-` は標準入力。[16章](16_CLI.md#まとめて動かすscript)） |
 | `mcp` | MCP サーバー（[18章](18_MCP.md)） |
 | `help [コマンド]` | 説明 |
-| `version` | 版 |
+| `version` | バージョン |
 
 ---
 

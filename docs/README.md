@@ -56,6 +56,6 @@
 | 文書 | 内容 |
 |---|---|
 | [ビルドとテスト](BUILD.md) | コードの構成、ビルド、テスト、配布物の作りかた |
-| [変更履歴](CHANGELOG.md) | 版ごとの変更 |
+| [変更履歴](CHANGELOG.md) | バージョンごとの変更 |
 | [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) | 移植元と同梱物のライセンス |
 | [画像付きの取扱説明書](../app/manual/index.html) | ツールバーの「使い方」で開くもの |

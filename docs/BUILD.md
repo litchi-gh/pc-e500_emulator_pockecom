@@ -11,7 +11,7 @@ cd Emulator
 ./package.ps1   # リリース用の zip とインストーラーを dist\ に作る
 ```
 
-`package.ps1` は、ビルドしてから、配布するファイルを1つのフォルダに集め、そこから zip とインストーラーの両方を作ります（同じファイルが入ります）。版は `src/desktop/PcE500.csproj` の `<Version>` で、`app/README.txt` の1行目にも同じ版が書かれていなければ止まります。インストーラーには [Inno Setup 6](https://jrsoftware.org/isinfo.php)（`winget install JRSoftware.InnoSetup`）が要ります。定義は `installer/PockeComE500.iss` です。最後に、zip とインストーラーの SHA-256 を `dist/PC-E500-Emulator-<版>-win-x64-SHA256.txt`（`sha256sum -c` で読める形）に書き、リリースの本文に貼る形でも表示します。リリースの本文にはこの「## SHA-256」の節を必ず入れてください。
+`package.ps1` は、ビルドしてから、配布するファイルを1つのフォルダに集め、そこから zip とインストーラーの両方を作ります（同じファイルが入ります）。バージョンは `src/desktop/PcE500.csproj` の `<Version>` で、`app/README.txt` の1行目にも同じバージョンが書かれていなければ止まります。インストーラーには [Inno Setup 6](https://jrsoftware.org/isinfo.php)（`winget install JRSoftware.InnoSetup`）が要ります。定義は `installer/PockeComE500.iss` です。最後に、zip とインストーラーの SHA-256 を `dist/PC-E500-Emulator-<バージョン>-win-x64-SHA256.txt`（`sha256sum -c` で読める形）に書き、リリースの本文に貼る形でも表示します。リリースの本文にはこの「## SHA-256」の節を必ず入れてください。
 
 ## コードの構成
 
@@ -32,7 +32,7 @@ flowchart TB
 - `src/desktop/`: C# / Windows Formsの画面・入力・保存（`Lang.cs` が言語切替。表示文字列は使用箇所で `L.T(日本語, 英語)` と書きます）
 - `tests/test_core.cpp`: CPU・全RAM容量・デバッガ書込み・LCD・タイマー・音声・CE-140F・CE-126P と11ピンのバス・保存形式（2万あまりのチェック）
 - `src/desktop/ManualShots.cs`: 取扱説明書用の画面画像の生成（`--manual-shots`）
-- `src/desktop/SmokeTest.cs`: 配置ROM、UI入力、内蔵RAMファイルとRAMカードイメージの復元、設定画面、デバッガのメモリ書換えとBIN入出力、Windows音声出力、CE-126P の紙、右クリックのメニューとウィンドウの表示、液晶の表示、新しい版のお知らせ、データフォルダの決め方の結合テスト
+- `src/desktop/SmokeTest.cs`: 配置ROM、UI入力、内蔵RAMファイルとRAMカードイメージの復元、設定画面、デバッガのメモリ書換えとBIN入出力、Windows音声出力、CE-126P の紙、右クリックのメニューとウィンドウの表示、液晶の表示、新しいバージョンのお知らせ、データフォルダの決め方の結合テスト
 - `tests/test_hardware.py`: 実ROMから全RAM容量、E650/U6000の増設RAM、E500Sの内蔵RAM、BATTの表示シンボル、ON＋RESETのオールリセット、BEEP波形とキークリックの時間、複数ブロック／ASCII保存・復元、連続ファイルとファイル操作を検証
 - `tests/test_roms.py`: `app/rom` にあるすべての ROM で、起動・計算・プログラム・CE-140F への SAVE と LOAD・LPRINT を試す（各段階の画面は `tests/output/roms/`）
 - `installer/`、`package.ps1`: インストーラーの定義と、zip とインストーラーを作るスクリプト

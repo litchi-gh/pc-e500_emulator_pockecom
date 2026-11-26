@@ -18,7 +18,7 @@ PRINT 12*34
 
 | システム | `pokecom` の場所 |
 |---|---|
-| Windows | `pokecom-<版>-win-x64.zip` を展開したフォルダの `pokecom.exe` |
+| Windows | `pokecom-<バージョン>-win-x64.zip` を展開したフォルダの `pokecom.exe` |
 | Ubuntu | [2章](02_LINUX.md#入れかた)の1行で入れれば `pokecom` |
 | Mac | [3章](03_MACOS.md#入れかた)の1行で入れれば `pokecom` |
 
@@ -28,7 +28,7 @@ PRINT 12*34
 
 1. `--rom` で指定したファイル
 2. 環境変数 `POKECOM_ROM` のファイル
-3. `rom` フォルダの中（いまいるフォルダ、`pokecom` のあるフォルダ、利用者のデータフォルダ、の順）。ROM のある最初のフォルダを使い、その中に `PC-E500(版).ROM` という名前があればいちばん新しい版を、なければ名前の順で最初のものを使います。大きさが 256KB（ヘッダー付きの 256KB+16 も可）か 384KB のファイルを ROM とみなします
+3. `rom` フォルダの中（いまいるフォルダ、`pokecom` のあるフォルダ、利用者のデータフォルダ、の順）。ROM のある最初のフォルダを使い、その中に `PC-E500(バージョン).ROM` という名前があればいちばん新しいバージョンを、なければ名前の順で最初のものを使います。大きさが 256KB（ヘッダー付きの 256KB+16 も可）か 384KB のファイルを ROM とみなします
 
 | システム | 利用者のデータフォルダ |
 |---|---|
@@ -231,7 +231,7 @@ screen --png after.png
 
 キーの名前は英数字、`ENTER` `SPACE` `BS` `DEL` `INS` `LEFT` `RIGHT` `UP` `DOWN` `SHIFT` `CTRL` `BASIC` `MENU` `F1`〜`F5`（`PF1`〜`PF5`）`2ndF` `C-CE` `BRK` `OFF` と、ほかのキーの印字です。`SHIFT+Q` のように書くと、同時に押します。
 
-### ほかの版の ROM でも試す
+### ほかのバージョンの ROM でも試す
 
 ```sh
 for rom in roms/*.ROM; do

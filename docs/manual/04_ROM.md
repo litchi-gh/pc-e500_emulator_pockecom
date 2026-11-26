@@ -1,6 +1,6 @@
 # 4. ROM を用意する
 
-ROM は含まれていません。お手持ちの実機から吸い出したものを、データの `rom` フォルダに置きます。名前は `PC-E500(7.2).ROM` のように「機種名(版).ROM」にします。
+ROM は含まれていません。お手持ちの実機から吸い出したものを、データの `rom` フォルダに置きます。名前は `PC-E500(7.2).ROM` のように「機種名(バージョン).ROM」にします。
 
 | システム | 置く場所 |
 |---|---|
@@ -50,7 +50,7 @@ SAVEM "L:S3B.ROM",&H20000,&H3FFFF     ' PC-E500S / PC-E650 / PC-U6000 のみ必�
 ```powershell
 python tools/merge_savem_rom.py S3A.ROM S3B.ROM --info                              # ヘッダーの確認
 python tools/merge_savem_rom.py S3A.ROM S3B.ROM -o app/rom/PC-U6000-full.rom         # 384KBに結合
-python tools/merge_savem_rom.py S3A.ROM -o "app/rom/PC-E500(7.2).ROM"                 # ヘッダー除去のみ (256KB)。名前は「機種名(版).ROM」
+python tools/merge_savem_rom.py S3A.ROM -o "app/rom/PC-E500(7.2).ROM"                 # ヘッダー除去のみ (256KB)。名前は「機種名(バージョン).ROM」
 python tools/merge_savem_rom.py S3A.ROM S3B.ROM --strip                              # 各ファイルのヘッダーを取り除いて上書き
 python tools/merge_savem_rom.py S3B.ROM --main-rom PC-U6000.rom --layout full -o app/rom/PC-U6000-full.rom   # 除去済み本体ROMと結合
 ```
@@ -82,7 +82,7 @@ PC-E500S / PC-E650 / PC-U6000の内蔵ROMは、提示されたメモリマップ
 | `00000-1FFFF` | `20000-3FFFF` | 128KB | CE3 |
 | `20000-5FFFF` | `C0000-FFFFF` | 256KB | CE2 |
 
-「ROMを開く」では、PC-E500の256KBイメージとPC-E500S/PC-E650/PC-U6000の384KBイメージを自動判別します。384KBのうち、本体ROMの機種コード（版の下の桁）が3のものをPC-E500Sとして扱います。判別した系列（E500・E500S・E650）はステータスバーの ROM の欄に、ROM の容量とファイルはマウスを乗せたときのヒントに表示します。384KBファイルは、先頭にアドレスの低い追加ROM、その後ろに256KB本体ROMを置いた形式です。
+「ROMを開く」では、PC-E500の256KBイメージとPC-E500S/PC-E650/PC-U6000の384KBイメージを自動判別します。384KBのうち、本体ROMの機種コード（バージョンの下の桁）が3のものをPC-E500Sとして扱います。判別した系列（E500・E500S・E650）はステータスバーの ROM の欄に、ROM の容量とファイルはマウスを乗せたときのヒントに表示します。384KBファイルは、先頭にアドレスの低い追加ROM、その後ろに256KB本体ROMを置いた形式です。
 
 画面下部のステータスバーには`ROM Ver.x.y`も表示します。この値はファイル名ではなく、サービスメンテ画面が使う本体ROM末尾16バイト内のメジャー／マイナーバージョンから取得します。動作確認に使ったPC-E500 ROMはVer.7.2、PC-E650 ROMはVer.8.5です。
 
