@@ -7,6 +7,7 @@
 | start on Windows | [1](manual_en/01_WINDOWS.md) → [4](manual_en/04_ROM.md) → [5](manual_en/05_FIRST_STEPS.md) |
 | start on Ubuntu | [2](manual_en/02_LINUX.md) → [4](manual_en/04_ROM.md) → [5](manual_en/05_FIRST_STEPS.md) |
 | use a Mac | [3](manual_en/03_MACOS.md) → [16](manual_en/16_CLI.md) |
+| update to a new version | [Windows](manual_en/01_WINDOWS.md#updating), [Ubuntu](manual_en/02_LINUX.md#updating-and-uninstalling), [Mac](manual_en/03_MACOS.md#updating) |
 | work it from a terminal or script | [16](manual_en/16_CLI.md), [17](manual_en/17_CLI_REFERENCE.md) |
 | use it from AI tools | [18](manual_en/18_MCP.md) |
 | put something right | [20](manual_en/20_TROUBLESHOOTING.md) |
@@ -16,8 +17,8 @@
 | Chapter | |
 |---|---|
 | [1. On Windows](manual_en/01_WINDOWS.md) | Installer and zip, folders, updating |
-| [2. On Ubuntu (Linux)](manual_en/02_LINUX.md) | Installing on Ubuntu, what differs from Windows |
-| [3. On a Mac (command line)](manual_en/03_MACOS.md) | Installing on a Mac |
+| [2. On Ubuntu (Linux)](manual_en/02_LINUX.md) | Installing and updating on Ubuntu, what differs from Windows |
+| [3. On a Mac (command line)](manual_en/03_MACOS.md) | Installing and updating on a Mac |
 | [4. Getting the ROM](manual_en/04_ROM.md) | Where the ROM goes, dumping it (ROMDump, SAVEM) |
 
 ## Using it

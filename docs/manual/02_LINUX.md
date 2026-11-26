@@ -115,7 +115,22 @@ cp ~/'PC-E500(7.2).ROM' ~/.local/share/PockeComE500/rom/
 
 ## 更新とアンインストール
 
-新しいバージョンが出ると、ツールバーに「新しいバージョン」のボタンが出ます。エミュレータを終了してから、[入れかた](#入れかた)の1行をもう一度実行します（`--deb` で入れたときは `--deb` を付けます）。ROM・RAM・設定はそのまま残ります。
+新しいバージョンが出ると、ツールバーに「新しいバージョン」のボタンが出ます（1日に1回まで GitHub に問い合わせます。「設定」で止められます）。更新は手で行います。ROM・RAM・設定・X: のファイルはそのまま残ります。
+
+1. エミュレータを終了します。
+2. [入れかた](#入れかた)の1行をもう一度実行します。いちばん新しいバージョンを取って、今のものに上書きします。
+
+   ```sh
+   wget -qO- https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh
+   ```
+
+   `--deb` で入れたときは、`--deb` を付けます。
+
+   ```sh
+   wget -qO- https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh -s -- --deb
+   ```
+
+3. `pokecom version` で、新しいバージョンになったことを確かめます。
 
 消すときは、次のようにします。`--deb` なしで入れたときはデータも消えるので、ROM などを先に移してから実行してください。
 

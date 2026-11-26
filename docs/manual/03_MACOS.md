@@ -69,6 +69,16 @@ pokecom roms
 | `pokecom version` | バージョンを表示する | `0.2.0` など |
 | `pokecom roms` | 見つかった ROM を並べる | 自分の ROM が出る |
 
+### 更新する
+
+`pokecom` は新しいバージョンが出ても知らせません。[リリース](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases)で新しいバージョンが出ているのを見たら、[入れかた](#入れかた)の1行をもう一度実行します。いちばん新しいバージョンを取って、今のものに上書きします。`rom` に置いた ROM はそのまま残ります。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh
+```
+
+`pokecom version` で、新しいバージョンになったことを確かめます。AI のツールから使っているときは、そのツールを開き直すと新しい `pokecom` が使われます。
+
 ### アンインストール
 
 ```sh

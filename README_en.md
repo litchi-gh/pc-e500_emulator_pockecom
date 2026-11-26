@@ -118,7 +118,7 @@ PRINT 12*34
 - **Saving**: the contents survive power-off. Save and restore the whole state at any time.
 - **Speed**: 0.5x to 4x, with BEEP sound.
 - **Language**: Japanese or English.
-- **Updates**: a newer release is announced on the toolbar (you update by hand).
+- **Updates**: the emulator with a window announces a newer release on the toolbar. You update by hand ([Windows](docs/manual_en/01_WINDOWS.md#updating), [Ubuntu](docs/manual_en/02_LINUX.md#updating-and-uninstalling), [Mac](docs/manual_en/03_MACOS.md#updating)).
 
 ## Getting started (Windows)
 

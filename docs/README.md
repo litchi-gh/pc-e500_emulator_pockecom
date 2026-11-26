@@ -7,6 +7,7 @@
 | Windows で使い始める | [1章](manual/01_WINDOWS.md) → [4章](manual/04_ROM.md) → [5章](manual/05_FIRST_STEPS.md) |
 | Ubuntu で使い始める | [2章](manual/02_LINUX.md) → [4章](manual/04_ROM.md) → [5章](manual/05_FIRST_STEPS.md) |
 | Mac で使う | [3章](manual/03_MACOS.md) → [16章](manual/16_CLI.md) |
+| 新しいバージョンに更新する | [Windows](manual/01_WINDOWS.md#更新する)・[Ubuntu](manual/02_LINUX.md#更新とアンインストール)・[Mac](manual/03_MACOS.md#更新する) |
 | 端末やスクリプトから動かす | [16章](manual/16_CLI.md)、[17章](manual/17_CLI_REFERENCE.md) |
 | AI のツールから使う | [18章](manual/18_MCP.md) |
 | うまく動かない | [20章](manual/20_TROUBLESHOOTING.md) |
@@ -16,8 +17,8 @@
 | 章 | 内容 |
 |---|---|
 | [1. Windows で使う](manual/01_WINDOWS.md) | インストーラーと zip、フォルダの構成、更新 |
-| [2. Ubuntu（Linux）で使う](manual/02_LINUX.md) | Ubuntu での入れかた、Windows 版との違い |
-| [3. Mac で使う（コマンドライン）](manual/03_MACOS.md) | Mac での入れかた |
+| [2. Ubuntu（Linux）で使う](manual/02_LINUX.md) | Ubuntu での入れかたと更新、Windows 版との違い |
+| [3. Mac で使う（コマンドライン）](manual/03_MACOS.md) | Mac での入れかたと更新 |
 | [4. ROM を用意する](manual/04_ROM.md) | ROM の置き場所、実機からの吸い出し（ROMDump・SAVEM） |
 
 ## 使い方

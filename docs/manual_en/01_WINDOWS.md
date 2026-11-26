@@ -25,15 +25,30 @@ Built from source, double-click `Start-PC-E500.cmd`, or open `app/PC-E500.exe` d
 
 The command line, for terminals, scripts and AI tools, comes separately as `pokecom-<version>-win-x64.zip`: see [chapter 16](16_CLI.md).
 
-## New versions and updating
+## New versions
 
 ![New version notice](../../app/manual/images-en/update.png)
 
-At start-up, once a day at most, the emulator asks GitHub [Releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) whether a new version is out, and announces it on the toolbar and in the right-click menu. It never downloads or replaces anything. To update, quit the emulator and run the new `-setup.exe` if you installed it, or unpack the zip over the folder that holds `PC-E500.exe` now; your data stays either way.
+At start-up, once a day at most, the emulator asks GitHub [Releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) whether a new version is out, and announces it on the toolbar and in the right-click menu. The button shows what changed, and "Open the download page" opens the release page. It never downloads or replaces anything.
 
 The Start menu's "PC-E500 Emulator data folder", or "Open the data folder" in the right-click menu, opens the data folder.
 
 The question goes to GitHub's public API (`api.github.com`) without an account, sending only the running version (as the User-Agent). Turn the automatic check off with "Check for a new version at start-up" in Settings; "Check for a new version..." in the right-click menu checks at any time.
+
+## Updating
+
+Updating is done by hand. Quit the emulator first, then do as fits the way it was installed. ROMs, RAM, settings and the files of X: stay whichever way.
+
+| Installed with | How to update |
+|---|---|
+| The installer | Get the new `PC-E500-Emulator-<version>-win-x64-setup.exe` from [Releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) and run it. It installs over the old one |
+| The zip | Unpack the new `PC-E500-Emulator-<version>-win-x64.zip` over the folder that holds `PC-E500.exe` now. The `rom`, `ram`, `drive-x` and `state` folders stay |
+| The command line (`pokecom`) | Unpacking the new `pokecom-<version>-win-x64.zip` makes a new folder, `pokecom-<version>-win-x64`. If you kept a ROM in the old folder's `rom`, move it to the new folder's `rom`. The old folder can then go |
+
+- With the command line's ROM in `%LocalAppData%\PockeComE500\rom`, nothing needs moving at an update ([chapter 16](16_CLI.md#where-the-rom-is-looked-for)).
+- If the PATH or an AI tool's settings name the old folder's `pokecom.exe`, change them to the new folder.
+
+To see that it worked, look at the title bar ("PC-E500 Emulator v0.2.0" or the like) or at what `pokecom version` prints.
 
 ---
 
