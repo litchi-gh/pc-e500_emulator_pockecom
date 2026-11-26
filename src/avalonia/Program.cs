@@ -24,7 +24,7 @@ internal sealed class App : Application
         Styles.Add(new FluentTheme());
         // Menus and dialogs too: their own default has no Japanese face on Ubuntu.
         Resources["ContentControlThemeFontFamily"]=Paint.Ui;
-        RequestedThemeVariant=MainWindow.SavedTheme() switch{"Light"=>ThemeVariant.Light,"Dark"=>ThemeVariant.Dark,_=>ThemeVariant.Default};
+        RequestedThemeVariant=MainWindow.SavedTheme() switch{"Light"=>ThemeVariant.Light,"Dark"=>ThemeVariant.Dark,_=>SystemTheme.Read()};
     }
     public override void OnFrameworkInitializationCompleted() {
         if(ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)desktop.MainWindow=new MainWindow(Program.Args);
