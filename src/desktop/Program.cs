@@ -696,6 +696,9 @@ internal sealed class MainForm : Form
         try {
             PollPad(now);
             double rate=Rates[speedIndex];
+            // At 1x the pace follows the sound, so nothing buffered for it is ever cut (AudioPace).
+            // 等倍では、音声のたまり具合に合わせて進める速さを少し変える（AudioPace）。
+            if(rate==1 && audio is not null)rate=audio.Pace();
             int cycles=(int)(elapsed*CpuHz*rate);
             RunCycles(cycles);
             int count=Native.e500_audio(core.Handle,soundBuffer,soundBuffer.Length);audio?.Submit(soundBuffer,count);

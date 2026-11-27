@@ -790,6 +790,23 @@ internal static class SmokeTest
                 for(int i=0;i<300;i++)backlog.Submit(tone,384);
                 if(backlog.BufferedSamples>4096)throw new Exception($"Audio backlog grew to {backlog.BufferedSamples} samples ({backlog.BufferedSamples/48}ms of delay)");
             }
+            {
+                // A queue left full by a start stayed full, because the machine makes
+                // sound exactly as fast as the device plays it, and every frame a
+                // little long then cut samples - a click in any tone that went on.
+                // The pace has to bring it back to its target and keep it there,
+                // with frames that wobble, without going near the cap again.
+                // 起動で満杯になった待ち行列が、ぶれるコマの中でも目標に戻り、上限に近づかないこと。
+                // A frame that runs long hands over more, and the next one less.
+                var pace=new AudioPace();double level=4096,highest=0,late=0;var wobble=new Random(1);
+                for(int frame=0;frame<64*30;frame++) {
+                    double now=wobble.Next(-300,301),made=750*pace.Rate((int)level,2560)+now-late;late=now;
+                    level=Math.Max(0,level+made-750);
+                    if(frame>=64*3)highest=Math.Max(highest,level);
+                }
+                if(Math.Abs(level-2560)>400 || highest>3600)throw new Exception($"The audio pace left {level:F0} samples queued (highest {highest:F0} after 3 s); it should hold about 2560, well under the 4096 cap");
+                if(new AudioPace().Rate(100000,2560)<0.98 || new AudioPace().Rate(0,2560)>1.02)throw new Exception("The audio pace moved the machine by more than 2%");
+            }
             // The two things that made a keystroke take a second to arrive. First:
             // waveOutWrite blocks its caller - 91 ms on average here, 1.4 s at worst -
             // so it must not run on the thread that steps the CPU and reads the
