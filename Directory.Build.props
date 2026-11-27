@@ -1,0 +1,8 @@
+<Project>
+  <!-- The built DLL and EXE files keep the paths of the PDB and the sources. Write them as /_/... so that the
+       folder of the PC that built them (with the user's name in it) is not in the files we hand out. -->
+  <PropertyGroup>
+    <PathMap>$(MSBuildThisFileDirectory)=/_/</PathMap>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>
