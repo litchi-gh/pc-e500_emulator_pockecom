@@ -327,7 +327,7 @@ internal sealed class PocketSurface : Control
     /// <param name="now">今の時刻（秒）</param>
     internal bool UpdateLcd(double now) {
         if(Core is null){Invalidate();return false;}
-        bool settling=motion.Settle(now,Core.Pixels);
+        bool settling=motion.Settle(now,Core.Duty);
         var symbols=Symbols;
         if(shownAny && symbols==shownSymbols && !motion.OffsetsChanged && shade.AsSpan().SequenceEqual(shownPixels))return settling;
         shade.CopyTo(shownPixels,0);shownSymbols=symbols;shownAny=true;

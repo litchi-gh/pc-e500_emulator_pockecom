@@ -4,6 +4,8 @@
 // メモリ・キーボード・LCD の配線は PockEmul の e500.cpp・Lcdc_e500.cpp から移植した。
 #include "machine.h"
 #include <new>
+#include <cmath>
+#include <algorithm>
 #include <cstddef>
 
 BYTE Lcd::command(int cmd) {
@@ -20,13 +22,18 @@ BYTE Lcd::command(int cmd) {
 // 0・2：両方へコマンド・データ、4・6：コントローラ2へ、8・10：コントローラ1へ、
 // 5・9：状態の読み出し、7・11：データの読み出し。
 BYTE Machine::display(int cmd,BYTE d) {
+    // A data write changes the dots of its byte; a command that moves the start
+    // line or turns the screen on or off changes the whole controller.
+    // データを書いたらそのバイトのドット、開始行と表示の ON/OFF が変わったらコントローラ全体のドットを直す。
+    auto write=[&](int c){auto &l=lcd[c];int p=l.page,col=l.column;l.command(0x100|d);dotsByte(c,p,col);};
+    auto order=[&](int c){auto &l=lcd[c];BYTE s=l.start,o=l.on;l.command(d);if(l.start!=s||l.on!=o)dotsController(c);};
     switch(cmd) {
-    case 0:lcd[0].command(d);return lcd[1].command(d);
-    case 2:lcd[0].command(0x100|d);return lcd[1].command(0x100|d);
-    case 4:return lcd[1].command(d);
-    case 6:return lcd[1].command(0x100|d);
-    case 8:return lcd[0].command(d);
-    case 10:return lcd[0].command(0x100|d);
+    case 0:order(0);order(1);return 0;
+    case 2:write(0);write(1);return 0;
+    case 4:order(1);return 0;
+    case 6:write(1);return 0;
+    case 8:order(0);return 0;
+    case 10:write(0);return 0;
     case 5:return lcd[1].command(0x200);
     case 9:return lcd[0].command(0x200);
     case 7:return lcd[1].command(0x300);
@@ -196,6 +203,65 @@ void Machine::pixels(BYTE *out) {
         out[y*240+x]=l.on && ((l.ram[(row/8)*64+column]>>(row%8))&1);
     }
 }
+// Grey by blinking: a program can show a dot on in one frame of three, and
+// the slow glass shows it a third dark. Sampling the dots once a screen frame
+// cannot see that (it catches one frame or another, beating with the host's
+// refresh), so every dot counts the cycles it was on, and the screen shows
+// the share since it last looked. A RAM bit is one dot on the screen for any
+// start line, so a write changes only its own eight dots.
+// 点滅の灰色：ドットごとに点いていたサイクルを数え、前に見てからの割合で描く。
+void Machine::setDot(int i,bool on) {
+    if(dotOn[i]==(on?1:0))return;
+    uint64_t now=cpu.cycles;
+    if(dotOn[i])dotAccum[i]+=now-dotSince[i];else dotSince[i]=now;
+    dotOn[i]=on?1:0;
+    auto &t=dotToggles[i];t[3]=t[2];t[2]=t[1];t[1]=t[0];t[0]=now;
+}
+void Machine::dotsByte(int c,int page,int column) {
+    auto &l=lcd[c];
+    if(c==0 && column>=56)return;          // controller 1 has 56 columns on the screen
+    int xl=c==1?column:64+column,xr=c==1?239-column:175-column;
+    BYTE v=l.ram[page*64+column];
+    for(int b=0;b<8;b++) {
+        int y=(page*8+b-l.start)&63;       // the left half shows lines start.., the right half start+32..
+        int i=y<32?y*240+xl:(y-32)*240+xr;
+        setDot(i,l.on && ((v>>b)&1));
+    }
+}
+void Machine::dotsController(int c) {for(int p=0;p<8;p++)for(int col=0;col<64;col++)dotsByte(c,p,col);}
+void Machine::dotsResync() {
+    dotOn.fill(0);dotAccum.fill(0);
+    dotsController(0);dotsController(1);
+    dotAccum.fill(0);dutyFrom=cpu.cycles;
+    for(auto &t:dotToggles)t.fill(0);
+    for(int i=0;i<240*32;i++)dotAvg[i]=dotOn[i];
+}
+// The share since the last look is enough for a dot drawn once, but a grey
+// blinks over three or more program frames (45 to 75 ms), longer than a
+// screen frame, so one look still catches it light or dark. A dot that turned
+// four times within BlinkSeconds is blinking: its share is smoothed over
+// SmoothSeconds, as the slow glass does. Other dots show their share at once,
+// so text stays sharp and a thing passing by leaves no trail.
+// 1つ前に見てからの割合だけでは、3コマ以上かけて点滅する灰色が明るく・暗く揺れる。
+// 速く点滅しているドット（BlinkSeconds の間に4回切り替わった）だけ、SmoothSeconds でならす。
+// 通り過ぎるもの（2回の切り替え）は尾を引かない。
+void Machine::duty(BYTE *out) {
+    constexpr double BlinkSeconds=0.2,SmoothSeconds=0.05;
+    uint64_t now=cpu.cycles;
+    if(now<dutyFrom)dotsResync();
+    uint64_t span=now-dutyFrom,blink=uint64_t(CpuHz*BlinkSeconds);
+    float k=span==0?0.0f:float(1-std::exp(-double(span)/(CpuHz*SmoothSeconds)));
+    for(int i=0;i<240*32;i++) {
+        uint64_t a=dotAccum[i];
+        if(dotOn[i]){a+=now-dotSince[i];dotSince[i]=now;}
+        float share=span==0?float(dotOn[i]):float(double(a)/double(span));
+        uint64_t fourth=dotToggles[i][3];
+        if(fourth!=0 && now-fourth<blink)dotAvg[i]+=(share-dotAvg[i])*k;else dotAvg[i]=share;
+        out[i]=(BYTE)std::min(255.0f,dotAvg[i]*255+0.5f);
+        dotAccum[i]=0;
+    }
+    dutyFrom=now;
+}
 
 // ---- DLL の公開 API（デスクトップ側の Core.cs から P/Invoke で呼ぶ） ----
 #ifdef _WIN32
@@ -252,6 +318,7 @@ API void e500_reset(Machine *m,int clearInternal) {
     if(clearInternal)std::fill(m->mem.begin()+0xc0000-m->internalKB*1024,m->mem.begin()+0xc0000,0xff);
     m->cpu=Csc62015(m);m->lcd[0]={};m->lcd[1]={};m->keys.fill(0);
     m->audio.clear();m->samplePhase=m->tonePhase=0;m->lastSoundMode=-1;m->disk.reset();m->printer.resetBus();m->serial.reset();m->cpu.Reset();
+    m->dotsResync();
 }
 // 内蔵 RAM（card=0）か RAM カード（card=1）の全体を読む（write=0）・書く（write=1）。size は容量ぴったり。
 API int e500_memory(Machine *m,int card,BYTE *data,int size,int write) {
@@ -380,6 +447,8 @@ API void e500_key(Machine *m,int row,int bit,int down) {
 API void e500_release_keys(Machine *m) {if(m){m->keys.fill(0);m->scanKeys();}}
 // LCD の 240×32 ドットを取り出す。
 API void e500_pixels(Machine *m,BYTE *out) {if(m && out)m->pixels(out);}
+// LCD の 240×32 ドットの、前に呼んでから点いていた時間の割合（0〜255）。点滅で出す灰色もこの濃さになる。
+API void e500_pixels_duty(Machine *m,BYTE *out) {if(m && out)m->duty(out);}
 // CPU のレジスタの値（id は REGNAME）。
 API UINT32 e500_reg(Machine *m,int id) {return m?m->cpu.get_reg(REGNAME(id)):0;}
 // CPU の状態：1 電源 OFF、2 HALT 中、4 エラーで停止（本体がなければ 4）。
@@ -696,5 +765,5 @@ API int e500_load(Machine *m,const BYTE *data,int size) {
         auto bus=m->busLevels(m->lastSoundMode);
         s.printer.oldXout=s.disk.oldXout=bus.xout;s.printer.oldBusy=s.disk.oldBusy=bus.busy;
     } else m->restartTone(s.printer.oldXout!=0);
-    m->disk.restoreCode(s.disk,s.cycles);m->printer.restore(s.printer,s.cycles);m->scanKeys();return 1;
+    m->disk.restoreCode(s.disk,s.cycles);m->printer.restore(s.printer,s.cycles);m->scanKeys();m->dotsResync();return 1;
 }

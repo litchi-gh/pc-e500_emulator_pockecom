@@ -154,7 +154,7 @@ internal sealed class PocketView : Panel
     /// <returns>残像のドットがまだ変わっている途中か（なら、次のコマも呼ぶ）</returns>
     internal bool UpdateLcd() {
         if(Core is null)return false;
-        bool settling=motion.Settle(clock.Elapsed.TotalSeconds,Core.Pixels);
+        bool settling=motion.Settle(clock.Elapsed.TotalSeconds,Core.Duty);
         var symbols=Symbols;
         if(!shownAny || symbols!=shownSymbols){shownSymbols=symbols;symbolLayer.InvalidateVisual();}
         if(shownAny && !motion.OffsetsChanged && motion.Shade.AsSpan().SequenceEqual(shown))return settling;

@@ -421,12 +421,13 @@ internal static class SmokeTest
                 for(int i=0;i<240*32;i++)if(lcd.TestShade(i)!=(core.Pixels[i]!=0?255:0))throw new Exception($"Dot {i} still between on and off a second later");
                 // Motion: a dot stepping left beside letters that stay put, and a band
                 // of every other dot stepping a dot, slide over as long as the last step took.
-                var dots=core.Pixels;
+                // (The surface draws the share of time each dot was on, Core.Duty.)
+                var dots=core.Duty;
                 void Picture(int star,int band){
                     Array.Clear(dots);
-                    for(int y=8;y<16;y++)dots[y*240+96]=1;
-                    dots[12*240+star]=1;
-                    for(int x=0;x<160;x++)if((x+band)%2==0)dots[28*240+x]=1;
+                    for(int y=8;y<16;y++)dots[y*240+96]=255;
+                    dots[12*240+star]=255;
+                    for(int x=0;x<160;x++)if((x+band)%2==0)dots[28*240+x]=255;
                 }
                 Picture(100,0);lcd.UpdateLcd(2000);lcd.UpdateLcd(2001);
                 Picture(99,1);lcd.UpdateLcd(2001.2);
@@ -440,7 +441,7 @@ internal static class SmokeTest
                 lcd.UpdateLcd(2001.61);
                 if(lcd.TestSliding!=0)throw new Exception($"{lcd.TestSliding} dots still sliding after the step's time");
                 // A whole line of text at once is not a move.
-                Array.Clear(dots);for(int x=0;x<60;x++)dots[2*240+x]=1;lcd.UpdateLcd(2001.7);
+                Array.Clear(dots);for(int x=0;x<60;x++)dots[2*240+x]=255;lcd.UpdateLcd(2001.7);
                 if(lcd.TestSliding!=0)throw new Exception("Text slid");
                 core.Refresh();lcd.UpdateLcd(2002);
                 lcd.SetAfterimage(false);form.TestRefresh();

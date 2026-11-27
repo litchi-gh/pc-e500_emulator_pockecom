@@ -23,7 +23,7 @@ internal static class Program
             if(args.Length>0 && args[0]=="--smoke-test") {Theme.Init("Light");SmokeTest.Run(args[1],args[2]);return;}
             if(args.Length>0 && args[0]=="--manual-shots") {Theme.Init(args.Length>4?args[4]:"Light");ManualShots.Run(args[1],args[2],args.Length>3?args[3]:"ja");return;}
             if(args.Length>4 && args[0]=="--demo-video") {Theme.Init("Light");DemoVideo.Run(args[1],args[2],args[3],args[4]);return;}
-            if(args.Length>4 && args[0]=="--compare-video") {Theme.Init("Light");CompareVideo.Run(args[1],args[2],args[3],args[4],args.Length>5?double.Parse(args[5],System.Globalization.CultureInfo.InvariantCulture):30);return;}
+            if(args.Length>4 && args[0]=="--compare-video") {Theme.Init("Light");CompareVideo.Run(args[1],args[2],args[3],args[4],args.Length>5?double.Parse(args[5],System.Globalization.CultureInfo.InvariantCulture):30,args.Length>6?Convert.ToInt32(args[6],16):0xBB000);return;}
             if(args.Length>0 && args[0]=="--open-folder") {AppFolders.Open(args.Length>1?args[1]:"");return;}
             Theme.Init(MainForm.SavedTheme());
             Application.Run(new MainForm(args.FirstOrDefault()));

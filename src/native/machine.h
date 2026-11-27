@@ -151,6 +151,24 @@ public:
     void step(uint64_t budget=3);
     /// LCD の 240×32 ドットを out に書く（1 なら点灯）。
     void pixels(BYTE *out);
+    /// 前に呼んでから今までに、ドットが点いていた時間の割合を out に書く（0〜255）。数え直しを始める。
+    /// ドットを速く点滅させる灰色（実機の液晶は遅く反応して、平均の濃さに見える）を、画面のコマの周期によらずに出す。
+    void duty(BYTE *out);
+    /// 今の表示 RAM から、点いていた時間を数え直す（リセット、状態の読み込みの後）。
+    void dotsResync();
+    // 点いていた時間：ドットごとに、今点いているか、点いた時刻、それまでに点いていたサイクル数。
+    // 表示 RAM の1ビットは、開始行に応じて画面のちょうど1つのドットに出るので、書いたビットのドットだけを直す。
+    std::array<BYTE,240*32> dotOn{};
+    std::array<uint64_t,240*32> dotSince{},dotAccum{};
+    uint64_t dutyFrom=0;
+    // 速く点滅しているドット（4回前の切り替えが近い）は、液晶の遅い反応のように時間でならす。
+    std::array<std::array<uint64_t,4>,240*32> dotToggles{};
+    std::array<float,240*32> dotAvg{};
+    void setDot(int i,bool on);
+    /// コントローラ c（0 = コントローラ1、1 = コントローラ2）の表示 RAM の1バイトのドットを直す。
+    void dotsByte(int c,int page,int column);
+    /// コントローラ c の全ドットを直す（開始行、表示の ON/OFF が変わったとき）。
+    void dotsController(int c);
     /// 命令を実行するたびに CPU から呼ばれる。音声のサンプルを作り、11ピンの周辺機器を動かす。
     /// @param cycles その命令にかかったサイクル数
     void peripherals(BYTE cycles);
