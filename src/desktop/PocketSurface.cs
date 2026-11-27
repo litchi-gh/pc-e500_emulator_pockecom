@@ -327,7 +327,7 @@ internal sealed class PocketSurface : Control
     /// <param name="now">今の時刻（秒）</param>
     internal bool UpdateLcd(double now) {
         if(Core is null){Invalidate();return false;}
-        bool settling=motion.Settle(now,Core.Pixels);
+        bool settling=motion.Settle(now,Core.Duty);
         var symbols=Symbols;
         if(shownAny && symbols==shownSymbols && !motion.OffsetsChanged && shade.AsSpan().SequenceEqual(shownPixels))return settling;
         shade.CopyTo(shownPixels,0);shownSymbols=symbols;shownAny=true;
@@ -611,8 +611,17 @@ internal sealed class PocketSurface : Control
             g.DrawLines(mark,[new PointF(x,y),new PointF(x,y+25),new PointF(x-8,y+25),new PointF(x-8,y+20),new PointF(x-14,y+28),new PointF(x-8,y+35),new PointF(x-8,y+30),new PointF(x+5,y+30),new PointF(x+5,y)]);
             return;
         }
-        float fontSize=k.Style==6?(k.Id is "DEL" or "BS" or "INS"?12:21):k.Style==1?14:k.Label.Length>3?9:12;
         Color lettering=k.Style==2&&!IsWide?Color.FromArgb(60,54,33):Color.FromArgb(245,240,220);
+        if(k.Id=="TEXT") {
+            // The real key carries two solid triangles, up over down, almost touching.
+            // 実機の TEXT キーは、上向きと下向きの塗った三角を上下にほぼ接して並べた印字。
+            float cx=r.X+r.Width/2,cy=r.Y+r.Height/2,half=r.Width*0.17f,tall=r.Height*0.27f,gap=r.Height*0.03f;
+            using var ink=new SolidBrush(lettering);
+            g.FillPolygon(ink,[new PointF(cx,cy-gap-tall),new PointF(cx+half,cy-gap),new PointF(cx-half,cy-gap)]);
+            g.FillPolygon(ink,[new PointF(cx-half,cy+gap),new PointF(cx+half,cy+gap),new PointF(cx,cy+gap+tall)]);
+            return;
+        }
+        float fontSize=k.Style==6?(k.Id is "DEL" or "BS" or "INS"?12:21):k.Style==1?14:k.Label.Length>3?9:12;
         if(k.Minor.Length>0) {
             // The operator, then its BASIC character small and low beside it.
             TextAt(g,k.Label,r.X+r.Width*0.08f,r.Y+(r.Height-fontSize*1.5f)/2,fontSize,lettering,true,r.Width*0.6f);

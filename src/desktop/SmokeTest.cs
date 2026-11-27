@@ -421,12 +421,13 @@ internal static class SmokeTest
                 for(int i=0;i<240*32;i++)if(lcd.TestShade(i)!=(core.Pixels[i]!=0?255:0))throw new Exception($"Dot {i} still between on and off a second later");
                 // Motion: a dot stepping left beside letters that stay put, and a band
                 // of every other dot stepping a dot, slide over as long as the last step took.
-                var dots=core.Pixels;
+                // (The surface draws the share of time each dot was on, Core.Duty.)
+                var dots=core.Duty;
                 void Picture(int star,int band){
                     Array.Clear(dots);
-                    for(int y=8;y<16;y++)dots[y*240+96]=1;
-                    dots[12*240+star]=1;
-                    for(int x=0;x<160;x++)if((x+band)%2==0)dots[28*240+x]=1;
+                    for(int y=8;y<16;y++)dots[y*240+96]=255;
+                    dots[12*240+star]=255;
+                    for(int x=0;x<160;x++)if((x+band)%2==0)dots[28*240+x]=255;
                 }
                 Picture(100,0);lcd.UpdateLcd(2000);lcd.UpdateLcd(2001);
                 Picture(99,1);lcd.UpdateLcd(2001.2);
@@ -440,7 +441,7 @@ internal static class SmokeTest
                 lcd.UpdateLcd(2001.61);
                 if(lcd.TestSliding!=0)throw new Exception($"{lcd.TestSliding} dots still sliding after the step's time");
                 // A whole line of text at once is not a move.
-                Array.Clear(dots);for(int x=0;x<60;x++)dots[2*240+x]=1;lcd.UpdateLcd(2001.7);
+                Array.Clear(dots);for(int x=0;x<60;x++)dots[2*240+x]=255;lcd.UpdateLcd(2001.7);
                 if(lcd.TestSliding!=0)throw new Exception("Text slid");
                 core.Refresh();lcd.UpdateLcd(2002);
                 lcd.SetAfterimage(false);form.TestRefresh();
@@ -789,6 +790,23 @@ internal static class SmokeTest
                 // device consumes at exactly the rate the machine produces.
                 for(int i=0;i<300;i++)backlog.Submit(tone,384);
                 if(backlog.BufferedSamples>4096)throw new Exception($"Audio backlog grew to {backlog.BufferedSamples} samples ({backlog.BufferedSamples/48}ms of delay)");
+            }
+            {
+                // A queue left full by a start stayed full, because the machine makes
+                // sound exactly as fast as the device plays it, and every frame a
+                // little long then cut samples - a click in any tone that went on.
+                // The pace has to bring it back to its target and keep it there,
+                // with frames that wobble, without going near the cap again.
+                // 起動で満杯になった待ち行列が、ぶれるコマの中でも目標に戻り、上限に近づかないこと。
+                // A frame that runs long hands over more, and the next one less.
+                var pace=new AudioPace();double level=4096,highest=0,late=0;var wobble=new Random(1);
+                for(int frame=0;frame<64*30;frame++) {
+                    double now=wobble.Next(-300,301),made=750*pace.Rate((int)level,2560)+now-late;late=now;
+                    level=Math.Max(0,level+made-750);
+                    if(frame>=64*3)highest=Math.Max(highest,level);
+                }
+                if(Math.Abs(level-2560)>400 || highest>3600)throw new Exception($"The audio pace left {level:F0} samples queued (highest {highest:F0} after 3 s); it should hold about 2560, well under the 4096 cap");
+                if(new AudioPace().Rate(100000,2560)<0.98 || new AudioPace().Rate(0,2560)>1.02)throw new Exception("The audio pace moved the machine by more than 2%");
             }
             // The two things that made a keystroke take a second to arrive. First:
             // waveOutWrite blocks its caller - 91 ms on average here, 1.4 s at worst -

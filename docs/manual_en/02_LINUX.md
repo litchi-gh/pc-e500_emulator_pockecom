@@ -73,7 +73,7 @@ pc-e500
 
 | Command | What it does | When all is well |
 |---|---|---|
-| `pokecom version` | Shows the version | `0.2.0` or the like |
+| `pokecom version` | Shows the version | `0.2.1` or the like |
 | `pokecom roms` | Lists the ROMs found | Yours is there |
 | `pc-e500` | Starts the emulator | Its window opens |
 
@@ -115,7 +115,22 @@ The case-only and screen-only views, moving by dragging, sizing by the edges and
 
 ## Updating and uninstalling
 
-When a new version is out, a "New version" button appears on the toolbar. Quit the emulator and run the line of [Installing](#installing) again (with `--deb`, if that is how it was installed). ROMs, RAM and settings stay.
+When a new version is out, a "New version" button appears on the toolbar (GitHub is asked once a day at most; Settings can stop it). Updating is done by hand. ROMs, RAM, settings and the files of X: stay.
+
+1. Quit the emulator.
+2. Run the line of [Installing](#installing) again. It gets the newest version and puts it over the one there.
+
+   ```sh
+   wget -qO- https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh
+   ```
+
+   Installed with `--deb`, add `--deb`:
+
+   ```sh
+   wget -qO- https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh -s -- --deb
+   ```
+
+3. Check with `pokecom version` that the new version is in.
 
 To take it out, installed without `--deb` (the data goes too, so move ROMs and the like first):
 

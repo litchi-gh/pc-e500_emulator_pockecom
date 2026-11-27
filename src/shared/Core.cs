@@ -33,6 +33,7 @@ internal static class Native
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern void e500_key(IntPtr m, int row, int bit, int down);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern void e500_release_keys(IntPtr m);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern void e500_pixels(IntPtr m, [Out] byte[] pixels);
+    [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern void e500_pixels_duty(IntPtr m, [Out] byte[] duty);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern uint e500_reg(IntPtr m, int id);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_status(IntPtr m);
     [DllImport(Dll, CallingConvention=CallingConvention.Cdecl)] internal static extern int e500_symbols(IntPtr m, int index);
@@ -88,6 +89,8 @@ internal sealed class Core : IDisposable
     internal bool IsE650Family=>RomKB==384;
     /// <summary>LCD の 240×32 ドット（Refresh で更新、1 なら点灯）。</summary>
     internal byte[] Pixels {get;} = new byte[240*32];
+    /// <summary>LCD の 240×32 ドットの、前の Refresh から点いていた時間の割合（0〜255）。点滅で出す灰色もこの濃さになる。</summary>
+    internal byte[] Duty {get;} = new byte[240*32];
     /// <summary>ROM の文字フォント（20h から、1文字6バイト）。</summary>
     internal byte[] Font=>textDecoder.Font;
     // Where Run hands what the CE-126P printed; without one it stays in the native buffer.
@@ -170,8 +173,8 @@ internal sealed class Core : IDisposable
         if(Paper is null)return;
         int n;while((n=Native.e500_printer_read(Handle,printed,printed.Length))>0)Paper.Feed(printed.AsSpan(0,n));
     }
-    /// <summary>LCD のドットを Pixels に読み直す。</summary>
-    internal void Refresh() => Native.e500_pixels(Handle,Pixels);
+    /// <summary>LCD のドットを Pixels に、前の Refresh から点いていた時間の割合を Duty に読み直す。</summary>
+    internal void Refresh() {Native.e500_pixels(Handle,Pixels);Native.e500_pixels_duty(Handle,Duty);}
     /// <summary>メモリを読む（LCD の I/O に触れない、デバッガ用）。</summary>
     /// <param name="address">先頭アドレス（00000〜FFFFF）</param>
     /// <param name="length">バイト数</param>

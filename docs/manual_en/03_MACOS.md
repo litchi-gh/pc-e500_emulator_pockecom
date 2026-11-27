@@ -66,8 +66,18 @@ pokecom roms
 
 | Command | What it does | When all is well |
 |---|---|---|
-| `pokecom version` | Shows the version | `0.2.0` or the like |
+| `pokecom version` | Shows the version | `0.2.1` or the like |
 | `pokecom roms` | Lists the ROMs found | Yours is there |
+
+### Updating
+
+`pokecom` does not announce new versions. When [Releases](https://github.com/litchi-gh/pc-e500_emulator_pockecom/releases) has a newer one, run the line of [Installing](#installing) again: it gets the newest version and puts it over the one there. ROMs in `rom` stay.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/litchi-gh/pc-e500_emulator_pockecom/main/install.sh | sh
+```
+
+Check with `pokecom version` that the new version is in. An AI tool that uses it starts the new `pokecom` once it is opened again.
 
 ### Uninstalling
 

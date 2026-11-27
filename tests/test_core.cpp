@@ -121,6 +121,41 @@ extern "C" int e500_debug_call(Machine*,int,int,int);
 extern "C" void e500_debug_watch_reads(Machine*,const uint32_t*,int,int);
 extern "C" int e500_debug_read_hit(Machine*);
 extern "C" int e500_debug_write_imem(Machine*,int,const BYTE*,int);
+// LCD の点滅の灰色：ドットごとの点いていた時間の割合（e500_pixels_duty）。
+void testGrayDuty() {
+    auto m=std::make_unique<Machine>();auto &c=m->cpu;
+    BYTE out[240*32];
+    auto at=[&](uint64_t cycle){c.cycles=cycle;};
+    at(1000);m->dotsResync();
+    m->Set_8(0x2000,0x3f);m->Set_8(0x2000,0xc0);           // both on, start line 0
+    m->duty(out);check(out[0]==0 && out[239]==0,"duty: blank screen");
+    // A dot on for a third of the span: x 0, y 0 is controller 2, page 0, column 0, bit 0.
+    m->Set_8(0x2004,0xb8);m->Set_8(0x2004,0x40);m->Set_8(0x2006,0x01);
+    at(2000);m->Set_8(0x2004,0x40);m->Set_8(0x2006,0x00);
+    at(4000);m->duty(out);check(out[0]==85,"duty: a third of the span is 85");
+    // A dot drawn once and left on shows full at the next look, not smoothed.
+    m->Set_8(0x2004,0x40);m->Set_8(0x2006,0x01);
+    at(6000);m->duty(out);check(out[0]==255,"duty: a still dot is sharp");
+    at(9000);m->duty(out);check(out[0]==255 && out[1]==0,"duty: still on");
+    // The start line moved halfway: the RAM bit shows at x 0, y 0, then at x 239, y 0 (the right half shows lines 32..).
+    // (More than BlinkSeconds later, so the dot is not counted as blinking.)
+    at(300000);m->duty(out);
+    at(303000);m->Set_8(0x2000,0xc0+32);
+    at(306000);m->duty(out);check(out[0]>=126 && out[0]<=129 && out[239]>=126 && out[239]<=129,"duty: the start line moves a dot to the other half");
+    m->Set_8(0x2000,0xc0);m->Set_8(0x2004,0x40);m->Set_8(0x2006,0x00);
+    // A grey blinking on in one frame of three (11500 cycles a frame), looked at every
+    // 12800 cycles (a 60 Hz screen): smoothed, it stays near a third.
+    // 3コマに1コマ点く灰色を、画面のコマ（12800 サイクル）ごとに見ると、ならして 1/3 くらいで止まる。
+    uint64_t t0=700000,frame=11500,look=12800,next=t0+look;int lo=255,hi=0;
+    for(uint64_t t=t0,k=0;t<t0+CpuHz;t+=frame,k++) {
+        while(next<=t){at(next);m->duty(out);if(next>t0+CpuHz/2){lo=std::min<int>(lo,out[0]);hi=std::max<int>(hi,out[0]);}next+=look;}
+        at(t);m->Set_8(0x2004,0x40);m->Set_8(0x2006,k%3==0?0x01:0x00);
+    }
+    check(lo>=60 && hi<=110,"duty: a blinking grey is smoothed to about a third");
+    // A reset clears the screen and the counts.
+    e500_reset(m.get(),0);m->duty(out);check(out[0]==0,"duty: reset");
+}
+
 // デバッガの API：ブレークポイント、呼び出しの記録、ステップアウト、1命令、レジスタの書き込み、呼び出し。
 void testDebugger() {
     auto m=std::make_unique<Machine>();auto &c=m->cpu;c.Reset();
@@ -170,6 +205,7 @@ int main() {
     try {
         testAmc();
         testDebugger();
+        testGrayDuty();
         auto m=std::make_unique<Machine>();auto &c=m->cpu;
         m->mem[0xffffd]=0x00;m->mem[0xffffe]=0x01;m->mem[0xfffff]=0x0c;
         c.Reset();check(c.reg.x.p==0xc0100,"reset vector");

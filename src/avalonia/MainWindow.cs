@@ -376,7 +376,9 @@ internal sealed class MainWindow : Window
         if(core is null || paused)return;
         try {
             PollPad(now);
-            input.Run((int)(elapsed*KeyInput<HoldBy>.CpuHz*Rates[speedIndex]));
+            // At 1x the pace follows the sound, so nothing buffered for it is ever cut (AudioPace).
+            double rate=Rates[speedIndex];if(rate==1)rate=audio.Pace();
+            input.Run((int)(elapsed*KeyInput<HoldBy>.CpuHz*rate));
             loader.Finish();
             audio.Submit(soundBuffer,Native.e500_audio(core.Handle,soundBuffer,soundBuffer.Length));
             bool off=(Native.e500_status(core.Handle)&1)!=0;
