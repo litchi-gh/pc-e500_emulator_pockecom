@@ -66,7 +66,7 @@ pokecom roms
 
 | Command | What it does | When all is well |
 |---|---|---|
-| `pokecom version` | Shows the version | `0.2.0` or the like |
+| `pokecom version` | Shows the version | `0.2.1` or the like |
 | `pokecom roms` | Lists the ROMs found | Yours is there |
 
 ### Uninstalling

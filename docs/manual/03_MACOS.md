@@ -66,7 +66,7 @@ pokecom roms
 
 | コマンド | 何をするか | 正しいとき |
 |---|---|---|
-| `pokecom version` | バージョンを表示する | `0.2.0` など |
+| `pokecom version` | バージョンを表示する | `0.2.1` など |
 | `pokecom roms` | 見つかった ROM を並べる | 自分の ROM が出る |
 
 ### アンインストール

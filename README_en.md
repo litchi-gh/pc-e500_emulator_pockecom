@@ -142,6 +142,13 @@ What follows is for Windows.
 2. Put the ROM dumped from your machine (with [ROMDump](https://github.com/litchi-gh/pc-e500_beep_romdumper/blob/main/README_en.md), for one) in the data folder's `rom`. "Open the data folder" in the right-click menu opens it.
 3. Start it, press **PF1** (F1 on the PC) to initialise memory, then **BASIC** (F7).
 
+## What is new in 0.2.1 (since 0.2.0)
+
+- **LCD**: a program that shows grey by blinking dots fast now looks grey, as on the real machine. Each dot is drawn by the share of time it was on.
+- **Sound**: a tone that goes on, such as a game's engine, no longer clicks now and then.
+- **Ubuntu**: with a dark desktop, the toolbar and menu text could not be read. Fixed.
+- **The machine's picture**: the TEXT key now shows the two triangles of the real case.
+
 ## What is new in 0.2.0 (since 0.1.0)
 
 - **Ubuntu**: a window with the same controls as on Windows, for Ubuntu 24.04 or later. One line pasted into a terminal installs it (a tar.gz and a `.deb` are there too).
