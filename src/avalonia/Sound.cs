@@ -16,6 +16,8 @@ internal interface ISound : IDisposable
     void Submit(short[] samples,int count);
     /// <summary>預けたサンプルを捨てる（一時停止や ROM の切り替えのとき）。</summary>
     void Flush();
+    /// <summary>本体を進める速さの倍率（たまり具合を目標に戻す。消音中や出力がないときは 1）。UI スレッドから呼ぶ。</summary>
+    double Pace();
     /// <summary>今のシステムの音声の出力を開く。</summary>
     internal static ISound Open()=>OperatingSystem.IsWindows()?new WaveSound():new AlsaSound();
 }
@@ -30,6 +32,7 @@ internal sealed class WaveSound : ISound
     public string? Error=>output.Error;
     public void Submit(short[] samples,int count)=>output.Submit(samples,count);
     public void Flush()=>output.Flush();
+    public double Pace()=>output.Pace();
     public void Dispose()=>output.Dispose();
 }
 
@@ -86,7 +89,10 @@ internal sealed class AlsaSound : ISound
         }
         work.Set();
     }
-    public void Flush() {lock(gate)queued.Clear();resetWanted=true;work.Set();}
+    public void Flush() {lock(gate)queued.Clear();pace.Reset();resetWanted=true;work.Set();}
+    // The device holds its 60 ms; the pace keeps the primer waiting behind it.
+    readonly AudioPace pace=new();
+    public double Pace() {int n;lock(gate)n=queued.Count;return pcm==IntPtr.Zero || Muted?1:pace.Rate(n,Primer);}
     void Pump() {
         bool primed=false;var chunk=new short[Chunk];
         while(running) {

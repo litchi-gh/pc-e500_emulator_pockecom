@@ -3,8 +3,9 @@ using System.Diagnostics;
 using System.Drawing.Imaging;
 namespace PokeCom;
 
-// `PC-E500.exe --compare-video <rom> <game.bin> <ffmpeg.exe> <out.mp4> [seconds]`
-// runs a machine-code game (loaded at BB000 and started with CALL &BB000) and
+// `PC-E500.exe --compare-video <rom> <game.bin> <ffmpeg.exe> <out.mp4> [seconds] [call]`
+// runs a machine-code game (the area reserved from BB000, started with CALL &BB000
+// or the hexadecimal address given) and
 // films its LCD twice from the same machine at the same moments: above without
 // the afterimage (frame interpolation), below with it. The time is the video's
 // own, 1/60 s a frame, so both halves see exactly the same frames.
@@ -12,7 +13,7 @@ namespace PokeCom;
 internal static class CompareVideo
 {
     const int W=1920,H=1080,Fps=60,CpuHz=768000;
-    internal static void Run(string rom,string bin,string ffmpeg,string output,double seconds) {
+    internal static void Run(string rom,string bin,string ffmpeg,string output,double seconds,int call=0xBB000) {
         Process? encoder=null;
         try {
             using var form=new MainForm(rom,testing:true);
@@ -25,7 +26,7 @@ internal static class CompareVideo
             form.TestReserveMachineCode(size);
             if(MachineCodeArea.Read(core) is not {} area || area.Start>0xBB000)throw new InvalidOperationException("The machine-code area could not be reserved from BB000");
             string loaded=form.TestLoadFile(bin);
-            form.TestText("CALL &BB000");
+            form.TestText($"CALL &{call:X5}");
             // A few seconds for the title to come up.
             core.Run(CpuHz*3);
             // The LCD as the user has it set (real or plain, contrast).

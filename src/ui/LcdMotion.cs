@@ -27,22 +27,29 @@ internal sealed class LcdMotion
     internal bool Afterimage=>afterimage;
     /// <summary>残像を切り替える。切り替えたら、今の絵から始め直す。</summary>
     internal void SetAfterimage(bool on){if(afterimage==on)return;afterimage=on;levelAt=-1;}
-    /// <summary>ドットの濃さを、LCD の今のドットに向けて now までの時間だけ進める（残像を使わなければ、そのまま写す）。</summary>
+    readonly byte[] seen=new byte[240*32];
+    /// <summary>ドットの濃さを、LCD のドットに向けて now までの時間だけ進める（残像を使わなければ、そのまま写す）。</summary>
+    /// <param name="duty">前に読んでから点いていた時間の割合（0〜255）。目指す濃さ。点滅で出す灰色もこれで出る</param>
     /// <returns>まだ変わっている途中のドットがあるか</returns>
-    internal bool Settle(double now,byte[] pixels) {
+    internal bool Settle(double now,byte[] duty) {
+        // Motion is looked for in the dots more on than off, not in the dots of
+        // this instant: a grey blinks every frame, and its blinking is no move.
+        // 動きは、その瞬間のドットではなく、半分より長く点いていたドットで見る（灰色の点滅を動きと取り違えない）。
+        var pixels=seen;
+        for(int i=0;i<pixels.Length;i++)pixels[i]=duty[i]>=128?(byte)1:(byte)0;
         if(!afterimage || levelAt<0 || now<levelAt) {
-            for(int i=0;i<pixels.Length;i++){bool on=pixels[i]!=0;level[i]=on?1:0;shade[i]=on?(byte)255:(byte)0;}
+            for(int i=0;i<pixels.Length;i++){level[i]=duty[i]/255f;shade[i]=duty[i];}
             levelAt=now;ResetMotion(pixels);return false;
         }
         double dt=now-levelAt;levelAt=now;
         float rise=(float)(1-Math.Exp(-dt/RiseSeconds)),fall=(float)(1-Math.Exp(-dt/FallSeconds));
         bool settling=Slide(now,pixels);
         for(int i=0;i<pixels.Length;i++) {
-            float target=pixels[i]!=0?1:0,l=level[i];
+            float target=duty[i]/255f,l=level[i];
             // A dot that moved, and the one it left, change at once: the slide carries the change.
             // A block caught half redrawn at the start of a step keeps its last picture until the rest comes.
             if(holding[i/240/8*BlockCols+i%240/8]){float was=motionBase[i];level[i]=was;shade[i]=(byte)(was*255);settling=true;continue;}
-            if(snap[i]){level[i]=target;shade[i]=(byte)(target*255);continue;}
+            if(snap[i]){level[i]=target;shade[i]=duty[i];continue;}
             if(l==target)continue;
             l+=(target-l)*(target>l?rise:fall);
             // Within a step of the last shade, it is there.

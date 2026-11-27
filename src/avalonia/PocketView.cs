@@ -154,7 +154,7 @@ internal sealed class PocketView : Panel
     /// <returns>残像のドットがまだ変わっている途中か（なら、次のコマも呼ぶ）</returns>
     internal bool UpdateLcd() {
         if(Core is null)return false;
-        bool settling=motion.Settle(clock.Elapsed.TotalSeconds,Core.Pixels);
+        bool settling=motion.Settle(clock.Elapsed.TotalSeconds,Core.Duty);
         var symbols=Symbols;
         if(!shownAny || symbols!=shownSymbols){shownSymbols=symbols;symbolLayer.InvalidateVisual();}
         if(shownAny && !motion.OffsetsChanged && motion.Shade.AsSpan().SequenceEqual(shown))return settling;
@@ -262,6 +262,12 @@ internal sealed class PocketView : Panel
         Paint.Lettering(g,"BACK",x+w*words[2],x+w*words[3],top-3.15,top+3.15,White,false);
     }
     static void Lines(DrawingContext g,IPen pen,params Point[] points){for(int i=1;i<points.Length;i++)g.DrawLine(pen,points[i-1],points[i]);}
+    /// <summary>塗った三角を描く。</summary>
+    static void Triangle(DrawingContext g,IBrush brush,Point a,Point b,Point c) {
+        var shape=new StreamGeometry();
+        using(var s=shape.Open()){s.BeginFigure(a,true);s.LineTo(b);s.LineTo(c);s.EndFigure(true);}
+        g.DrawGeometry(brush,null,shape);
+    }
     /// <summary>キーを1つ描く（キーの上・右下の印字を含む）。押したときに下がるのはキーだけ。</summary>
     void DrawKey(DrawingContext g,Key k) {
         var at=Paint.Of(k.Bounds);bool down=pressed.Contains(k.Id);var r=down?at.Translate(new Vector(0,1.2)):at;
@@ -282,8 +288,15 @@ internal sealed class PocketView : Panel
             Lines(g,Paint.Pen(238,234,208,1),new(x,y),new(x,y+25),new(x-8,y+25),new(x-8,y+20),new(x-14,y+28),new(x-8,y+35),new(x-8,y+30),new(x+5,y+30),new(x+5,y));
             return;
         }
-        double size=k.Style==6?(k.Id is "DEL" or "BS" or "INS"?12:21):k.Style==1?14:k.Label.Length>3?9:12;
         Color lettering=k.Style==2 && !IsWide?Rgb(60,54,33):Rgb(245,240,220);
+        if(k.Id=="TEXT") {
+            // 実機の TEXT キーは、上向きと下向きの塗った三角を上下にほぼ接して並べた印字。
+            double cx=r.X+r.Width/2,cy=r.Y+r.Height/2,half=r.Width*0.17,tall=r.Height*0.27,gap=r.Height*0.03;
+            Triangle(g,Paint.Solid(lettering),new(cx,cy-gap-tall),new(cx+half,cy-gap),new(cx-half,cy-gap));
+            Triangle(g,Paint.Solid(lettering),new(cx-half,cy+gap),new(cx+half,cy+gap),new(cx,cy+gap+tall));
+            return;
+        }
+        double size=k.Style==6?(k.Id is "DEL" or "BS" or "INS"?12:21):k.Style==1?14:k.Label.Length>3?9:12;
         if(k.Minor.Length>0) {
             Paint.TextAt(g,k.Label,r.X+r.Width*0.08,r.Y+(r.Height-size*1.5)/2,size,lettering,true,r.Width*0.6);
             Paint.TextAt(g,k.Minor,r.X+r.Width*0.6,r.Y+(r.Height-size*0.9)/2+2,size*0.6,lettering,true,r.Width*0.3);

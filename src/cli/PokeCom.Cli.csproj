@@ -8,7 +8,7 @@
     <RootNamespace>PokeCom</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Product>PC-E500 Emulator (PokeCom) command line</Product>
   </PropertyGroup>
   <!-- The core of the system built for: named by the runtime identifier, or the one building. -->

@@ -71,6 +71,12 @@ internal sealed class AudioOutput : IDisposable
     // What the device is holding, and everything buffered ahead of it.
     internal int PendingCount=>outstanding;
     internal int BufferedSamples {get{lock(gate)return queued.Count+(outstanding+inFlight)*Chunk;}}
+    // What the pace keeps buffered: the cushion in the device, and two chunks
+    // waiting behind it, well under the cap so a stalled frame still fits.
+    const int Target=Chunk*(Cushion+2);
+    readonly AudioPace pace=new();
+    /// <summary>本体を進める速さの倍率（たまり具合を目標に戻す。消音中や出力がないときは 1）。UI スレッドから呼ぶ。</summary>
+    internal double Pace()=>device==IntPtr.Zero || Muted?1:pace.Rate(BufferedSamples,Target);
 
     /// <summary>デバイスを開き、書き込み用のスレッドを始める。</summary>
     internal AudioOutput() {
@@ -104,7 +110,7 @@ internal sealed class AudioOutput : IDisposable
 
     /// <summary>預けたサンプルを捨て、デバイスを止めてやり直す（一時停止や ROM の切り替えのとき）。</summary>
     internal void Flush() {
-        lock(gate)queued.Clear();
+        lock(gate)queued.Clear();pace.Reset();
         resetWanted=true;work.Set();
     }
 
